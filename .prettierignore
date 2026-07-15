@@ -1,0 +1,8 @@
+dist/
+src-tauri/target/
+src-tauri/gen/
+playwright-report/
+test-results/
+coverage/
+package-lock.json
+toodoo-build-plan.md
