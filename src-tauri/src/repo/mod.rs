@@ -2,9 +2,15 @@
 //! through Tauri commands (and later the local REST API). Every mutation
 //! appends to `changelog` and emits a `DomainEvent` on the bus.
 
+pub mod check_items;
 pub mod db;
+pub mod folders;
 pub mod projects;
+pub mod search;
+pub mod seed;
 pub mod settings;
+pub mod tags;
+pub mod tasks;
 
 use chrono::{SecondsFormat, Utc};
 use sqlx::SqliteConnection;

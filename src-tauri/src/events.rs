@@ -9,8 +9,42 @@ use tokio::sync::broadcast;
 pub enum DomainEvent {
     #[serde(rename = "project.created")]
     ProjectCreated { id: String },
+    #[serde(rename = "project.updated")]
+    ProjectUpdated { id: String },
     #[serde(rename = "project.deleted")]
     ProjectDeleted { id: String },
+    #[serde(rename = "folder.created")]
+    FolderCreated { id: String },
+    #[serde(rename = "folder.updated")]
+    FolderUpdated { id: String },
+    #[serde(rename = "folder.deleted")]
+    FolderDeleted { id: String },
+    #[serde(rename = "task.created")]
+    TaskCreated { id: String },
+    #[serde(rename = "task.updated")]
+    TaskUpdated { id: String },
+    #[serde(rename = "task.completed")]
+    TaskCompleted { ids: Vec<String> },
+    #[serde(rename = "task.trashed")]
+    TaskTrashed { ids: Vec<String> },
+    #[serde(rename = "task.restored")]
+    TaskRestored { id: String },
+    #[serde(rename = "task.deleted")]
+    TaskDeleted { id: String },
+    #[serde(rename = "task.moved")]
+    TaskMoved { id: String },
+    #[serde(rename = "checkitem.changed")]
+    CheckItemChanged { task_id: String },
+    #[serde(rename = "tag.created")]
+    TagCreated { id: String },
+    #[serde(rename = "tag.updated")]
+    TagUpdated { id: String },
+    #[serde(rename = "tag.deleted")]
+    TagDeleted { id: String },
+    #[serde(rename = "task.tags_changed")]
+    TaskTagsChanged { task_id: String },
+    #[serde(rename = "seed.completed")]
+    SeedCompleted,
     #[serde(rename = "setting.changed")]
     SettingChanged { key: String },
 }
