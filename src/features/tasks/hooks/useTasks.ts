@@ -13,6 +13,10 @@ export function useViewTasks(view: ViewSelection) {
           return api.listTagTasks(view.tagId);
         case "smart":
           return api.listSmart(view.view);
+        case "filter":
+          return api.listFilterTasks(view.filterId);
+        case "matrix":
+          return Promise.resolve([]);
       }
     },
   });

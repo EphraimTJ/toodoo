@@ -51,6 +51,12 @@ pub enum DomainEvent {
     ReminderFired { task_id: String, reminder_id: String },
     #[serde(rename = "template.changed")]
     TemplateChanged,
+    #[serde(rename = "section.changed")]
+    SectionChanged { project_id: String },
+    #[serde(rename = "filter.changed")]
+    FilterChanged,
+    #[serde(rename = "matrix.changed")]
+    MatrixChanged,
     #[serde(rename = "seed.completed")]
     SeedCompleted,
     #[serde(rename = "setting.changed")]

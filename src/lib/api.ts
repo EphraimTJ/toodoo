@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { evaluateRule, parseQuery, resolveQuery } from "../features/filters/lib/rule";
 
 export type JsonValue = string | number | boolean | null | JsonValue[] | { [k: string]: JsonValue };
 
@@ -107,6 +108,53 @@ export interface TaskTemplate {
   sortOrder: number;
   createdAt: string;
   updatedAt: string;
+}
+
+// ---- Custom Filters & Eisenhower Matrix rule model (mirrors filter_rule.rs) --
+
+export type RuleMatch = "all" | "any";
+
+export type DueOp =
+  | { kind: "overdue" | "today" | "tomorrow" | "next7" | "none" }
+  | { kind: "range"; from?: string | null; to?: string | null };
+
+export type Condition =
+  | { field: "list"; ids: string[] }
+  | { field: "tag"; ids: string[] }
+  | { field: "priority"; values: number[] }
+  | { field: "due"; op: DueOp }
+  | { field: "keyword"; text: string }
+  | { field: "kind"; values: string[] }
+  | { field: "status"; values: string[] };
+
+export interface Rule {
+  match: RuleMatch;
+  conditions: Condition[];
+}
+
+export interface Section {
+  id: string;
+  projectId: string;
+  name: string;
+  sortOrder: number;
+}
+
+export interface Filter {
+  id: string;
+  name: string;
+  ruleJson: string;
+  color: string | null;
+  sortOrder: number;
+}
+
+export interface Quadrant {
+  quadrant: number;
+  rule: Rule;
+}
+
+export interface QuadrantTasks {
+  quadrant: number;
+  tasks: Task[];
 }
 
 export interface CheckItem {
@@ -253,6 +301,25 @@ export interface Api {
   deleteTemplate(id: string): Promise<void>;
   instantiateTemplate(templateId: string, projectId: string): Promise<Task>;
 
+  listSections(projectId: string): Promise<Section[]>;
+  createSection(projectId: string, name: string): Promise<Section>;
+  renameSection(id: string, name: string): Promise<void>;
+  reorderSection(id: string, afterId: string | null): Promise<void>;
+  deleteSection(id: string): Promise<void>;
+  moveTaskToSection(taskId: string, sectionId: string | null): Promise<void>;
+
+  listFilters(): Promise<Filter[]>;
+  createFilter(name: string, rule: Rule, color?: string | null): Promise<Filter>;
+  updateFilter(id: string, patch: { name?: string; rule?: Rule; color?: string }): Promise<void>;
+  deleteFilter(id: string): Promise<void>;
+  parseFilterQuery(text: string): Promise<Rule>;
+  listFilterTasks(id: string): Promise<Task[]>;
+
+  getMatrix(): Promise<Quadrant[]>;
+  setQuadrant(quadrant: number, rule: Rule): Promise<void>;
+  listMatrix(): Promise<QuadrantTasks[]>;
+  assignToQuadrant(taskId: string, quadrant: number): Promise<void>;
+
   getSetting(key: string): Promise<JsonValue | null>;
   setSetting(key: string, value: JsonValue): Promise<void>;
   seedDemoData(tasks: number): Promise<void>;
@@ -321,6 +388,31 @@ const tauriApi: Api = {
   instantiateTemplate: (templateId, projectId) =>
     invoke("instantiate_template", { templateId, projectId }),
 
+  listSections: (projectId) => invoke("list_sections", { projectId }),
+  createSection: (projectId, name) => invoke("create_section", { projectId, name }),
+  renameSection: (id, name) => invoke("rename_section", { id, name }),
+  reorderSection: (id, afterId) => invoke("reorder_section", { id, afterId }),
+  deleteSection: (id) => invoke("delete_section", { id }),
+  moveTaskToSection: (taskId, sectionId) => invoke("move_task_to_section", { taskId, sectionId }),
+
+  listFilters: () => invoke("list_filters"),
+  createFilter: (name, rule, color) => invoke("create_filter", { name, rule, color: color ?? null }),
+  updateFilter: (id, patch) =>
+    invoke("update_filter", {
+      id,
+      name: patch.name ?? null,
+      rule: patch.rule ?? null,
+      color: patch.color ?? null,
+    }),
+  deleteFilter: (id) => invoke("delete_filter", { id }),
+  parseFilterQuery: (text) => invoke("parse_filter_query", { text }),
+  listFilterTasks: (id) => invoke("list_filter_tasks", { id, ...localDateParams() }),
+
+  getMatrix: () => invoke("get_matrix"),
+  setQuadrant: (quadrant, rule) => invoke("set_quadrant", { quadrant, rule }),
+  listMatrix: () => invoke("list_matrix", localDateParams()),
+  assignToQuadrant: (taskId, quadrant) => invoke("assign_to_quadrant", { taskId, quadrant }),
+
   getSetting: (key) => invoke("get_setting", { key }),
   setSetting: (key, value) => invoke("set_setting", { key, value }),
   seedDemoData: (tasks) => invoke("seed_demo_data", { tasks }),
@@ -342,8 +434,19 @@ function browserStubApi(): Api {
   const reminders: Reminder[] = [];
   const activity: ActivityEntry[] = [];
   const templates: TaskTemplate[] = [];
+  const sections: Section[] = [];
+  const filters: Filter[] = [];
+  const matrixConfig = new Map<number, Rule>();
   const nowIso = () => new Date().toISOString();
   const uid = () => crypto.randomUUID();
+
+  const DEFAULT_QUADRANT_PRIORITY = [5, 3, 1, 0];
+  const defaultQuadrantRule = (q: number): Rule => ({
+    match: "all",
+    conditions: [{ field: "priority", values: [DEFAULT_QUADRANT_PRIORITY[q] ?? 0] }],
+  });
+  const matrixQuadrants = (): Quadrant[] =>
+    [0, 1, 2, 3].map((q) => ({ quadrant: q, rule: matrixConfig.get(q) ?? defaultQuadrantRule(q) }));
 
   const logActivity = (entityId: string, action: string) =>
     activity.unshift({
@@ -834,6 +937,108 @@ function browserStubApi(): Api {
           offsetMin: spec.offsetMin,
         });
       return self.getTask(created.id);
+    },
+
+    listSections: async (projectId) =>
+      clone(
+        sections.filter((s) => s.projectId === projectId).sort((a, b) => a.sortOrder - b.sortOrder),
+      ),
+    createSection: async (projectId, name) => {
+      const s: Section = {
+        id: uid(),
+        projectId,
+        name,
+        sortOrder: (sections.filter((x) => x.projectId === projectId).length + 1) * 1024,
+      };
+      sections.push(s);
+      return clone(s);
+    },
+    renameSection: async (id, name) => {
+      const s = sections.find((x) => x.id === id);
+      if (!s) throw new Error(`not found: section ${id}`);
+      s.name = name;
+    },
+    reorderSection: async (id, afterId) => {
+      const s = sections.find((x) => x.id === id);
+      if (!s) throw new Error(`not found: section ${id}`);
+      const siblings = sections
+        .filter((x) => x.projectId === s.projectId && x.id !== id)
+        .sort((a, b) => a.sortOrder - b.sortOrder);
+      const at = afterId === null ? 0 : siblings.findIndex((x) => x.id === afterId) + 1;
+      siblings.splice(at, 0, s);
+      siblings.forEach((x, i) => (x.sortOrder = (i + 1) * 1024));
+    },
+    deleteSection: async (id) => {
+      const i = sections.findIndex((x) => x.id === id);
+      if (i < 0) throw new Error(`not found: section ${id}`);
+      for (const t of tasks) if (t.sectionId === id) t.sectionId = null;
+      sections.splice(i, 1);
+    },
+    moveTaskToSection: async (taskId, sectionId) => {
+      const t = findTask(taskId);
+      t.sectionId = sectionId;
+      t.updatedAt = nowIso();
+    },
+
+    listFilters: async () => clone(filters.slice().sort((a, b) => a.sortOrder - b.sortOrder)),
+    createFilter: async (name, rule, color) => {
+      const f: Filter = {
+        id: uid(),
+        name,
+        ruleJson: JSON.stringify(rule),
+        color: color ?? null,
+        sortOrder: filters.length,
+      };
+      filters.push(f);
+      return clone(f);
+    },
+    updateFilter: async (id, patch) => {
+      const f = filters.find((x) => x.id === id);
+      if (!f) throw new Error(`not found: filter ${id}`);
+      if (patch.name !== undefined) f.name = patch.name;
+      if (patch.rule !== undefined) f.ruleJson = JSON.stringify(patch.rule);
+      if (patch.color !== undefined) f.color = patch.color;
+    },
+    deleteFilter: async (id) => {
+      const i = filters.findIndex((x) => x.id === id);
+      if (i < 0) throw new Error(`not found: filter ${id}`);
+      filters.splice(i, 1);
+    },
+    parseFilterQuery: async (text) => resolveQuery(parseQuery(text), projects, tags),
+    listFilterTasks: async (id) => {
+      const f = filters.find((x) => x.id === id);
+      if (!f) throw new Error(`not found: filter ${id}`);
+      const rule: Rule = JSON.parse(f.ruleJson);
+      const { today, tzOffsetMin } = localDateParams();
+      const hasStatus = rule.conditions.some((c) => c.field === "status");
+      const candidates = tasks.filter(
+        (t) => t.status !== "TRASHED" && (hasStatus || t.status === "ACTIVE"),
+      );
+      return clone(candidates.filter((t) => evaluateRule(rule, t, today, tzOffsetMin)));
+    },
+
+    getMatrix: async () => clone(matrixQuadrants()),
+    setQuadrant: async (quadrant, rule) => {
+      matrixConfig.set(quadrant, rule);
+    },
+    listMatrix: async () => {
+      const quads = matrixQuadrants();
+      const { today, tzOffsetMin } = localDateParams();
+      const buckets: QuadrantTasks[] = [0, 1, 2, 3].map((quadrant) => ({ quadrant, tasks: [] }));
+      for (const t of tasks.filter((x) => x.status === "ACTIVE")) {
+        const q = quads.find((qq) => evaluateRule(qq.rule, t, today, tzOffsetMin));
+        if (q) buckets[q.quadrant].tasks.push(clone(t));
+      }
+      return buckets;
+    },
+    assignToQuadrant: async (taskId, quadrant) => {
+      const rule = matrixQuadrants().find((q) => q.quadrant === quadrant)?.rule;
+      const prio = rule?.conditions.find((c) => c.field === "priority");
+      if (prio && prio.field === "priority" && prio.values.length > 0) {
+        const t = findTask(taskId);
+        t.priority = prio.values[0];
+        t.updatedAt = nowIso();
+      }
     },
 
     getSetting: async (key) => clone(settings.get(key) ?? null),

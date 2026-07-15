@@ -10,9 +10,13 @@ use tauri_plugin_notification::NotificationExt;
 use events::EventBus;
 use repo::activity::ActivityEntry;
 use repo::check_items::CheckItem;
+use repo::filter_rule::Rule;
+use repo::filters::Filter;
 use repo::folders::{Folder, FolderPatch};
+use repo::matrix::{Quadrant, QuadrantTasks};
 use repo::projects::{NewProject, Project, ProjectPatch};
 use repo::reminders::Reminder;
+use repo::sections::Section;
 use repo::tags::Tag;
 use repo::tasks::{NewTask, SmartCounts, SmartView, Task, TaskPatch};
 use repo::templates::{TaskTemplate, TemplatePayload};
@@ -373,6 +377,136 @@ async fn instantiate_template(
         .map_err(err)
 }
 
+// ---- sections (Kanban columns) --------------------------------------------------
+
+#[tauri::command]
+async fn list_sections(state: State<'_, AppState>, project_id: String) -> CmdResult<Vec<Section>> {
+    repo::sections::list_sections(&state.pool, &project_id).await.map_err(err)
+}
+
+#[tauri::command]
+async fn create_section(
+    state: State<'_, AppState>,
+    project_id: String,
+    name: String,
+) -> CmdResult<Section> {
+    repo::sections::create_section(&state.pool, &state.bus, &project_id, &name).await.map_err(err)
+}
+
+#[tauri::command]
+async fn rename_section(state: State<'_, AppState>, id: String, name: String) -> CmdResult<()> {
+    repo::sections::rename_section(&state.pool, &state.bus, &id, &name).await.map_err(err)
+}
+
+#[tauri::command]
+async fn reorder_section(
+    state: State<'_, AppState>,
+    id: String,
+    after_id: Option<String>,
+) -> CmdResult<()> {
+    repo::sections::reorder_section(&state.pool, &state.bus, &id, after_id.as_deref())
+        .await
+        .map_err(err)
+}
+
+#[tauri::command]
+async fn delete_section(state: State<'_, AppState>, id: String) -> CmdResult<()> {
+    repo::sections::delete_section(&state.pool, &state.bus, &id).await.map_err(err)
+}
+
+#[tauri::command]
+async fn move_task_to_section(
+    state: State<'_, AppState>,
+    task_id: String,
+    section_id: Option<String>,
+) -> CmdResult<()> {
+    repo::sections::move_task_to_section(&state.pool, &state.bus, &task_id, section_id.as_deref())
+        .await
+        .map_err(err)
+}
+
+// ---- custom filters -------------------------------------------------------------
+
+#[tauri::command]
+async fn list_filters(state: State<'_, AppState>) -> CmdResult<Vec<Filter>> {
+    repo::filters::list_filters(&state.pool).await.map_err(err)
+}
+
+#[tauri::command]
+async fn create_filter(
+    state: State<'_, AppState>,
+    name: String,
+    rule: Rule,
+    color: Option<String>,
+) -> CmdResult<Filter> {
+    repo::filters::create_filter(&state.pool, &state.bus, &name, &rule, color.as_deref())
+        .await
+        .map_err(err)
+}
+
+#[tauri::command]
+async fn update_filter(
+    state: State<'_, AppState>,
+    id: String,
+    name: Option<String>,
+    rule: Option<Rule>,
+    color: Option<String>,
+) -> CmdResult<()> {
+    repo::filters::update_filter(&state.pool, &state.bus, &id, name.as_deref(), rule.as_ref(), color.as_deref())
+        .await
+        .map_err(err)
+}
+
+#[tauri::command]
+async fn delete_filter(state: State<'_, AppState>, id: String) -> CmdResult<()> {
+    repo::filters::delete_filter(&state.pool, &state.bus, &id).await.map_err(err)
+}
+
+#[tauri::command]
+async fn parse_filter_query(state: State<'_, AppState>, text: String) -> CmdResult<Rule> {
+    repo::filters::parse_query(&state.pool, &text).await.map_err(err)
+}
+
+#[tauri::command]
+async fn list_filter_tasks(
+    state: State<'_, AppState>,
+    id: String,
+    today: String,
+    tz_offset_min: i32,
+) -> CmdResult<Vec<Task>> {
+    repo::filters::list_filter_tasks(&state.pool, &id, &today, tz_offset_min).await.map_err(err)
+}
+
+// ---- Eisenhower matrix ----------------------------------------------------------
+
+#[tauri::command]
+async fn get_matrix(state: State<'_, AppState>) -> CmdResult<Vec<Quadrant>> {
+    repo::matrix::get_matrix(&state.pool).await.map_err(err)
+}
+
+#[tauri::command]
+async fn set_quadrant(state: State<'_, AppState>, quadrant: i64, rule: Rule) -> CmdResult<()> {
+    repo::matrix::set_quadrant(&state.pool, &state.bus, quadrant, &rule).await.map_err(err)
+}
+
+#[tauri::command]
+async fn list_matrix(
+    state: State<'_, AppState>,
+    today: String,
+    tz_offset_min: i32,
+) -> CmdResult<Vec<QuadrantTasks>> {
+    repo::matrix::list_matrix(&state.pool, &today, tz_offset_min).await.map_err(err)
+}
+
+#[tauri::command]
+async fn assign_to_quadrant(
+    state: State<'_, AppState>,
+    task_id: String,
+    quadrant: i64,
+) -> CmdResult<()> {
+    repo::matrix::assign_to_quadrant(&state.pool, &state.bus, &task_id, quadrant).await.map_err(err)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -487,7 +621,23 @@ pub fn run() {
             create_template,
             update_template,
             delete_template,
-            instantiate_template
+            instantiate_template,
+            list_sections,
+            create_section,
+            rename_section,
+            reorder_section,
+            delete_section,
+            move_task_to_section,
+            list_filters,
+            create_filter,
+            update_filter,
+            delete_filter,
+            parse_filter_query,
+            list_filter_tasks,
+            get_matrix,
+            set_quadrant,
+            list_matrix,
+            assign_to_quadrant
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

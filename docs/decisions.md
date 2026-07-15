@@ -5,6 +5,51 @@ ambiguity we resolved by judgment call), with the reasoning. Newest entries at
 the top. Never rewrite history — if a decision is reversed, add a new entry
 that supersedes the old one.
 
+## 2026-07-15 — Eisenhower Matrix is priority-based; drag sets priority (user-approved)
+
+**Decision:** The four quadrants default to priority rules — Q0 High(5), Q1
+Medium(3), Q2 Low(1), Q3 None(0) — so every task lands in exactly one quadrant.
+Quadrant rules are editable (any `filter_rule::Rule`); when they overlap, a task
+falls into the **first** matching quadrant and tasks matching none are hidden.
+Dragging a card into a quadrant sets the task's priority to that quadrant's
+"representative priority" (the first Priority value in its rule); if a quadrant's
+rule has no priority condition, the drag is a no-op.
+
+**Why:** Matches TickTick's default matrix and keeps the drag action
+unambiguous and reversible. Confirmed with the project owner.
+
+## 2026-07-15 — Custom Filter model, text grammar, and result scope (user-approved)
+
+**Decision:** A filter is a flat list of conditions combined with All (AND) or
+Any (OR) — nested groups are deferred. Conditions cover list, tag, priority,
+due (overdue/today/tomorrow/next7/none/range), keyword (title+notes,
+case-insensitive), type, and status. The advanced text grammar:
+`list:NAME`/`~NAME`, `tag:NAME`/`#NAME`, `priority:high|medium|low|none`/`!high`,
+`due:today|tomorrow|next7|overdue|none`, `is:active|completed|wontdo`,
+`type:task|note`, `"quoted phrase"`/bare words → keyword, and a top-level `OR`
+flips the combinator to Any (default All). An **empty** filter matches all active
+tasks. Results are ACTIVE tasks unless a `Status` condition widens them; TRASHED
+is never included.
+
+**Why:** Covers the §3.2 Custom Filters checklist (rule-based, AND/OR, advanced
+text syntax) with a grammar close to TickTick's while staying unambiguous. The
+evaluator and parser are duplicated in Rust (source of truth) and TypeScript
+(browser stub) and pinned to identical unit tests so they cannot drift.
+
+## 2026-07-15 — Kanban cards are top-level tasks; sectionless tasks get a fixed column
+
+**Decision:** Kanban cards are top-level (parentless) ACTIVE tasks; subtasks are
+summarized on the card as `done/total`, not shown as individual cards. Tasks
+with no `section_id` live in a fixed leading "No Section" column that cannot be
+renamed or deleted. Deleting a column detaches its tasks back to "No Section"
+rather than trashing them. WIP is a per-column count badge (no configurable
+limit). Column collapse is view-only local state; the List/Kanban choice itself
+persists on the list (`projects.view_mode`).
+
+**Why:** Mirrors TickTick's board. Keeping recurrence/subtask semantics off the
+board avoids drag ambiguity, and detaching (not deleting) tasks on column delete
+is the safe, reversible choice.
+
 ## 2026-07-15 — Recurring completion advances in place; subtree not cascaded
 
 **Decision:** Completing a recurring task (one with an `rrule` and a start/due

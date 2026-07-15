@@ -36,6 +36,18 @@ export function useDomainEvents(): void {
           case "template":
             void queryClient.invalidateQueries({ queryKey: ["templates"] });
             break;
+          case "section":
+            void queryClient.invalidateQueries({ queryKey: ["sections"] });
+            void queryClient.invalidateQueries({ queryKey: ["tasks"] });
+            break;
+          case "filter":
+            void queryClient.invalidateQueries({ queryKey: ["filters"] });
+            void queryClient.invalidateQueries({ queryKey: ["tasks"] });
+            break;
+          case "matrix":
+            void queryClient.invalidateQueries({ queryKey: ["matrix"] });
+            void queryClient.invalidateQueries({ queryKey: ["tasks"] });
+            break;
           case "project":
           case "folder":
             void queryClient.invalidateQueries({ queryKey: ["projects"] });

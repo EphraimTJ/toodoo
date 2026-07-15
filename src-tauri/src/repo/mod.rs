@@ -5,11 +5,16 @@
 pub mod activity;
 pub mod check_items;
 pub mod db;
+pub mod filter_rule;
+pub mod filters;
 pub mod folders;
+pub mod matrix;
 pub mod projects;
+pub mod query;
 pub mod recurrence;
 pub mod reminders;
 pub mod search;
+pub mod sections;
 pub mod seed;
 pub mod settings;
 pub mod tags;

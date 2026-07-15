@@ -13,6 +13,7 @@ import { completedDateLabel, organizeTasks } from "../lib/sortGroup";
 import { BatchToolbar } from "./BatchToolbar";
 import { TaskAddBar } from "./TaskAddBar";
 import { TaskRow } from "./TaskRow";
+import { ViewModeToggle } from "./ViewModeToggle";
 
 const SMART_TITLES: Record<SmartView, string> = {
   today: "Today",
@@ -73,7 +74,9 @@ export function TaskListView({ view }: { view: ViewSelection }) {
       ? SMART_TITLES[view.view]
       : view.kind === "tag"
         ? `#${(tags ?? []).find((t) => t.id === view.tagId)?.name ?? "…"}`
-        : ((projects ?? []).find((p) => p.id === view.projectId)?.name ?? "…");
+        : view.kind === "project"
+          ? ((projects ?? []).find((p) => p.id === view.projectId)?.name ?? "…")
+          : "";
 
   const dragEnabled =
     view.kind === "project" && options.sort === "custom" && options.group === "none";
@@ -202,6 +205,11 @@ export function TaskListView({ view }: { view: ViewSelection }) {
         <h2 className="text-base font-semibold">{title}</h2>
         {!flatView && (
           <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+            {view.kind === "project" &&
+              (() => {
+                const project = (projects ?? []).find((p) => p.id === view.projectId);
+                return project ? <ViewModeToggle project={project} /> : null;
+              })()}
             <DropdownMenu.Root>
               <DropdownMenu.Trigger asChild>
                 <button

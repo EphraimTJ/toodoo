@@ -3,6 +3,7 @@ import { useUiStore } from "../../lib/uiStore";
 import { ThemeToggle } from "../../features/settings/components/ThemeToggle";
 import { SidebarProjects } from "../../features/projects/components/SidebarProjects";
 import { SidebarTags } from "../../features/tags/components/SidebarTags";
+import { SidebarFilters } from "../../features/filters/components/SidebarFilters";
 import { useSmartCounts } from "../../features/tasks/hooks/useTasks";
 
 const SMART_LISTS: { view: SmartView; label: string; countKey?: "today" | "tomorrow" | "next7" }[] =
@@ -67,10 +68,22 @@ export function Sidebar() {
               </li>
             );
           })}
+          <li>
+            <button
+              type="button"
+              onClick={() => setView({ kind: "matrix" })}
+              className={`flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left text-sm hover:bg-bg ${
+                view.kind === "matrix" ? "bg-bg font-medium text-accent" : ""
+              }`}
+            >
+              Matrix
+            </button>
+          </li>
         </ul>
 
         <SidebarProjects />
         <SidebarTags />
+        <SidebarFilters />
       </nav>
     </aside>
   );

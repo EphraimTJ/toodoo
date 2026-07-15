@@ -64,7 +64,7 @@ This is the checklist the whole project is graded against, converted from §3 of
 - [x] Folders to group lists
 - [x] List colors
 - [x] List icons/emojis
-- [ ] View-type memory per list
+- [x] View-type memory per list
 - [ ] Smart Lists
   - [x] Today
   - [x] Tomorrow
@@ -75,11 +75,11 @@ This is the checklist the whole project is graded against, converted from §3 of
   - [x] Trash
   - [ ] Won't Do
   - [ ] Show/hide/reorder smart lists
-- [ ] Custom Filters (Pro)
-  - [ ] Rule-based smart lists combining list, tag, priority, date range,
+- [x] Custom Filters (Pro)
+  - [x] Rule-based smart lists combining list, tag, priority, date range,
         keyword, task type
-  - [ ] AND/OR logic
-  - [ ] Advanced text syntax
+  - [x] AND/OR logic
+  - [x] Advanced text syntax
 - [ ] Tags
   - [ ] Nested tags
   - [x] Tag colors
@@ -94,11 +94,11 @@ This is the checklist the whole project is graded against, converted from §3 of
 ## 3.3 Views
 
 - [x] List view (classic)
-- [ ] Kanban view per list
-  - [ ] Custom columns/sections
-  - [ ] Drag between columns
-  - [ ] Column WIP display
-  - [ ] Collapse columns
+- [x] Kanban view per list
+  - [x] Custom columns/sections
+  - [x] Drag between columns
+  - [x] Column WIP display
+  - [x] Collapse columns
 - [ ] Timeline (Gantt) view (Pro)
   - [ ] Tasks as bars across dates
   - [ ] Drag to reschedule / resize
@@ -112,10 +112,10 @@ This is the checklist the whole project is graded against, converted from §3 of
   - [ ] Agenda/List-by-day
   - [ ] "Unscheduled tasks" arrange panel with drag-and-drop scheduling
   - [ ] Time-block by dragging on the grid
-- [ ] Eisenhower Matrix (Pro)
-  - [ ] 4 quadrants
-  - [ ] Editable quadrant rules (each quadrant is a saved filter)
-  - [ ] Drag between quadrants to re-prioritize
+- [x] Eisenhower Matrix (Pro)
+  - [x] 4 quadrants
+  - [x] Editable quadrant rules (each quadrant is a saved filter)
+  - [x] Drag between quadrants to re-prioritize
 - [ ] Per-view display options
   - [ ] Show/hide completed
   - [ ] Detail density

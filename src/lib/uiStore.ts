@@ -4,7 +4,9 @@ import type { SmartView } from "./api";
 export type ViewSelection =
   | { kind: "project"; projectId: string }
   | { kind: "smart"; view: SmartView }
-  | { kind: "tag"; tagId: string };
+  | { kind: "tag"; tagId: string }
+  | { kind: "filter"; filterId: string }
+  | { kind: "matrix" };
 
 export function viewKey(view: ViewSelection): string {
   switch (view.kind) {
@@ -14,6 +16,10 @@ export function viewKey(view: ViewSelection): string {
       return `smart:${view.view}`;
     case "tag":
       return `tag:${view.tagId}`;
+    case "filter":
+      return `filter:${view.filterId}`;
+    case "matrix":
+      return "matrix";
   }
 }
 

@@ -11,7 +11,7 @@ function creationDefaults(view: ReturnType<typeof useUiStore.getState>["view"]):
 } {
   const { today } = localDateParams();
   if (view.kind === "project") return { projectId: view.projectId };
-  if (view.kind === "tag") return { projectId: INBOX_ID };
+  if (view.kind !== "smart") return { projectId: INBOX_ID };
   switch (view.view) {
     case "today":
       return { projectId: INBOX_ID, dueAt: `${today}T00:00:00.000Z` };
