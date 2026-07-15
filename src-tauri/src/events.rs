@@ -57,6 +57,10 @@ pub enum DomainEvent {
     FilterChanged,
     #[serde(rename = "matrix.changed")]
     MatrixChanged,
+    #[serde(rename = "calendar.changed")]
+    CalendarChanged,
+    #[serde(rename = "subscription.changed")]
+    SubscriptionChanged,
     #[serde(rename = "seed.completed")]
     SeedCompleted,
     #[serde(rename = "setting.changed")]

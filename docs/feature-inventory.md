@@ -104,32 +104,32 @@ This is the checklist the whole project is graded against, converted from §3 of
   - [ ] Drag to reschedule / resize
   - [ ] Group lanes
   - [ ] Zoom day/week/month
-- [ ] Calendar views (Pro)
-  - [ ] Day
-  - [ ] Week (5/7-day)
-  - [ ] Month
-  - [ ] Multi-week
-  - [ ] Agenda/List-by-day
-  - [ ] "Unscheduled tasks" arrange panel with drag-and-drop scheduling
-  - [ ] Time-block by dragging on the grid
+- [x] Calendar views (Pro)
+  - [x] Day
+  - [x] Week (5/7-day)
+  - [x] Month
+  - [x] Multi-week
+  - [x] Agenda/List-by-day
+  - [x] "Unscheduled tasks" arrange panel with drag-and-drop scheduling
+  - [x] Time-block by dragging on the grid
 - [x] Eisenhower Matrix (Pro)
   - [x] 4 quadrants
   - [x] Editable quadrant rules (each quadrant is a saved filter)
   - [x] Drag between quadrants to re-prioritize
 - [ ] Per-view display options
-  - [ ] Show/hide completed
+  - [x] Show/hide completed
   - [ ] Detail density
-  - [ ] Weekend shading
-  - [ ] Week start day
+  - [x] Weekend shading
+  - [x] Week start day
 
 ## 3.4 Calendar Platform Features
 
-- [ ] Calendar subscriptions (Pro): external ICS/iCal URLs (read-only overlay)
-  - [ ] Refresh interval
-  - [ ] Per-calendar color/visibility
-- [ ] Import `.ics` files
-- [ ] Export lists/calendar as ICS
-- [ ] Local calendar events as first-class items alongside tasks
+- [x] Calendar subscriptions (Pro): external ICS/iCal URLs (read-only overlay)
+  - [x] Refresh interval
+  - [x] Per-calendar color/visibility
+- [x] Import `.ics` files
+- [x] Export lists/calendar as ICS
+- [x] Local calendar events as first-class items alongside tasks
 
 ## 3.5 Focus / Pomodoro (Pro)
 

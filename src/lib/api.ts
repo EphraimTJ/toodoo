@@ -157,6 +157,56 @@ export interface QuadrantTasks {
   tasks: Task[];
 }
 
+// ---- Calendar ---------------------------------------------------------------
+
+export type CalItemKind = "TASK" | "EVENT";
+
+export interface CalItem {
+  id: string;
+  kind: CalItemKind;
+  sourceId: string;
+  title: string;
+  startAt: string;
+  endAt: string | null;
+  allDay: boolean;
+  color: string | null;
+  editable: boolean;
+}
+
+export interface CalEvent {
+  id: string;
+  subscriptionId: string | null;
+  title: string;
+  startAt: string;
+  endAt: string | null;
+  allDay: boolean;
+  location: string | null;
+  notes: string | null;
+  color: string | null;
+  rrule: string | null;
+}
+
+export interface NewEvent {
+  title: string;
+  startAt: string;
+  endAt?: string | null;
+  allDay?: boolean;
+  location?: string | null;
+  notes?: string | null;
+  color?: string | null;
+  rrule?: string | null;
+}
+
+export interface CalSubscription {
+  id: string;
+  url: string;
+  name: string;
+  color: string | null;
+  visible: boolean;
+  refreshMin: number;
+  lastFetch: string | null;
+}
+
 export interface CheckItem {
   id: string;
   taskId: string;
@@ -320,6 +370,42 @@ export interface Api {
   listMatrix(): Promise<QuadrantTasks[]>;
   assignToQuadrant(taskId: string, quadrant: number): Promise<void>;
 
+  listCalendar(from: string, to: string, includeCompleted: boolean): Promise<CalItem[]>;
+  createEvent(input: NewEvent): Promise<CalEvent>;
+  getEvent(id: string): Promise<CalEvent>;
+  updateEvent(
+    id: string,
+    patch: {
+      title?: string;
+      startAt?: string;
+      endAt?: string;
+      allDay?: boolean;
+      location?: string;
+      notes?: string;
+      color?: string;
+    },
+  ): Promise<CalEvent>;
+  deleteEvent(id: string): Promise<void>;
+  moveCalendarItem(kind: CalItemKind, id: string, startAt: string, allDay: boolean): Promise<void>;
+  resizeCalendarItem(kind: CalItemKind, id: string, endAt: string): Promise<void>;
+  scheduleTask(taskId: string, startAt: string, allDay: boolean, durationMin?: number): Promise<void>;
+
+  listSubscriptions(): Promise<CalSubscription[]>;
+  addSubscription(
+    url: string,
+    name: string,
+    color?: string | null,
+    refreshMin?: number,
+  ): Promise<CalSubscription>;
+  updateSubscription(
+    id: string,
+    patch: { name?: string; color?: string; visible?: boolean; refreshMin?: number },
+  ): Promise<void>;
+  deleteSubscription(id: string): Promise<void>;
+  refreshSubscription(id: string): Promise<number>;
+  importIcs(text: string): Promise<number>;
+  exportIcs(projectId?: string | null): Promise<string>;
+
   getSetting(key: string): Promise<JsonValue | null>;
   setSetting(key: string, value: JsonValue): Promise<void>;
   seedDemoData(tasks: number): Promise<void>;
@@ -413,6 +499,44 @@ const tauriApi: Api = {
   listMatrix: () => invoke("list_matrix", localDateParams()),
   assignToQuadrant: (taskId, quadrant) => invoke("assign_to_quadrant", { taskId, quadrant }),
 
+  listCalendar: (from, to, includeCompleted) =>
+    invoke("list_calendar", { from, to, includeCompleted }),
+  createEvent: (input) => invoke("create_event", { input }),
+  getEvent: (id) => invoke("get_event", { id }),
+  updateEvent: (id, patch) =>
+    invoke("update_event", {
+      id,
+      title: patch.title ?? null,
+      startAt: patch.startAt ?? null,
+      endAt: patch.endAt ?? null,
+      allDay: patch.allDay ?? null,
+      location: patch.location ?? null,
+      notes: patch.notes ?? null,
+      color: patch.color ?? null,
+    }),
+  deleteEvent: (id) => invoke("delete_event", { id }),
+  moveCalendarItem: (kind, id, startAt, allDay) =>
+    invoke("move_calendar_item", { kind, id, startAt, allDay }),
+  resizeCalendarItem: (kind, id, endAt) => invoke("resize_calendar_item", { kind, id, endAt }),
+  scheduleTask: (taskId, startAt, allDay, durationMin) =>
+    invoke("schedule_task", { taskId, startAt, allDay, durationMin: durationMin ?? null }),
+
+  listSubscriptions: () => invoke("list_subscriptions"),
+  addSubscription: (url, name, color, refreshMin) =>
+    invoke("add_subscription", { url, name, color: color ?? null, refreshMin: refreshMin ?? null }),
+  updateSubscription: (id, patch) =>
+    invoke("update_subscription", {
+      id,
+      name: patch.name ?? null,
+      color: patch.color ?? null,
+      visible: patch.visible ?? null,
+      refreshMin: patch.refreshMin ?? null,
+    }),
+  deleteSubscription: (id) => invoke("delete_subscription", { id }),
+  refreshSubscription: (id) => invoke("refresh_subscription", { id }),
+  importIcs: (text) => invoke("import_ics", { text }),
+  exportIcs: (projectId) => invoke("export_ics", { projectId: projectId ?? null }),
+
   getSetting: (key) => invoke("get_setting", { key }),
   setSetting: (key, value) => invoke("set_setting", { key, value }),
   seedDemoData: (tasks) => invoke("seed_demo_data", { tasks }),
@@ -437,8 +561,25 @@ function browserStubApi(): Api {
   const sections: Section[] = [];
   const filters: Filter[] = [];
   const matrixConfig = new Map<number, Rule>();
+  const calEvents: CalEvent[] = [];
+  const subscriptions: CalSubscription[] = [];
   const nowIso = () => new Date().toISOString();
   const uid = () => crypto.randomUUID();
+
+  const CAL_DEFAULT_DURATION = 60;
+  const addMinutes = (iso: string, m: number) =>
+    new Date(new Date(iso).getTime() + m * 60_000).toISOString();
+  const calIntersects = (start: string, end: string | null, from: string, to: string) => {
+    const e = end ?? start;
+    return start <= to && e >= from;
+  };
+  const taskSpan = (t: Task): { start: string; end: string | null; allDay: boolean } | null => {
+    if (t.startAt && t.dueAt) return { start: t.startAt, end: t.dueAt, allDay: t.isAllDay };
+    const point = t.dueAt ?? t.startAt;
+    if (!point) return null;
+    if (t.isAllDay) return { start: point, end: null, allDay: true };
+    return { start: point, end: addMinutes(point, t.durationMin ?? CAL_DEFAULT_DURATION), allDay: false };
+  };
 
   const DEFAULT_QUADRANT_PRIORITY = [5, 3, 1, 0];
   const defaultQuadrantRule = (q: number): Rule => ({
@@ -1040,6 +1181,150 @@ function browserStubApi(): Api {
         t.updatedAt = nowIso();
       }
     },
+
+    listCalendar: async (from, to, includeCompleted) => {
+      const statuses = includeCompleted ? ["ACTIVE", "COMPLETED"] : ["ACTIVE"];
+      const items: CalItem[] = [];
+      for (const t of tasks.filter((x) => statuses.includes(x.status))) {
+        const span = taskSpan(t);
+        if (!span || !calIntersects(span.start, span.end, from, to)) continue;
+        items.push({
+          id: t.id,
+          kind: "TASK",
+          sourceId: t.id,
+          title: t.title,
+          startAt: span.start,
+          endAt: span.end,
+          allDay: span.allDay,
+          color: null,
+          editable: !t.rrule,
+        });
+      }
+      // Local events only (the stub does no network fetch or RRULE expansion).
+      for (const e of calEvents) {
+        if (e.rrule) continue;
+        if (!calIntersects(e.startAt, e.endAt, from, to)) continue;
+        items.push({
+          id: e.id,
+          kind: "EVENT",
+          sourceId: e.id,
+          title: e.title,
+          startAt: e.startAt,
+          endAt: e.endAt,
+          allDay: e.allDay,
+          color: e.color,
+          editable: true,
+        });
+      }
+      return clone(items);
+    },
+    getEvent: async (id) => {
+      const e = calEvents.find((x) => x.id === id);
+      if (!e) throw new Error(`not found: event ${id}`);
+      return clone(e);
+    },
+    createEvent: async (input) => {
+      const e: CalEvent = {
+        id: uid(),
+        subscriptionId: null,
+        title: input.title,
+        startAt: input.startAt,
+        endAt: input.endAt ?? null,
+        allDay: input.allDay ?? false,
+        location: input.location ?? null,
+        notes: input.notes ?? null,
+        color: input.color ?? null,
+        rrule: input.rrule ?? null,
+      };
+      calEvents.push(e);
+      return clone(e);
+    },
+    updateEvent: async (id, patch) => {
+      const e = calEvents.find((x) => x.id === id);
+      if (!e) throw new Error(`not found: event ${id}`);
+      if (patch.title !== undefined) e.title = patch.title;
+      if (patch.startAt !== undefined) e.startAt = patch.startAt;
+      if (patch.endAt !== undefined) e.endAt = patch.endAt;
+      if (patch.allDay !== undefined) e.allDay = patch.allDay;
+      if (patch.location !== undefined) e.location = patch.location;
+      if (patch.notes !== undefined) e.notes = patch.notes;
+      if (patch.color !== undefined) e.color = patch.color;
+      return clone(e);
+    },
+    deleteEvent: async (id) => {
+      const i = calEvents.findIndex((x) => x.id === id);
+      if (i >= 0) calEvents.splice(i, 1);
+    },
+    moveCalendarItem: async (kind, id, startAt, allDay) => {
+      if (kind === "TASK") {
+        const t = findTask(id);
+        const old = t.dueAt ?? t.startAt;
+        const delta = old ? new Date(startAt).getTime() - new Date(old).getTime() : 0;
+        if (t.startAt) t.startAt = new Date(new Date(t.startAt).getTime() + delta).toISOString();
+        if (t.dueAt) t.dueAt = new Date(new Date(t.dueAt).getTime() + delta).toISOString();
+        t.isAllDay = allDay;
+        t.updatedAt = nowIso();
+      } else {
+        const e = calEvents.find((x) => x.id === id);
+        if (!e) throw new Error(`not found: event ${id}`);
+        const delta = new Date(startAt).getTime() - new Date(e.startAt).getTime();
+        e.startAt = startAt;
+        if (e.endAt) e.endAt = new Date(new Date(e.endAt).getTime() + delta).toISOString();
+        e.allDay = allDay;
+      }
+    },
+    resizeCalendarItem: async (kind, id, endAt) => {
+      if (kind === "TASK") {
+        const t = findTask(id);
+        const start = t.startAt ?? t.dueAt;
+        t.durationMin = start
+          ? Math.max(0, Math.round((new Date(endAt).getTime() - new Date(start).getTime()) / 60_000))
+          : CAL_DEFAULT_DURATION;
+        t.updatedAt = nowIso();
+      } else {
+        const e = calEvents.find((x) => x.id === id);
+        if (!e) throw new Error(`not found: event ${id}`);
+        e.endAt = endAt;
+      }
+    },
+    scheduleTask: async (taskId, startAt, allDay, durationMin) => {
+      const t = findTask(taskId);
+      t.dueAt = startAt;
+      t.isAllDay = allDay;
+      t.durationMin = durationMin ?? null;
+      t.updatedAt = nowIso();
+    },
+
+    listSubscriptions: async () => clone(subscriptions),
+    addSubscription: async (url, name, color, refreshMin) => {
+      const s: CalSubscription = {
+        id: uid(),
+        url,
+        name,
+        color: color ?? null,
+        visible: true,
+        refreshMin: refreshMin ?? 60,
+        lastFetch: null,
+      };
+      subscriptions.push(s);
+      return clone(s);
+    },
+    updateSubscription: async (id, patch) => {
+      const s = subscriptions.find((x) => x.id === id);
+      if (!s) throw new Error(`not found: subscription ${id}`);
+      if (patch.name !== undefined) s.name = patch.name;
+      if (patch.color !== undefined) s.color = patch.color;
+      if (patch.visible !== undefined) s.visible = patch.visible;
+      if (patch.refreshMin !== undefined) s.refreshMin = patch.refreshMin;
+    },
+    deleteSubscription: async (id) => {
+      const i = subscriptions.findIndex((x) => x.id === id);
+      if (i >= 0) subscriptions.splice(i, 1);
+    },
+    // ICS parse/generate and live fetch are Tauri-only (see docs/decisions.md).
+    refreshSubscription: async () => 0,
+    importIcs: async () => 0,
+    exportIcs: async () => "",
 
     getSetting: async (key) => clone(settings.get(key) ?? null),
     setSetting: async (key, value) => {

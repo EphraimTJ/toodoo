@@ -6,7 +6,8 @@ export type ViewSelection =
   | { kind: "smart"; view: SmartView }
   | { kind: "tag"; tagId: string }
   | { kind: "filter"; filterId: string }
-  | { kind: "matrix" };
+  | { kind: "matrix" }
+  | { kind: "calendar" };
 
 export function viewKey(view: ViewSelection): string {
   switch (view.kind) {
@@ -20,6 +21,8 @@ export function viewKey(view: ViewSelection): string {
       return `filter:${view.filterId}`;
     case "matrix":
       return "matrix";
+    case "calendar":
+      return "calendar";
   }
 }
 

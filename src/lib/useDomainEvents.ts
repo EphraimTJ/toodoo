@@ -48,6 +48,14 @@ export function useDomainEvents(): void {
             void queryClient.invalidateQueries({ queryKey: ["matrix"] });
             void queryClient.invalidateQueries({ queryKey: ["tasks"] });
             break;
+          case "calendar":
+            void queryClient.invalidateQueries({ queryKey: ["calendar"] });
+            void queryClient.invalidateQueries({ queryKey: ["tasks"] });
+            break;
+          case "subscription":
+            void queryClient.invalidateQueries({ queryKey: ["subscriptions"] });
+            void queryClient.invalidateQueries({ queryKey: ["calendar"] });
+            break;
           case "project":
           case "folder":
             void queryClient.invalidateQueries({ queryKey: ["projects"] });

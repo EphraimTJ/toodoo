@@ -5,6 +5,40 @@ ambiguity we resolved by judgment call), with the reasoning. Newest entries at
 the top. Never rewrite history — if a decision is reversed, add a new entry
 that supersedes the old one.
 
+## 2026-07-15 — Calendar: FullCalendar, live ICS fetch, feed-RRULE expansion (user-approved)
+
+**Decision (deps):** the calendar grid uses **FullCalendar** (`@fullcalendar/react`
++ daygrid/timegrid/list/interaction, all MIT), named in the CLAUDE.md stack.
+External ICS subscriptions are fetched live over the network with **reqwest**
+(rustls-tls). Both confirmed with the project owner.
+
+**Grid actions:** dragging an item reschedules it — a task's start and due move
+together (the gap is preserved); an event's start/end move together. Resizing
+sets duration (`tasks.duration_min` / event `end_at`). Drawing on empty grid
+creates a new **local** event. Dragging a task from the "Unscheduled" panel onto
+the grid schedules it (sets due date + a 60-min block when timed).
+
+**Which tasks appear:** tasks with a due or start date. All-day tasks sit on the
+all-day row; timed tasks render as blocks (default 60 min when no duration).
+A recurring task shows once at its current occurrence and is not draggable on the
+grid (it advances on completion, per Phase 2).
+
+**Subscriptions & recurring events:** subscription events and expanded recurring
+occurrences are **read-only** (`editable:false`), keyed `id = sourceId::<startIso>`
+so FullCalendar keys stay unique. A refresh **replaces** a subscription's cached
+events wholesale. Feed `RRULE`s are expanded across the visible window via the
+Phase-2 recurrence engine, honoring `EXDATE`; `RECURRENCE-ID` overrides and full
+`VTIMEZONE` parsing (beyond `TZID` lookup) are **out of scope for v1**.
+
+**Import/export:** `.ics` import creates local events; export emits dated tasks
+(DTSTART = due date) plus local events — subscription events are not re-exported.
+Week-start, weekend shading, and show-completed persist per calendar in settings.
+
+**Why:** FullCalendar de-risks the drag/resize interactions the build plan flags
+as a top risk, and the split of ICS parsing (pure, unit-tested) from the network
+fetch keeps the hard logic deterministic. The `editable:false` + replace-on-
+refresh model keeps read-only overlays from being accidentally mutated.
+
 ## 2026-07-15 — Eisenhower Matrix is priority-based; drag sets priority (user-approved)
 
 **Decision:** The four quadrants default to priority rules — Q0 High(5), Q1

@@ -124,6 +124,69 @@ fn resolve_tz(tz_name: Option<&str>) -> RruleTz {
         .unwrap_or(RruleTz::UTC)
 }
 
+/// Extract the bare RRULE body from a stored value that may carry a leading
+/// `RRULE:` (or a full iCal block).
+fn rrule_body(rrule: &str) -> &str {
+    rrule
+        .lines()
+        .find(|l| l.to_uppercase().starts_with("RRULE:"))
+        .map(|l| &l[l.find(':').map(|i| i + 1).unwrap_or(0)..])
+        .unwrap_or(rrule)
+        .trim()
+}
+
+/// Every occurrence of `rrule` (anchored at `dtstart`) that falls within
+/// `[from, to]`, excluding `exdates`. Honors COUNT/UNTIL natively (they stay in
+/// the rule). Used to expand recurring calendar events across the visible
+/// window. Bounded iteration so an exotic rule can never hang.
+pub fn occurrences_between(
+    rrule: &str,
+    dtstart: &str,
+    from: &str,
+    to: &str,
+    tz_name: Option<&str>,
+    exdates: &[String],
+) -> Result<Vec<String>> {
+    let body = rrule_body(rrule);
+    if body.is_empty() {
+        return Err(RepoError::Invalid("empty RRULE".into()));
+    }
+    let tz = resolve_tz(tz_name);
+    let start = parse_utc(dtstart)?;
+    let from_dt = parse_utc(from)?;
+    let to_dt = parse_utc(to)?;
+
+    let dtstart_local = start.with_timezone(&tz);
+    let ical = format!(
+        "DTSTART;TZID={}:{}\nRRULE:{}",
+        tz.name(),
+        dtstart_local.format("%Y%m%dT%H%M%S"),
+        body
+    );
+    let set: RRuleSet = ical
+        .parse()
+        .map_err(|e| RepoError::Invalid(format!("invalid RRULE {body:?}: {e}")))?;
+
+    let excluded: std::collections::HashSet<i64> = exdates
+        .iter()
+        .filter_map(|e| parse_utc(e).ok())
+        .map(|d| d.timestamp_millis())
+        .collect();
+
+    let mut out = Vec::new();
+    for occ in set.into_iter().take(3660) {
+        let occ_utc = occ.with_timezone(&Utc);
+        if occ_utc > to_dt {
+            break;
+        }
+        if occ_utc < from_dt || excluded.contains(&occ_utc.timestamp_millis()) {
+            continue;
+        }
+        out.push(fmt(occ_utc));
+    }
+    Ok(out)
+}
+
 /// First rule occurrence strictly after `basis` (interpreting the rule in `tz`,
 /// starting it at `basis`). Bounded iteration so an exotic rule can never hang.
 fn first_after(body: &str, basis: DateTime<Utc>, tz: RruleTz) -> Result<Option<DateTime<Utc>>> {
@@ -345,6 +408,74 @@ mod tests {
         let next = next_occurrence(input).unwrap().unwrap();
         assert_eq!(next.due_at.unwrap(), "2026-03-19T00:00:00.000Z");
         assert_eq!(next.start_at.unwrap(), "2026-03-17T00:00:00.000Z"); // gap kept
+    }
+
+    #[test]
+    fn occurrences_between_weekly_within_window() {
+        // Weekly Mondays from 2026-03-02; March has Mondays 2,9,16,23,30.
+        let occ = occurrences_between(
+            "FREQ=WEEKLY;BYDAY=MO",
+            "2026-03-02T09:00:00.000Z",
+            "2026-03-01T00:00:00.000Z",
+            "2026-03-31T23:59:59.000Z",
+            None,
+            &[],
+        )
+        .unwrap();
+        assert_eq!(occ.len(), 5);
+        assert_eq!(occ[0], "2026-03-02T09:00:00.000Z");
+        assert_eq!(occ[4], "2026-03-30T09:00:00.000Z");
+    }
+
+    #[test]
+    fn occurrences_between_honors_count_and_exdate() {
+        // COUNT caps at 3 even though the window is wide.
+        let occ = occurrences_between(
+            "FREQ=DAILY;COUNT=3",
+            "2026-03-02T09:00:00.000Z",
+            "2026-01-01T00:00:00.000Z",
+            "2026-12-31T00:00:00.000Z",
+            None,
+            &[],
+        )
+        .unwrap();
+        assert_eq!(occ, [
+            "2026-03-02T09:00:00.000Z",
+            "2026-03-03T09:00:00.000Z",
+            "2026-03-04T09:00:00.000Z",
+        ]);
+
+        // EXDATE removes the middle occurrence.
+        let occ = occurrences_between(
+            "FREQ=DAILY;COUNT=3",
+            "2026-03-02T09:00:00.000Z",
+            "2026-01-01T00:00:00.000Z",
+            "2026-12-31T00:00:00.000Z",
+            None,
+            &["2026-03-03T09:00:00.000Z".to_string()],
+        )
+        .unwrap();
+        assert_eq!(occ.len(), 2);
+        assert!(!occ.contains(&"2026-03-03T09:00:00.000Z".to_string()));
+    }
+
+    #[test]
+    fn occurrences_between_clips_to_window() {
+        // Only the occurrences inside the tight window are returned.
+        let occ = occurrences_between(
+            "FREQ=DAILY",
+            "2026-03-01T00:00:00.000Z",
+            "2026-03-10T00:00:00.000Z",
+            "2026-03-12T00:00:00.000Z",
+            None,
+            &[],
+        )
+        .unwrap();
+        assert_eq!(occ, [
+            "2026-03-10T00:00:00.000Z",
+            "2026-03-11T00:00:00.000Z",
+            "2026-03-12T00:00:00.000Z",
+        ]);
     }
 
     #[test]

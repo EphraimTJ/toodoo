@@ -9,6 +9,8 @@ use tauri_plugin_notification::NotificationExt;
 
 use events::EventBus;
 use repo::activity::ActivityEntry;
+use repo::cal_subscriptions::Subscription;
+use repo::calendar::{CalEvent, CalItem, NewEvent};
 use repo::check_items::CheckItem;
 use repo::filter_rule::Rule;
 use repo::filters::Filter;
@@ -507,6 +509,158 @@ async fn assign_to_quadrant(
     repo::matrix::assign_to_quadrant(&state.pool, &state.bus, &task_id, quadrant).await.map_err(err)
 }
 
+// ---- calendar ------------------------------------------------------------------
+
+#[tauri::command]
+async fn list_calendar(
+    state: State<'_, AppState>,
+    from: String,
+    to: String,
+    include_completed: bool,
+) -> CmdResult<Vec<CalItem>> {
+    repo::calendar::list_calendar(&state.pool, &from, &to, include_completed).await.map_err(err)
+}
+
+#[tauri::command]
+async fn create_event(state: State<'_, AppState>, input: NewEvent) -> CmdResult<CalEvent> {
+    repo::calendar::create_event(&state.pool, &state.bus, input).await.map_err(err)
+}
+
+#[tauri::command]
+async fn get_event(state: State<'_, AppState>, id: String) -> CmdResult<CalEvent> {
+    repo::calendar::get_event(&state.pool, &id).await.map_err(err)
+}
+
+#[tauri::command]
+#[allow(clippy::too_many_arguments)]
+async fn update_event(
+    state: State<'_, AppState>,
+    id: String,
+    title: Option<String>,
+    start_at: Option<String>,
+    end_at: Option<String>,
+    all_day: Option<bool>,
+    location: Option<String>,
+    notes: Option<String>,
+    color: Option<String>,
+) -> CmdResult<CalEvent> {
+    repo::calendar::update_event(
+        &state.pool,
+        &state.bus,
+        &id,
+        title.as_deref(),
+        start_at.as_deref(),
+        end_at.as_deref(),
+        all_day,
+        location.as_deref(),
+        notes.as_deref(),
+        color.as_deref(),
+    )
+    .await
+    .map_err(err)
+}
+
+#[tauri::command]
+async fn delete_event(state: State<'_, AppState>, id: String) -> CmdResult<()> {
+    repo::calendar::delete_event(&state.pool, &state.bus, &id).await.map_err(err)
+}
+
+#[tauri::command]
+async fn move_calendar_item(
+    state: State<'_, AppState>,
+    kind: String,
+    id: String,
+    start_at: String,
+    all_day: bool,
+) -> CmdResult<()> {
+    repo::calendar::move_item(&state.pool, &state.bus, &kind, &id, &start_at, all_day).await.map_err(err)
+}
+
+#[tauri::command]
+async fn resize_calendar_item(
+    state: State<'_, AppState>,
+    kind: String,
+    id: String,
+    end_at: String,
+) -> CmdResult<()> {
+    repo::calendar::resize_item(&state.pool, &state.bus, &kind, &id, &end_at).await.map_err(err)
+}
+
+#[tauri::command]
+async fn schedule_task(
+    state: State<'_, AppState>,
+    task_id: String,
+    start_at: String,
+    all_day: bool,
+    duration_min: Option<i64>,
+) -> CmdResult<()> {
+    repo::calendar::schedule_task(&state.pool, &state.bus, &task_id, &start_at, all_day, duration_min)
+        .await
+        .map_err(err)
+}
+
+// ---- calendar subscriptions & import/export ------------------------------------
+
+#[tauri::command]
+async fn list_subscriptions(state: State<'_, AppState>) -> CmdResult<Vec<Subscription>> {
+    repo::cal_subscriptions::list_subscriptions(&state.pool).await.map_err(err)
+}
+
+#[tauri::command]
+async fn add_subscription(
+    state: State<'_, AppState>,
+    url: String,
+    name: String,
+    color: Option<String>,
+    refresh_min: Option<i64>,
+) -> CmdResult<Subscription> {
+    repo::cal_subscriptions::add_subscription(&state.pool, &state.bus, &url, &name, color.as_deref(), refresh_min)
+        .await
+        .map_err(err)
+}
+
+#[tauri::command]
+async fn update_subscription(
+    state: State<'_, AppState>,
+    id: String,
+    name: Option<String>,
+    color: Option<String>,
+    visible: Option<bool>,
+    refresh_min: Option<i64>,
+) -> CmdResult<()> {
+    repo::cal_subscriptions::update_subscription(
+        &state.pool,
+        &state.bus,
+        &id,
+        name.as_deref(),
+        color.as_deref(),
+        visible,
+        refresh_min,
+    )
+    .await
+    .map_err(err)
+}
+
+#[tauri::command]
+async fn delete_subscription(state: State<'_, AppState>, id: String) -> CmdResult<()> {
+    repo::cal_subscriptions::delete_subscription(&state.pool, &state.bus, &id).await.map_err(err)
+}
+
+#[tauri::command]
+async fn refresh_subscription(state: State<'_, AppState>, id: String) -> CmdResult<usize> {
+    repo::cal_subscriptions::refresh_subscription(&state.pool, &state.bus, &id).await.map_err(err)
+}
+
+#[tauri::command]
+async fn import_ics(state: State<'_, AppState>, text: String) -> CmdResult<usize> {
+    repo::cal_subscriptions::import_ics(&state.pool, &state.bus, &text).await.map_err(err)
+}
+
+#[tauri::command]
+async fn export_ics(state: State<'_, AppState>, project_id: Option<String>) -> CmdResult<String> {
+    repo::cal_subscriptions::export_ics(&state.pool, project_id.as_deref()).await.map_err(err)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -566,6 +720,20 @@ pub fn run() {
                             task_id: r.task_id,
                             reminder_id: r.reminder_id,
                         });
+                    }
+                }
+            });
+
+            // Calendar-subscription refresh: every 5 minutes, refresh any feed
+            // whose interval has elapsed (first tick runs immediately on launch).
+            let sub_pool = pool.clone();
+            let sub_bus = bus.clone();
+            tauri::async_runtime::spawn(async move {
+                let mut tick = tokio::time::interval(std::time::Duration::from_secs(300));
+                loop {
+                    tick.tick().await;
+                    if let Err(e) = repo::cal_subscriptions::refresh_due(&sub_pool, &sub_bus).await {
+                        eprintln!("subscription refresh failed: {e}");
                     }
                 }
             });
@@ -637,7 +805,22 @@ pub fn run() {
             get_matrix,
             set_quadrant,
             list_matrix,
-            assign_to_quadrant
+            assign_to_quadrant,
+            list_calendar,
+            create_event,
+            get_event,
+            update_event,
+            delete_event,
+            move_calendar_item,
+            resize_calendar_item,
+            schedule_task,
+            list_subscriptions,
+            add_subscription,
+            update_subscription,
+            delete_subscription,
+            refresh_subscription,
+            import_ics,
+            export_ics
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
