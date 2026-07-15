@@ -1,14 +1,22 @@
-import { useQuery } from "@tanstack/react-query";
-import { api } from "../../lib/api";
+import type { SmartView } from "../../lib/api";
+import { useUiStore } from "../../lib/uiStore";
 import { ThemeToggle } from "../../features/settings/components/ThemeToggle";
+import { SidebarProjects } from "../../features/projects/components/SidebarProjects";
+import { useSmartCounts } from "../../features/tasks/hooks/useTasks";
 
-const SMART_LISTS = ["Today", "Tomorrow", "Next 7 Days", "Inbox", "All", "Completed", "Trash"];
+const SMART_LISTS: { view: SmartView; label: string; countKey?: "today" | "tomorrow" | "next7" }[] =
+  [
+    { view: "today", label: "Today", countKey: "today" },
+    { view: "tomorrow", label: "Tomorrow", countKey: "tomorrow" },
+    { view: "next7Days", label: "Next 7 Days", countKey: "next7" },
+    { view: "all", label: "All" },
+    { view: "completed", label: "Completed" },
+    { view: "trash", label: "Trash" },
+  ];
 
 export function Sidebar() {
-  const { data: projects } = useQuery({
-    queryKey: ["projects"],
-    queryFn: api.listProjects,
-  });
+  const { view, setView } = useUiStore();
+  const { data: counts } = useSmartCounts();
 
   return (
     <aside
@@ -22,34 +30,45 @@ export function Sidebar() {
 
       <nav className="flex-1 overflow-y-auto px-2 pb-4">
         <ul>
-          {SMART_LISTS.map((name) => (
-            <li key={name}>
-              <button
-                type="button"
-                className="w-full rounded-md px-2 py-1.5 text-left text-sm hover:bg-bg"
-              >
-                {name}
-              </button>
-            </li>
-          ))}
+          <li>
+            <button
+              type="button"
+              onClick={() => setView({ kind: "project", projectId: "inbox" })}
+              className={`flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left text-sm hover:bg-bg ${
+                view.kind === "project" && view.projectId === "inbox"
+                  ? "bg-bg font-medium text-accent"
+                  : ""
+              }`}
+            >
+              Inbox
+              {(counts?.inbox ?? 0) > 0 && (
+                <span className="text-xs text-text-muted">{counts?.inbox}</span>
+              )}
+            </button>
+          </li>
+          {SMART_LISTS.map((smart) => {
+            const active = view.kind === "smart" && view.view === smart.view;
+            const count = smart.countKey ? counts?.[smart.countKey] : undefined;
+            return (
+              <li key={smart.view}>
+                <button
+                  type="button"
+                  onClick={() => setView({ kind: "smart", view: smart.view })}
+                  className={`flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left text-sm hover:bg-bg ${
+                    active ? "bg-bg font-medium text-accent" : ""
+                  }`}
+                >
+                  {smart.label}
+                  {count !== undefined && count > 0 && (
+                    <span className="text-xs text-text-muted">{count}</span>
+                  )}
+                </button>
+              </li>
+            );
+          })}
         </ul>
 
-        <h2 className="mt-4 px-2 text-xs font-medium uppercase tracking-wide text-text-muted">
-          Lists
-        </h2>
-        <ul>
-          {(projects ?? []).map((project) => (
-            <li key={project.id}>
-              <button
-                type="button"
-                className="w-full rounded-md px-2 py-1.5 text-left text-sm hover:bg-bg"
-              >
-                {project.icon ? `${project.icon} ` : ""}
-                {project.name}
-              </button>
-            </li>
-          ))}
-        </ul>
+        <SidebarProjects />
       </nav>
     </aside>
   );

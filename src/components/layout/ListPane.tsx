@@ -1,12 +1,11 @@
+import { useUiStore } from "../../lib/uiStore";
+import { TaskListView } from "../../features/tasks/components/TaskListView";
+
 export function ListPane() {
+  const view = useUiStore((s) => s.view);
   return (
     <main aria-label="Task list" className="flex min-w-0 flex-1 flex-col">
-      <header className="border-b border-border px-6 py-3">
-        <h2 className="text-base font-semibold">Inbox</h2>
-      </header>
-      <div className="flex flex-1 items-center justify-center text-sm text-text-muted">
-        No tasks yet — task CRUD ships in Phase 1.
-      </div>
+      <TaskListView view={view} />
     </main>
   );
 }

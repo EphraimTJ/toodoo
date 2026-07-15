@@ -231,6 +231,10 @@ function browserStubApi(): Api {
   const tags: Tag[] = [];
   const nowIso = () => new Date().toISOString();
   const uid = () => crypto.randomUUID();
+  // Return copies, never live references: the real backend serializes fresh
+  // JSON per call, and react-query's structural sharing relies on that to
+  // detect changes (in-place mutations would otherwise be invisible).
+  const clone = <T>(value: T): T => structuredClone(value);
 
   const makeProject = (input: NewProject): Project => ({
     id: input.name === "Inbox" ? INBOX_ID : uid(),
@@ -277,11 +281,11 @@ function browserStubApi(): Api {
   };
 
   return {
-    listProjects: async () => projects.filter((p) => !p.closed).slice(),
+    listProjects: async () => clone(projects.filter((p) => !p.closed)),
     createProject: async (input) => {
       const p = makeProject(input);
       projects.push(p);
-      return p;
+      return clone(p);
     },
     updateProject: async (id, patch) => {
       const p = projects.find((x) => x.id === id);
@@ -296,7 +300,7 @@ function browserStubApi(): Api {
         viewMode: patch.viewMode ?? p.viewMode,
         updatedAt: nowIso(),
       });
-      return p;
+      return clone(p);
     },
     deleteProject: async (id) => {
       if (id === INBOX_ID) throw new Error("invalid operation: the Inbox cannot be deleted");
@@ -313,7 +317,7 @@ function browserStubApi(): Api {
       projects.forEach((p, idx) => (p.sortOrder = idx));
     },
 
-    listFolders: async () => folders.slice(),
+    listFolders: async () => clone(folders),
     createFolder: async (name) => {
       const f: Folder = {
         id: uid(),
@@ -324,7 +328,7 @@ function browserStubApi(): Api {
         updatedAt: nowIso(),
       };
       folders.push(f);
-      return f;
+      return clone(f);
     },
     updateFolder: async (id, patch) => {
       const f = folders.find((x) => x.id === id);
@@ -335,7 +339,7 @@ function browserStubApi(): Api {
         sortOrder: patch.sortOrder ?? f.sortOrder,
         updatedAt: nowIso(),
       });
-      return f;
+      return clone(f);
     },
     deleteFolder: async (id) => {
       const i = folders.findIndex((f) => f.id === id);
@@ -368,9 +372,9 @@ function browserStubApi(): Api {
         tagIds: [],
       };
       tasks.push(t);
-      return t;
+      return clone(t);
     },
-    getTask: async (id) => findTask(id),
+    getTask: async (id) => clone(findTask(id)),
     updateTask: async (id, patch) => {
       const t = findTask(id);
       Object.assign(t, {
@@ -384,12 +388,10 @@ function browserStubApi(): Api {
         sectionId: patch.sectionId === undefined ? t.sectionId : patch.sectionId,
         updatedAt: nowIso(),
       });
-      return t;
+      return clone(t);
     },
     completeTask: async (id) => {
-      const targets = [findTask(id), ...descendants(id)].filter(
-        (t) => t.status === "ACTIVE",
-      );
+      const targets = [findTask(id), ...descendants(id)].filter((t) => t.status === "ACTIVE");
       for (const t of targets) {
         t.status = "COMPLETED";
         t.completedAt = nowIso();
@@ -411,7 +413,7 @@ function browserStubApi(): Api {
       t.status = "ACTIVE";
       t.completedAt = null;
       if (!projects.some((p) => p.id === t.projectId)) t.projectId = INBOX_ID;
-      return t;
+      return clone(t);
     },
     deleteTaskForever: async (id) => {
       const doomed = new Set([id, ...descendants(id).map((t) => t.id)]);
@@ -433,27 +435,31 @@ function browserStubApi(): Api {
       siblings.forEach((x, idx) => (x.sortOrder = (idx + 1) * 1024));
     },
     listProjectTasks: async (projectId) =>
-      tasks
-        .filter((t) => t.projectId === projectId && liveTask(t))
-        .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0)),
+      clone(
+        tasks
+          .filter((t) => t.projectId === projectId && liveTask(t))
+          .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0)),
+      ),
     listSmart: async (view) => {
       const { today } = localDateParams();
       const active = tasks.filter((t) => t.status === "ACTIVE");
       switch (view) {
         case "today":
-          return active.filter((t) => (effDate(t) ?? "9999") <= today);
+          return clone(active.filter((t) => (effDate(t) ?? "9999") <= today));
         case "tomorrow":
-          return active.filter((t) => effDate(t) === shiftDay(today, 1));
+          return clone(active.filter((t) => effDate(t) === shiftDay(today, 1)));
         case "next7Days":
-          return active.filter((t) => (effDate(t) ?? "9999") <= shiftDay(today, 6));
+          return clone(active.filter((t) => (effDate(t) ?? "9999") <= shiftDay(today, 6)));
         case "all":
-          return active.slice();
+          return clone(active);
         case "completed":
-          return tasks
-            .filter((t) => t.status === "COMPLETED")
-            .sort((a, b) => (b.completedAt ?? "").localeCompare(a.completedAt ?? ""));
+          return clone(
+            tasks
+              .filter((t) => t.status === "COMPLETED")
+              .sort((a, b) => (b.completedAt ?? "").localeCompare(a.completedAt ?? "")),
+          );
         case "trash":
-          return tasks.filter((t) => t.status === "TRASHED");
+          return clone(tasks.filter((t) => t.status === "TRASHED"));
       }
     },
     smartCounts: async () => {
@@ -472,21 +478,31 @@ function browserStubApi(): Api {
       const itemHits = new Set(
         checkItems.filter((c) => c.title.toLowerCase().includes(q)).map((c) => c.taskId),
       );
-      return tasks.filter(
-        (t) =>
-          liveTask(t) &&
-          (t.title.toLowerCase().includes(q) ||
-            (t.contentPlain ?? "").toLowerCase().includes(q) ||
-            itemHits.has(t.id)),
+      return clone(
+        tasks.filter(
+          (t) =>
+            liveTask(t) &&
+            (t.title.toLowerCase().includes(q) ||
+              (t.contentPlain ?? "").toLowerCase().includes(q) ||
+              itemHits.has(t.id)),
+        ),
       );
     },
 
     listCheckItems: async (taskId) =>
-      checkItems.filter((c) => c.taskId === taskId).sort((a, b) => a.sortOrder - b.sortOrder),
+      clone(
+        checkItems.filter((c) => c.taskId === taskId).sort((a, b) => a.sortOrder - b.sortOrder),
+      ),
     addCheckItem: async (taskId, title) => {
-      const item: CheckItem = { id: uid(), taskId, title, done: false, sortOrder: checkItems.length };
+      const item: CheckItem = {
+        id: uid(),
+        taskId,
+        title,
+        done: false,
+        sortOrder: checkItems.length,
+      };
       checkItems.push(item);
-      return item;
+      return clone(item);
     },
     setCheckItem: async (id, patch) => {
       const item = checkItems.find((c) => c.id === id);
@@ -499,13 +515,19 @@ function browserStubApi(): Api {
       if (i >= 0) checkItems.splice(i, 1);
     },
 
-    listTags: async () => tags.slice(),
+    listTags: async () => clone(tags),
     createTag: async (name, color) => {
       if (tags.some((t) => t.name.toLowerCase() === name.toLowerCase()))
         throw new Error(`invalid operation: tag "${name}" already exists`);
-      const tag: Tag = { id: uid(), name, color: color ?? null, parentId: null, sortOrder: tags.length };
+      const tag: Tag = {
+        id: uid(),
+        name,
+        color: color ?? null,
+        parentId: null,
+        sortOrder: tags.length,
+      };
       tags.push(tag);
-      return tag;
+      return clone(tag);
     },
     updateTag: async (id, patch) => {
       const tag = tags.find((t) => t.id === id);
@@ -528,7 +550,7 @@ function browserStubApi(): Api {
       t.tagIds = t.tagIds.filter((x) => x !== tagId);
     },
 
-    getSetting: async (key) => settings.get(key) ?? null,
+    getSetting: async (key) => clone(settings.get(key) ?? null),
     setSetting: async (key, value) => {
       settings.set(key, value);
     },

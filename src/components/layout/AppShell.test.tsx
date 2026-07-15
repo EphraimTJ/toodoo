@@ -22,10 +22,12 @@ describe("AppShell", () => {
     expect(screen.getByRole("complementary", { name: "Task detail" })).toBeInTheDocument();
   });
 
-  it("shows the smart lists in the sidebar", () => {
+  it("shows the smart lists and the Inbox project", async () => {
     renderShell();
-    for (const name of ["Today", "Next 7 Days", "Inbox", "Trash"]) {
+    for (const name of ["Today", "Tomorrow", "Next 7 Days", "All", "Completed", "Trash"]) {
       expect(screen.getByRole("button", { name })).toBeInTheDocument();
     }
+    // Inbox arrives async from the projects query (seeded in the API stub).
+    expect(await screen.findByRole("button", { name: /Inbox/ })).toBeInTheDocument();
   });
 });
