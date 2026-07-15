@@ -12,17 +12,17 @@ This is the checklist the whole project is graded against, converted from §3 of
 ## 3.1 Tasks
 
 - [ ] Task CRUD
-  - [ ] Title
-  - [ ] Rich-text description/notes
-  - [ ] Priority (None/Low/Medium/High)
-  - [ ] Tags (multi, nestable, colored)
-  - [ ] List/project assignment
-  - [ ] Sort order
-- [ ] Subtasks (nested tasks)
-- [ ] Check items (lightweight checklists inside a task)
+  - [x] Title
+  - [x] Rich-text description/notes
+  - [x] Priority (None/Low/Medium/High)
+  - [ ] Tags (multi, nestable, colored) — multi + colored shipped; nesting pending
+  - [x] List/project assignment
+  - [x] Sort order
+- [x] Subtasks (nested tasks)
+- [x] Check items (lightweight checklists inside a task)
 - [ ] Task vs. check item toggle (both modes, like TickTick)
-- [ ] Start date
-- [ ] Due date
+- [x] Start date
+- [x] Due date
 - [ ] All-day vs. timed
 - [ ] Task duration (time spans on calendar)
 - [ ] Multiple reminders per task
@@ -51,27 +51,27 @@ This is the checklist the whole project is graded against, converted from §3 of
 - [ ] "Won't Do" status
 - [ ] Task duplication
 - [ ] Convert note ↔ task
-- [ ] Batch edit (multi-select: move, tag, date, priority, delete)
+- [x] Batch edit (multi-select: move, tag, date, priority, delete)
 - [ ] Copy task link (`toodoo://task/<id>` URL scheme)
 - [ ] Location reminders (adapted per §9: data model + manual "arrive/leave"
       trigger; true desktop geofencing out of scope)
 
 ## 3.2 Lists, Folders & Organization
 
-- [ ] Inbox
-- [ ] Unlimited lists/projects (no cap)
-- [ ] Folders to group lists
-- [ ] List colors
+- [x] Inbox
+- [x] Unlimited lists/projects (no cap)
+- [x] Folders to group lists
+- [x] List colors
 - [ ] List icons/emojis
 - [ ] View-type memory per list
 - [ ] Smart Lists
-  - [ ] Today
-  - [ ] Tomorrow
-  - [ ] Next 7 Days
+  - [x] Today
+  - [x] Tomorrow
+  - [x] Next 7 Days
   - [ ] Assigned to Me (adapted)
-  - [ ] All
-  - [ ] Completed
-  - [ ] Trash
+  - [x] All
+  - [x] Completed
+  - [x] Trash
   - [ ] Won't Do
   - [ ] Show/hide/reorder smart lists
 - [ ] Custom Filters (Pro)
@@ -84,11 +84,11 @@ This is the checklist the whole project is graded against, converted from §3 of
   - [ ] Tag colors
   - [ ] Tag manager (rename/merge/delete)
   - [ ] Filter by tag
-- [ ] Sorting: by date, priority, title, tag, custom (manual drag)
-- [ ] Grouping: by list, date, priority, tag, none
-- [ ] Completed tasks: show/hide per list
+- [x] Sorting: by date, priority, title, tag, custom (manual drag)
+- [x] Grouping: by list, date, priority, tag, none
+- [x] Completed tasks: show/hide per list
 - [ ] Completed-by-date browsing
-- [ ] Trash with restore
+- [x] Trash with restore
 
 ## 3.3 Views
 
@@ -215,7 +215,7 @@ This is the checklist the whole project is graded against, converted from §3 of
 
 - [ ] Global quick-add hotkey (system-wide)
 - [ ] Full in-app shortcut map
-- [ ] Command palette (⌘K)
+- [x] Command palette (⌘K)
 - [ ] System tray with today count + quick actions
 - [ ] Launch at login
 - [ ] Native notifications with action buttons (Complete / Snooze)
