@@ -7,7 +7,8 @@ export type ViewSelection =
   | { kind: "tag"; tagId: string }
   | { kind: "filter"; filterId: string }
   | { kind: "matrix" }
-  | { kind: "calendar" };
+  | { kind: "calendar" }
+  | { kind: "focus" };
 
 export function viewKey(view: ViewSelection): string {
   switch (view.kind) {
@@ -23,6 +24,8 @@ export function viewKey(view: ViewSelection): string {
       return "matrix";
     case "calendar":
       return "calendar";
+    case "focus":
+      return "focus";
   }
 }
 
@@ -31,12 +34,14 @@ interface UiState {
   selectedTaskId: string | null;
   multiSelect: ReadonlySet<string>;
   paletteOpen: boolean;
+  focusTaskId: string | null;
 
   setView(view: ViewSelection): void;
   selectTask(id: string | null): void;
   toggleMultiSelect(id: string): void;
   clearMultiSelect(): void;
   setPaletteOpen(open: boolean): void;
+  openFocus(taskId?: string | null): void;
 }
 
 export const useUiStore = create<UiState>((set) => ({
@@ -44,8 +49,10 @@ export const useUiStore = create<UiState>((set) => ({
   selectedTaskId: null,
   multiSelect: new Set<string>(),
   paletteOpen: false,
+  focusTaskId: null,
 
   setView: (view) => set({ view, selectedTaskId: null, multiSelect: new Set() }),
+  openFocus: (taskId = null) => set({ view: { kind: "focus" }, focusTaskId: taskId }),
   selectTask: (selectedTaskId) => set({ selectedTaskId }),
   toggleMultiSelect: (id) =>
     set((s) => {

@@ -5,6 +5,7 @@ import { api, type Priority, type Task } from "../../../../lib/api";
 import { useUiStore } from "../../../../lib/uiStore";
 import { useTags, useTagMutations } from "../../../tags/hooks/useTags";
 import { useTaskMutations } from "../../hooks/useTasks";
+import { TaskFocusInfo } from "../../../focus/components/TaskFocusInfo";
 import { ActivityLog } from "./ActivityLog";
 import { DatePicker } from "./DatePicker";
 import { DescriptionEditor } from "./DescriptionEditor";
@@ -335,6 +336,7 @@ export function TaskDetail() {
       <Reminders task={task} />
       <CheckItems task={task} />
       <Subtasks task={task} />
+      <TaskFocusInfo task={task} />
       <ActivityLog task={task} />
 
       <div className="mt-auto flex justify-end gap-2 pt-4">

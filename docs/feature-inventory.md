@@ -133,24 +133,25 @@ This is the checklist the whole project is graded against, converted from §3 of
 
 ## 3.5 Focus / Pomodoro (Pro)
 
-- [ ] Pomo timer
-  - [ ] Configurable work/short-break/long-break durations
-  - [ ] Long-break interval
-  - [ ] Auto-start options
-  - [ ] Daily pomo goal
-- [ ] Stopwatch mode (count-up focus)
-- [ ] Attach a focus session to a task or habit
-- [ ] Focus notes per session
-- [ ] White noise / ambient sounds during focus
-- [ ] Mini floating focus window
-- [ ] Tray countdown
-- [ ] Focus statistics (Pro)
-  - [ ] Daily/weekly/monthly focus duration
-  - [ ] Pomo counts
-  - [ ] Per-task/per-tag focus distribution
-  - [ ] Trend charts
-  - [ ] Focus record timeline with manual add/edit of records
-- [ ] Estimated pomos / estimated duration per task, vs. actual
+- [x] Pomo timer
+  - [x] Configurable work/short-break/long-break durations
+  - [x] Long-break interval
+  - [x] Auto-start options
+  - [x] Daily pomo goal
+- [x] Stopwatch mode (count-up focus)
+- [x] Attach a focus session to a task or habit — task attach shipped; habit
+      attach lands with Phase 6 (habits)
+- [x] Focus notes per session
+- [x] White noise / ambient sounds during focus
+- [ ] Mini floating focus window — deferred to Phase 12 (desktop pass)
+- [ ] Tray countdown — deferred to Phase 12 (desktop pass)
+- [x] Focus statistics (Pro)
+  - [x] Daily/weekly/monthly focus duration
+  - [x] Pomo counts
+  - [x] Per-task/per-tag focus distribution
+  - [x] Trend charts
+  - [x] Focus record timeline with manual add/edit of records
+- [x] Estimated pomos / estimated duration per task, vs. actual
 
 ## 3.6 Habits (Pro)
 

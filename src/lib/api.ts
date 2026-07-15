@@ -207,6 +207,51 @@ export interface CalSubscription {
   lastFetch: string | null;
 }
 
+// ---- Focus / Pomodoro -------------------------------------------------------
+
+export type FocusKind = "POMO" | "STOPWATCH";
+
+export interface FocusSession {
+  id: string;
+  taskId: string | null;
+  habitId: string | null;
+  kind: FocusKind;
+  startedAt: string;
+  endedAt: string | null;
+  pauseMs: number;
+  note: string | null;
+  status: string;
+  plannedMin: number | null;
+}
+
+export interface DayStat {
+  date: string;
+  ms: number;
+  pomos: number;
+}
+export interface FocusTaskStat {
+  taskId: string | null;
+  title: string;
+  ms: number;
+  pomos: number;
+}
+export interface FocusTagStat {
+  tagId: string;
+  name: string;
+  ms: number;
+}
+export interface FocusStats {
+  totalMs: number;
+  pomoCount: number;
+  perDay: DayStat[];
+  perTask: FocusTaskStat[];
+  perTag: FocusTagStat[];
+}
+export interface TaskActuals {
+  actualMs: number;
+  actualPomos: number;
+}
+
 export interface CheckItem {
   id: string;
   taskId: string;
@@ -406,6 +451,27 @@ export interface Api {
   importIcs(text: string): Promise<number>;
   exportIcs(projectId?: string | null): Promise<string>;
 
+  startFocus(taskId: string | null, kind: FocusKind, plannedMin?: number): Promise<FocusSession>;
+  completeFocus(id: string, pauseMs: number, note: string | null, status: string): Promise<FocusSession>;
+  setFocusPaused(id: string, paused: boolean): Promise<void>;
+  activeFocus(): Promise<FocusSession | null>;
+  addFocusSession(
+    taskId: string | null,
+    kind: FocusKind,
+    startedAt: string,
+    endedAt: string,
+    note?: string | null,
+  ): Promise<FocusSession>;
+  updateFocusSession(
+    id: string,
+    patch: { startedAt?: string; endedAt?: string; note?: string },
+  ): Promise<FocusSession>;
+  deleteFocusSession(id: string): Promise<void>;
+  listFocusSessions(from: string, to: string): Promise<FocusSession[]>;
+  listTaskFocus(taskId: string): Promise<FocusSession[]>;
+  focusStats(from: string, to: string): Promise<FocusStats>;
+  taskFocusActuals(taskId: string): Promise<TaskActuals>;
+
   getSetting(key: string): Promise<JsonValue | null>;
   setSetting(key: string, value: JsonValue): Promise<void>;
   seedDemoData(tasks: number): Promise<void>;
@@ -537,6 +603,27 @@ const tauriApi: Api = {
   importIcs: (text) => invoke("import_ics", { text }),
   exportIcs: (projectId) => invoke("export_ics", { projectId: projectId ?? null }),
 
+  startFocus: (taskId, kind, plannedMin) =>
+    invoke("start_focus", { taskId, kind, plannedMin: plannedMin ?? null }),
+  completeFocus: (id, pauseMs, note, status) =>
+    invoke("complete_focus", { id, pauseMs, note, status }),
+  setFocusPaused: (id, paused) => invoke("set_focus_paused", { id, paused }),
+  activeFocus: () => invoke("active_focus"),
+  addFocusSession: (taskId, kind, startedAt, endedAt, note) =>
+    invoke("add_focus_session", { taskId, kind, startedAt, endedAt, note: note ?? null }),
+  updateFocusSession: (id, patch) =>
+    invoke("update_focus_session", {
+      id,
+      startedAt: patch.startedAt ?? null,
+      endedAt: patch.endedAt ?? null,
+      note: patch.note ?? null,
+    }),
+  deleteFocusSession: (id) => invoke("delete_focus_session", { id }),
+  listFocusSessions: (from, to) => invoke("list_focus_sessions", { from, to }),
+  listTaskFocus: (taskId) => invoke("list_task_focus", { taskId }),
+  focusStats: (from, to) => invoke("focus_stats", { from, to, tzOffsetMin: localDateParams().tzOffsetMin }),
+  taskFocusActuals: (taskId) => invoke("task_focus_actuals", { taskId }),
+
   getSetting: (key) => invoke("get_setting", { key }),
   setSetting: (key, value) => invoke("set_setting", { key, value }),
   seedDemoData: (tasks) => invoke("seed_demo_data", { tasks }),
@@ -563,8 +650,17 @@ function browserStubApi(): Api {
   const matrixConfig = new Map<number, Rule>();
   const calEvents: CalEvent[] = [];
   const subscriptions: CalSubscription[] = [];
+  const focusSessions: FocusSession[] = [];
   const nowIso = () => new Date().toISOString();
   const uid = () => crypto.randomUUID();
+
+  const focusEffMs = (s: FocusSession) =>
+    s.endedAt ? Math.max(0, new Date(s.endedAt).getTime() - new Date(s.startedAt).getTime() - s.pauseMs) : 0;
+  const focusLocalDay = (iso: string) => {
+    const d = new Date(iso);
+    const p = (n: number) => String(n).padStart(2, "0");
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+  };
 
   const CAL_DEFAULT_DURATION = 60;
   const addMinutes = (iso: string, m: number) =>
@@ -1325,6 +1421,138 @@ function browserStubApi(): Api {
     refreshSubscription: async () => 0,
     importIcs: async () => 0,
     exportIcs: async () => "",
+
+    startFocus: async (taskId, kind, plannedMin) => {
+      const s: FocusSession = {
+        id: uid(),
+        taskId,
+        habitId: null,
+        kind,
+        startedAt: nowIso(),
+        endedAt: null,
+        pauseMs: 0,
+        note: null,
+        status: "RUNNING",
+        plannedMin: plannedMin ?? null,
+      };
+      focusSessions.push(s);
+      return clone(s);
+    },
+    completeFocus: async (id, pauseMs, note, status) => {
+      const s = focusSessions.find((x) => x.id === id);
+      if (!s) throw new Error(`not found: focus session ${id}`);
+      s.endedAt = nowIso();
+      s.pauseMs = Math.max(0, pauseMs);
+      if (note !== null) s.note = note;
+      s.status = status;
+      return clone(s);
+    },
+    setFocusPaused: async (id, paused) => {
+      const s = focusSessions.find((x) => x.id === id);
+      if (!s) throw new Error(`not found: focus session ${id}`);
+      s.status = paused ? "PAUSED" : "RUNNING";
+    },
+    activeFocus: async () => {
+      const running = focusSessions
+        .filter((s) => s.status === "RUNNING" || s.status === "PAUSED")
+        .sort((a, b) => b.startedAt.localeCompare(a.startedAt));
+      return running[0] ? clone(running[0]) : null;
+    },
+    addFocusSession: async (taskId, kind, startedAt, endedAt, note) => {
+      const s: FocusSession = {
+        id: uid(),
+        taskId,
+        habitId: null,
+        kind,
+        startedAt,
+        endedAt,
+        pauseMs: 0,
+        note: note ?? null,
+        status: "DONE",
+        plannedMin: null,
+      };
+      focusSessions.push(s);
+      return clone(s);
+    },
+    updateFocusSession: async (id, patch) => {
+      const s = focusSessions.find((x) => x.id === id);
+      if (!s) throw new Error(`not found: focus session ${id}`);
+      if (patch.startedAt !== undefined) s.startedAt = patch.startedAt;
+      if (patch.endedAt !== undefined) s.endedAt = patch.endedAt;
+      if (patch.note !== undefined) s.note = patch.note;
+      return clone(s);
+    },
+    deleteFocusSession: async (id) => {
+      const i = focusSessions.findIndex((x) => x.id === id);
+      if (i >= 0) focusSessions.splice(i, 1);
+    },
+    listFocusSessions: async (from, to) =>
+      clone(
+        focusSessions
+          .filter((s) => s.status === "DONE" && s.startedAt >= from && s.startedAt <= to)
+          .sort((a, b) => b.startedAt.localeCompare(a.startedAt)),
+      ),
+    listTaskFocus: async (taskId) =>
+      clone(
+        focusSessions
+          .filter((s) => s.status === "DONE" && s.taskId === taskId)
+          .sort((a, b) => b.startedAt.localeCompare(a.startedAt)),
+      ),
+    focusStats: async (from, to) => {
+      const rows = focusSessions.filter(
+        (s) => s.status === "DONE" && s.endedAt && s.startedAt >= from && s.startedAt <= to,
+      );
+      let totalMs = 0;
+      let pomoCount = 0;
+      const perDay = new Map<string, DayStat>();
+      const perTask = new Map<string, FocusTaskStat>();
+      const perTag = new Map<string, FocusTagStat>();
+      for (const s of rows) {
+        const ms = focusEffMs(s);
+        const isPomo = s.kind === "POMO";
+        totalMs += ms;
+        if (isPomo) pomoCount += 1;
+
+        const dayKey = focusLocalDay(s.startedAt);
+        const day = perDay.get(dayKey) ?? { date: dayKey, ms: 0, pomos: 0 };
+        day.ms += ms;
+        day.pomos += isPomo ? 1 : 0;
+        perDay.set(dayKey, day);
+
+        const key = s.taskId ?? " none";
+        const task = tasks.find((t) => t.id === s.taskId);
+        const stat = perTask.get(key) ?? {
+          taskId: s.taskId,
+          title: s.taskId ? (task?.title ?? "(deleted task)") : "No task",
+          ms: 0,
+          pomos: 0,
+        };
+        stat.ms += ms;
+        stat.pomos += isPomo ? 1 : 0;
+        perTask.set(key, stat);
+
+        for (const tagId of task?.tagIds ?? []) {
+          const tag = tags.find((t) => t.id === tagId);
+          const ts = perTag.get(tagId) ?? { tagId, name: tag?.name ?? "?", ms: 0 };
+          ts.ms += ms;
+          perTag.set(tagId, ts);
+        }
+      }
+      return {
+        totalMs,
+        pomoCount,
+        perDay: [...perDay.values()].sort((a, b) => a.date.localeCompare(b.date)),
+        perTask: [...perTask.values()].sort((a, b) => b.ms - a.ms),
+        perTag: [...perTag.values()].sort((a, b) => b.ms - a.ms),
+      };
+    },
+    taskFocusActuals: async (taskId) => {
+      const rows = focusSessions.filter((s) => s.status === "DONE" && s.taskId === taskId);
+      return {
+        actualMs: rows.reduce((sum, s) => sum + focusEffMs(s), 0),
+        actualPomos: rows.filter((s) => s.kind === "POMO").length,
+      };
+    },
 
     getSetting: async (key) => clone(settings.get(key) ?? null),
     setSetting: async (key, value) => {

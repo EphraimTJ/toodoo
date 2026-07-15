@@ -56,6 +56,9 @@ export function useDomainEvents(): void {
             void queryClient.invalidateQueries({ queryKey: ["subscriptions"] });
             void queryClient.invalidateQueries({ queryKey: ["calendar"] });
             break;
+          case "focus":
+            void queryClient.invalidateQueries({ queryKey: ["focus"] });
+            break;
           case "project":
           case "folder":
             void queryClient.invalidateQueries({ queryKey: ["projects"] });

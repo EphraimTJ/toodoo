@@ -5,13 +5,16 @@ import { KanbanView } from "../../features/kanban/components/KanbanView";
 import { FilterResultsView } from "../../features/filters/components/FilterResultsView";
 import { MatrixView } from "../../features/matrix/components/MatrixView";
 import { CalendarView } from "../../features/calendar/components/CalendarView";
+import { FocusView } from "../../features/focus/components/FocusView";
 
 export function ListPane() {
   const view = useUiStore((s) => s.view);
   const { data: projects } = useProjects();
 
   let content;
-  if (view.kind === "calendar") {
+  if (view.kind === "focus") {
+    content = <FocusView />;
+  } else if (view.kind === "calendar") {
     content = <CalendarView />;
   } else if (view.kind === "matrix") {
     content = <MatrixView />;

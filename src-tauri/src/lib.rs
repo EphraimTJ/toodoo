@@ -14,6 +14,7 @@ use repo::calendar::{CalEvent, CalItem, NewEvent};
 use repo::check_items::CheckItem;
 use repo::filter_rule::Rule;
 use repo::filters::Filter;
+use repo::focus::{FocusSession, FocusStats, TaskActuals};
 use repo::folders::{Folder, FolderPatch};
 use repo::matrix::{Quadrant, QuadrantTasks};
 use repo::projects::{NewProject, Project, ProjectPatch};
@@ -661,6 +662,119 @@ async fn export_ics(state: State<'_, AppState>, project_id: Option<String>) -> C
     repo::cal_subscriptions::export_ics(&state.pool, project_id.as_deref()).await.map_err(err)
 }
 
+// ---- focus / pomodoro ----------------------------------------------------------
+
+#[tauri::command]
+async fn start_focus(
+    state: State<'_, AppState>,
+    task_id: Option<String>,
+    kind: String,
+    planned_min: Option<i64>,
+) -> CmdResult<FocusSession> {
+    repo::focus::start_session(&state.pool, &state.bus, task_id.as_deref(), &kind, planned_min)
+        .await
+        .map_err(err)
+}
+
+#[tauri::command]
+async fn complete_focus(
+    state: State<'_, AppState>,
+    id: String,
+    pause_ms: i64,
+    note: Option<String>,
+    status: String,
+) -> CmdResult<FocusSession> {
+    repo::focus::complete_session(&state.pool, &state.bus, &id, pause_ms, note.as_deref(), &status)
+        .await
+        .map_err(err)
+}
+
+#[tauri::command]
+async fn set_focus_paused(state: State<'_, AppState>, id: String, paused: bool) -> CmdResult<()> {
+    repo::focus::set_paused(&state.pool, &state.bus, &id, paused).await.map_err(err)
+}
+
+#[tauri::command]
+async fn active_focus(state: State<'_, AppState>) -> CmdResult<Option<FocusSession>> {
+    repo::focus::active_session(&state.pool).await.map_err(err)
+}
+
+#[tauri::command]
+async fn add_focus_session(
+    state: State<'_, AppState>,
+    task_id: Option<String>,
+    kind: String,
+    started_at: String,
+    ended_at: String,
+    note: Option<String>,
+) -> CmdResult<FocusSession> {
+    repo::focus::add_manual_session(
+        &state.pool,
+        &state.bus,
+        task_id.as_deref(),
+        &kind,
+        &started_at,
+        &ended_at,
+        note.as_deref(),
+    )
+    .await
+    .map_err(err)
+}
+
+#[tauri::command]
+async fn update_focus_session(
+    state: State<'_, AppState>,
+    id: String,
+    started_at: Option<String>,
+    ended_at: Option<String>,
+    note: Option<String>,
+) -> CmdResult<FocusSession> {
+    repo::focus::update_session(
+        &state.pool,
+        &state.bus,
+        &id,
+        started_at.as_deref(),
+        ended_at.as_deref(),
+        note.as_deref(),
+    )
+    .await
+    .map_err(err)
+}
+
+#[tauri::command]
+async fn delete_focus_session(state: State<'_, AppState>, id: String) -> CmdResult<()> {
+    repo::focus::delete_session(&state.pool, &state.bus, &id).await.map_err(err)
+}
+
+#[tauri::command]
+async fn list_focus_sessions(
+    state: State<'_, AppState>,
+    from: String,
+    to: String,
+) -> CmdResult<Vec<FocusSession>> {
+    repo::focus::list_sessions(&state.pool, &from, &to).await.map_err(err)
+}
+
+#[tauri::command]
+async fn list_task_focus(state: State<'_, AppState>, task_id: String) -> CmdResult<Vec<FocusSession>> {
+    repo::focus::list_task_sessions(&state.pool, &task_id).await.map_err(err)
+}
+
+#[tauri::command]
+async fn focus_stats(
+    state: State<'_, AppState>,
+    from: String,
+    to: String,
+    tz_offset_min: i32,
+) -> CmdResult<FocusStats> {
+    repo::focus::focus_stats(&state.pool, &from, &to, tz_offset_min).await.map_err(err)
+}
+
+#[tauri::command]
+async fn task_focus_actuals(state: State<'_, AppState>, task_id: String) -> CmdResult<TaskActuals> {
+    repo::focus::task_actuals(&state.pool, &task_id).await.map_err(err)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -820,7 +934,18 @@ pub fn run() {
             delete_subscription,
             refresh_subscription,
             import_ics,
-            export_ics
+            export_ics,
+            start_focus,
+            complete_focus,
+            set_focus_paused,
+            active_focus,
+            add_focus_session,
+            update_focus_session,
+            delete_focus_session,
+            list_focus_sessions,
+            list_task_focus,
+            focus_stats,
+            task_focus_actuals
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

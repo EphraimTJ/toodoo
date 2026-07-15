@@ -5,6 +5,38 @@ ambiguity we resolved by judgment call), with the reasoning. Newest entries at
 the top. Never rewrite history — if a decision is reversed, add a new entry
 that supersedes the old one.
 
+## 2026-07-15 — Focus/Pomodoro: frontend timer, Recharts, bundled ambient (user-approved)
+
+**Decision (deps & scope):** the focus statistics dashboard uses **Recharts**
+(in the CLAUDE.md stack). Ambient sound ships as **bundled audio tracks** —
+procedurally-generated white/pink/brown noise loops (`scripts/gen-ambient.mjs`),
+so the files are original and license-free. The always-on-top **mini focus
+window** and the **tray countdown** are **deferred to Phase 12** (desktop-polish),
+which already owns tray menu + launch-at-login; this keeps Phase 5 testable.
+All confirmed with the project owner.
+
+**Timer model:** the countdown runs in the **frontend**; the backend persists
+sessions. A RUNNING row is written on start (so it survives a reload — restored
+via `active_session`); pause time is tracked client-side by wall clock and saved
+as `pause_ms` on completion. A session's effective focus time is
+`ended - started - pause_ms`.
+
+**What counts:** a "pomo" is one **DONE `POMO`** session; stopwatch sessions add
+focus duration but not to the pomo count. The daily goal is the count of DONE
+pomos today. Break phases are timers only — not persisted sessions. Defaults:
+work 25 / short 5 / long 15 min, long break every 4 pomos, auto-start off (all
+editable in settings).
+
+**Attachment:** sessions attach to a **task** this phase; habit attachment waits
+for Phase 6 (habits don't exist yet), leaving `focus_sessions.habit_id` null.
+Focus statistics here are focus-specific; the global achievement score and
+weekly/monthly summary remain **Phase 9**.
+
+**Why:** a frontend timer + backend persistence is the simplest correct split
+for a local single-user app, keeps the cycle logic (`lib/pomodoro.ts`) and the
+stats aggregation (`repo/focus.rs`) pure and unit-testable, and avoids native
+window/tray plumbing that can't be exercised by the stub/Playwright.
+
 ## 2026-07-15 — Calendar: FullCalendar, live ICS fetch, feed-RRULE expansion (user-approved)
 
 **Decision (deps):** the calendar grid uses **FullCalendar** (`@fullcalendar/react`

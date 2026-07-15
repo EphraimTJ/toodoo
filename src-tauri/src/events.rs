@@ -61,6 +61,8 @@ pub enum DomainEvent {
     CalendarChanged,
     #[serde(rename = "subscription.changed")]
     SubscriptionChanged,
+    #[serde(rename = "focus.changed")]
+    FocusChanged,
     #[serde(rename = "seed.completed")]
     SeedCompleted,
     #[serde(rename = "setting.changed")]

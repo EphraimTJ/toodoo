@@ -9,6 +9,7 @@ pub mod check_items;
 pub mod db;
 pub mod filter_rule;
 pub mod filters;
+pub mod focus;
 pub mod folders;
 pub mod ics;
 pub mod matrix;
