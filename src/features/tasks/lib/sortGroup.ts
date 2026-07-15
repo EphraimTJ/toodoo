@@ -11,7 +11,7 @@ const PRIORITY_LABEL: Record<number, string> = {
 };
 
 export function comparator(sort: SortMode, tagsById: Map<string, Tag>) {
-  return (a: Task, b: Task): number => {
+  const bySort = (a: Task, b: Task): number => {
     switch (sort) {
       case "custom":
         return (a.sortOrder ?? 0) - (b.sortOrder ?? 0);
@@ -30,6 +30,11 @@ export function comparator(sort: SortMode, tagsById: Map<string, Tag>) {
         return ta.localeCompare(tb);
       }
     }
+  };
+  // Pinned tasks float above their siblings regardless of the chosen sort.
+  return (a: Task, b: Task): number => {
+    if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
+    return bySort(a, b);
   };
 }
 

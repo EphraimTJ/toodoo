@@ -45,12 +45,68 @@ export interface Task {
   dueAt: string | null;
   isAllDay: boolean;
   durationMin: number | null;
+  timeZone: string | null;
+  rrule: string | null;
+  repeatFrom: string | null;
   pinned: boolean;
+  estPomos: number | null;
+  estDurationMin: number | null;
   sortOrder: number | null;
   completedAt: string | null;
   createdAt: string;
   updatedAt: string;
   tagIds: string[];
+}
+
+export type RepeatFrom = "DUE" | "COMPLETION";
+export type ReminderKind = "ABS" | "REL";
+
+export interface Reminder {
+  id: string;
+  taskId: string;
+  triggerKind: ReminderKind;
+  at: string | null;
+  offsetMin: number | null;
+  snoozedUntil: string | null;
+  lastFiredAt: string | null;
+}
+
+export interface ReminderSpec {
+  triggerKind: ReminderKind;
+  at?: string | null;
+  offsetMin?: number | null;
+}
+
+export interface ActivityEntry {
+  id: string;
+  entityKind: string;
+  entityId: string;
+  action: string;
+  payloadJson: string | null;
+  at: string;
+}
+
+export interface TemplatePayload {
+  title: string;
+  contentRich?: string | null;
+  contentPlain?: string | null;
+  priority?: Priority;
+  isAllDay?: boolean;
+  durationMin?: number | null;
+  timeZone?: string | null;
+  rrule?: string | null;
+  repeatFrom?: RepeatFrom;
+  checkItems?: string[];
+  reminders?: ReminderSpec[];
+}
+
+export interface TaskTemplate {
+  id: string;
+  name: string;
+  payloadJson: string;
+  sortOrder: number;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface CheckItem {
@@ -105,6 +161,10 @@ export interface NewTask {
   startAt?: string;
   dueAt?: string;
   isAllDay?: boolean;
+  durationMin?: number;
+  timeZone?: string;
+  rrule?: string;
+  repeatFrom?: RepeatFrom;
 }
 
 export interface TaskPatch {
@@ -116,6 +176,12 @@ export interface TaskPatch {
   dueAt?: string | null;
   isAllDay?: boolean;
   sectionId?: string | null;
+  durationMin?: number | null;
+  timeZone?: string | null;
+  rrule?: string | null;
+  repeatFrom?: RepeatFrom | null;
+  estPomos?: number | null;
+  estDurationMin?: number | null;
 }
 
 export const INBOX_ID = "inbox";
@@ -168,6 +234,25 @@ export interface Api {
   assignTag(taskId: string, tagId: string): Promise<void>;
   unassignTag(taskId: string, tagId: string): Promise<void>;
 
+  setTaskPinned(id: string, pinned: boolean): Promise<void>;
+
+  listReminders(taskId: string): Promise<Reminder[]>;
+  addReminder(
+    taskId: string,
+    triggerKind: ReminderKind,
+    opts?: { at?: string | null; offsetMin?: number | null },
+  ): Promise<Reminder>;
+  snoozeReminder(id: string, until: string): Promise<void>;
+  deleteReminder(id: string): Promise<void>;
+
+  listActivity(entityKind: string, entityId: string): Promise<ActivityEntry[]>;
+
+  listTemplates(): Promise<TaskTemplate[]>;
+  createTemplate(name: string, payload: TemplatePayload): Promise<TaskTemplate>;
+  updateTemplate(id: string, patch: { name?: string; payload?: TemplatePayload }): Promise<void>;
+  deleteTemplate(id: string): Promise<void>;
+  instantiateTemplate(templateId: string, projectId: string): Promise<Task>;
+
   getSetting(key: string): Promise<JsonValue | null>;
   setSetting(key: string, value: JsonValue): Promise<void>;
   seedDemoData(tasks: number): Promise<void>;
@@ -213,6 +298,29 @@ const tauriApi: Api = {
   assignTag: (taskId, tagId) => invoke("assign_tag", { taskId, tagId }),
   unassignTag: (taskId, tagId) => invoke("unassign_tag", { taskId, tagId }),
 
+  setTaskPinned: (id, pinned) => invoke("set_task_pinned", { id, pinned }),
+
+  listReminders: (taskId) => invoke("list_reminders", { taskId }),
+  addReminder: (taskId, triggerKind, opts) =>
+    invoke("add_reminder", {
+      taskId,
+      triggerKind,
+      at: opts?.at ?? null,
+      offsetMin: opts?.offsetMin ?? null,
+    }),
+  snoozeReminder: (id, until) => invoke("snooze_reminder", { id, until }),
+  deleteReminder: (id) => invoke("delete_reminder", { id }),
+
+  listActivity: (entityKind, entityId) => invoke("list_activity", { entityKind, entityId }),
+
+  listTemplates: () => invoke("list_templates"),
+  createTemplate: (name, payload) => invoke("create_template", { name, payload }),
+  updateTemplate: (id, patch) =>
+    invoke("update_template", { id, name: patch.name ?? null, payload: patch.payload ?? null }),
+  deleteTemplate: (id) => invoke("delete_template", { id }),
+  instantiateTemplate: (templateId, projectId) =>
+    invoke("instantiate_template", { templateId, projectId }),
+
   getSetting: (key) => invoke("get_setting", { key }),
   setSetting: (key, value) => invoke("set_setting", { key, value }),
   seedDemoData: (tasks) => invoke("seed_demo_data", { tasks }),
@@ -231,8 +339,55 @@ function browserStubApi(): Api {
   const tasks: Task[] = [];
   const checkItems: CheckItem[] = [];
   const tags: Tag[] = [];
+  const reminders: Reminder[] = [];
+  const activity: ActivityEntry[] = [];
+  const templates: TaskTemplate[] = [];
   const nowIso = () => new Date().toISOString();
   const uid = () => crypto.randomUUID();
+
+  const logActivity = (entityId: string, action: string) =>
+    activity.unshift({
+      id: uid(),
+      entityKind: "task",
+      entityId,
+      action,
+      payloadJson: null,
+      at: nowIso(),
+    });
+
+  // Minimal recurrence advance mirroring the Rust engine's common paths
+  // (docs/decisions.md notes the authoritative logic is server-side). Rolls
+  // the anchor forward by FREQ/INTERVAL; honors UNTIL. COUNT is enforced only
+  // by the backend, so the stub advances indefinitely — adequate for UI dev.
+  const advanceIso = (iso: string, rrule: string): string | null => {
+    const freq = /FREQ=([A-Z]+)/.exec(rrule)?.[1];
+    const interval = Number(/INTERVAL=(\d+)/.exec(rrule)?.[1] ?? "1");
+    const until = /UNTIL=(\d{8})/.exec(rrule)?.[1];
+    const d = new Date(iso);
+    switch (freq) {
+      case "DAILY":
+        d.setDate(d.getDate() + interval);
+        break;
+      case "WEEKLY":
+        d.setDate(d.getDate() + 7 * interval);
+        break;
+      case "MONTHLY":
+        d.setMonth(d.getMonth() + interval);
+        break;
+      case "YEARLY":
+        d.setFullYear(d.getFullYear() + interval);
+        break;
+      default:
+        return null;
+    }
+    if (until) {
+      const bound = new Date(
+        `${until.slice(0, 4)}-${until.slice(4, 6)}-${until.slice(6, 8)}T23:59:59Z`,
+      );
+      if (d.getTime() > bound.getTime()) return null;
+    }
+    return d.toISOString();
+  };
   // Return copies, never live references: the real backend serializes fresh
   // JSON per call, and react-query's structural sharing relies on that to
   // detect changes (in-place mutations would otherwise be invisible).
@@ -282,7 +437,7 @@ function browserStubApi(): Api {
     return localDay(d.toISOString(), false);
   };
 
-  return {
+  const self: Api = {
     listProjects: async () => clone(projects.filter((p) => !p.closed)),
     createProject: async (input) => {
       const p = makeProject(input);
@@ -365,8 +520,13 @@ function browserStubApi(): Api {
         startAt: input.startAt ?? null,
         dueAt: input.dueAt ?? null,
         isAllDay: input.isAllDay ?? true,
-        durationMin: null,
+        durationMin: input.durationMin ?? null,
+        timeZone: input.timeZone ?? null,
+        rrule: input.rrule ?? null,
+        repeatFrom: input.repeatFrom ?? null,
         pinned: false,
+        estPomos: null,
+        estDurationMin: null,
         sortOrder: (tasks.length + 1) * 1024,
         completedAt: null,
         createdAt: nowIso(),
@@ -374,29 +534,63 @@ function browserStubApi(): Api {
         tagIds: [],
       };
       tasks.push(t);
+      logActivity(t.id, "created");
       return clone(t);
     },
     getTask: async (id) => clone(findTask(id)),
     updateTask: async (id, patch) => {
       const t = findTask(id);
+      const keep = <T>(v: T | undefined, cur: T) => (v === undefined ? cur : v);
       Object.assign(t, {
         title: patch.title ?? t.title,
-        contentRich: patch.contentRich === undefined ? t.contentRich : patch.contentRich,
-        contentPlain: patch.contentPlain === undefined ? t.contentPlain : patch.contentPlain,
+        contentRich: keep(patch.contentRich, t.contentRich),
+        contentPlain: keep(patch.contentPlain, t.contentPlain),
         priority: patch.priority ?? t.priority,
-        startAt: patch.startAt === undefined ? t.startAt : patch.startAt,
-        dueAt: patch.dueAt === undefined ? t.dueAt : patch.dueAt,
+        startAt: keep(patch.startAt, t.startAt),
+        dueAt: keep(patch.dueAt, t.dueAt),
         isAllDay: patch.isAllDay ?? t.isAllDay,
-        sectionId: patch.sectionId === undefined ? t.sectionId : patch.sectionId,
+        sectionId: keep(patch.sectionId, t.sectionId),
+        durationMin: keep(patch.durationMin, t.durationMin),
+        timeZone: keep(patch.timeZone, t.timeZone),
+        rrule: keep(patch.rrule, t.rrule),
+        repeatFrom: keep(patch.repeatFrom, t.repeatFrom),
+        estPomos: keep(patch.estPomos, t.estPomos),
+        estDurationMin: keep(patch.estDurationMin, t.estDurationMin),
         updatedAt: nowIso(),
       });
+      logActivity(t.id, "edited");
       return clone(t);
     },
     completeTask: async (id) => {
-      const targets = [findTask(id), ...descendants(id)].filter((t) => t.status === "ACTIVE");
+      const top = findTask(id);
+      const anchor = top.dueAt ?? top.startAt;
+      // Recurring task with an anchor: advance in place instead of completing.
+      if (top.status === "ACTIVE" && top.rrule && top.rrule.trim() && anchor) {
+        const next = advanceIso(anchor, top.rrule);
+        if (next) {
+          const newAnchor = top.isAllDay ? next.slice(0, 10) + "T00:00:00.000Z" : next;
+          const gap =
+            top.startAt && top.dueAt
+              ? new Date(top.dueAt).getTime() - new Date(top.startAt).getTime()
+              : 0;
+          if (top.dueAt) {
+            top.dueAt = newAnchor;
+            if (top.startAt)
+              top.startAt = new Date(new Date(newAnchor).getTime() - gap).toISOString();
+          } else if (top.startAt) {
+            top.startAt = newAnchor;
+          }
+          top.updatedAt = nowIso();
+          logActivity(top.id, "recurrence_advanced");
+          return [];
+        }
+        // Series ended (past UNTIL): fall through and complete for real.
+      }
+      const targets = [top, ...descendants(id)].filter((t) => t.status === "ACTIVE");
       for (const t of targets) {
         t.status = "COMPLETED";
         t.completedAt = nowIso();
+        logActivity(t.id, "completed");
       }
       return targets.map((t) => t.id);
     },
@@ -554,12 +748,101 @@ function browserStubApi(): Api {
       t.tagIds = t.tagIds.filter((x) => x !== tagId);
     },
 
+    setTaskPinned: async (id, pinned) => {
+      const t = findTask(id);
+      t.pinned = pinned;
+      t.updatedAt = nowIso();
+    },
+
+    listReminders: async (taskId) =>
+      clone(reminders.filter((r) => r.taskId === taskId)),
+    addReminder: async (taskId, triggerKind, opts) => {
+      const r: Reminder = {
+        id: uid(),
+        taskId,
+        triggerKind,
+        at: opts?.at ?? null,
+        offsetMin: opts?.offsetMin ?? null,
+        snoozedUntil: null,
+        lastFiredAt: null,
+      };
+      reminders.push(r);
+      return clone(r);
+    },
+    snoozeReminder: async (id, until) => {
+      const r = reminders.find((x) => x.id === id);
+      if (!r) throw new Error(`not found: reminder ${id}`);
+      r.snoozedUntil = until;
+    },
+    deleteReminder: async (id) => {
+      const i = reminders.findIndex((x) => x.id === id);
+      if (i >= 0) reminders.splice(i, 1);
+    },
+
+    listActivity: async (entityKind, entityId) =>
+      clone(activity.filter((a) => a.entityKind === entityKind && a.entityId === entityId)),
+
+    listTemplates: async () => clone(templates),
+    createTemplate: async (name, payload) => {
+      const tpl: TaskTemplate = {
+        id: uid(),
+        name,
+        payloadJson: JSON.stringify(payload),
+        sortOrder: templates.length,
+        createdAt: nowIso(),
+        updatedAt: nowIso(),
+      };
+      templates.push(tpl);
+      return clone(tpl);
+    },
+    updateTemplate: async (id, patch) => {
+      const tpl = templates.find((x) => x.id === id);
+      if (!tpl) throw new Error(`not found: template ${id}`);
+      if (patch.name !== undefined) tpl.name = patch.name;
+      if (patch.payload !== undefined) tpl.payloadJson = JSON.stringify(patch.payload);
+      tpl.updatedAt = nowIso();
+    },
+    deleteTemplate: async (id) => {
+      const i = templates.findIndex((x) => x.id === id);
+      if (i < 0) throw new Error(`not found: template ${id}`);
+      templates.splice(i, 1);
+    },
+    instantiateTemplate: async (templateId, projectId) => {
+      const tpl = templates.find((x) => x.id === templateId);
+      if (!tpl) throw new Error(`not found: template ${templateId}`);
+      const p: TemplatePayload = JSON.parse(tpl.payloadJson);
+      const created = await self.createTask({
+        projectId,
+        title: p.title,
+        priority: p.priority,
+        isAllDay: p.isAllDay,
+        durationMin: p.durationMin ?? undefined,
+        timeZone: p.timeZone ?? undefined,
+        rrule: p.rrule ?? undefined,
+        repeatFrom: p.repeatFrom,
+      });
+      if (p.contentRich != null || p.contentPlain != null) {
+        await self.updateTask(created.id, {
+          contentRich: p.contentRich ?? null,
+          contentPlain: p.contentPlain ?? null,
+        });
+      }
+      for (const title of p.checkItems ?? []) await self.addCheckItem(created.id, title);
+      for (const spec of p.reminders ?? [])
+        await self.addReminder(created.id, spec.triggerKind, {
+          at: spec.at,
+          offsetMin: spec.offsetMin,
+        });
+      return self.getTask(created.id);
+    },
+
     getSetting: async (key) => clone(settings.get(key) ?? null),
     setSetting: async (key, value) => {
       settings.set(key, value);
     },
     seedDemoData: async () => {},
   };
+  return self;
 }
 
 const isTauri = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;

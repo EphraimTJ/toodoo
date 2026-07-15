@@ -13,6 +13,12 @@ class ResizeObserverStub {
 vi.stubGlobal("ResizeObserver", ResizeObserverStub);
 Element.prototype.scrollIntoView = Element.prototype.scrollIntoView ?? (() => {});
 
+// Radix (Popover/DropdownMenu) calls the Pointer Capture API, which jsdom omits.
+HTMLElement.prototype.hasPointerCapture = HTMLElement.prototype.hasPointerCapture ?? (() => false);
+HTMLElement.prototype.setPointerCapture = HTMLElement.prototype.setPointerCapture ?? (() => {});
+HTMLElement.prototype.releasePointerCapture =
+  HTMLElement.prototype.releasePointerCapture ?? (() => {});
+
 // jsdom reports 0x0 for every element, which makes @tanstack/react-virtual
 // (offsetWidth/offsetHeight) render nothing. Give elements a plausible size.
 Object.defineProperty(HTMLElement.prototype, "offsetWidth", { configurable: true, value: 800 });

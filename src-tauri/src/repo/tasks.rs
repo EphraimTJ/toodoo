@@ -1,11 +1,12 @@
 use serde::{Deserialize, Serialize};
-use sqlx::{QueryBuilder, Sqlite, SqlitePool};
+use sqlx::{QueryBuilder, Sqlite, SqliteConnection, SqlitePool};
 use std::collections::HashMap;
 
 use crate::error::{RepoError, Result};
 use crate::events::{DomainEvent, EventBus};
 
-use super::{append_changelog, new_id, now, ChangeOp};
+use super::recurrence::{next_occurrence, NextInput, RepeatFrom};
+use super::{activity, append_changelog, new_id, now, ChangeOp};
 
 /// Gap between adjacent manual sort positions; renumber when a gap closes.
 const SORT_STEP: i64 = 1024;
@@ -27,7 +28,12 @@ pub struct Task {
     pub due_at: Option<String>,
     pub is_all_day: bool,
     pub duration_min: Option<i64>,
+    pub time_zone: Option<String>,
+    pub rrule: Option<String>,
+    pub repeat_from: Option<String>,
     pub pinned: bool,
+    pub est_pomos: Option<i64>,
+    pub est_duration_min: Option<i64>,
     pub sort_order: Option<i64>,
     pub completed_at: Option<String>,
     pub created_at: String,
@@ -37,7 +43,8 @@ pub struct Task {
 }
 
 const COLUMNS: &str = "id, project_id, section_id, parent_id, title, content_rich, content_plain, \
-     kind, status, priority, start_at, due_at, is_all_day, duration_min, pinned, \
+     kind, status, priority, start_at, due_at, is_all_day, duration_min, time_zone, rrule, \
+     repeat_from, pinned, est_pomos, est_duration_min, \
      CAST(json_extract(sort_orders_json, '$.project') AS INTEGER) AS sort_order, \
      completed_at, created_at, updated_at";
 
@@ -56,6 +63,14 @@ pub struct NewTask {
     pub due_at: Option<String>,
     #[serde(default)]
     pub is_all_day: Option<bool>,
+    #[serde(default)]
+    pub duration_min: Option<i64>,
+    #[serde(default)]
+    pub time_zone: Option<String>,
+    #[serde(default)]
+    pub rrule: Option<String>,
+    #[serde(default)]
+    pub repeat_from: Option<String>,
 }
 
 /// Patch semantics: outer `None` = leave unchanged; `Some(None)` = clear.
@@ -78,6 +93,18 @@ pub struct TaskPatch {
     pub is_all_day: Option<bool>,
     #[serde(default)]
     pub section_id: Option<Option<String>>,
+    #[serde(default)]
+    pub duration_min: Option<Option<i64>>,
+    #[serde(default)]
+    pub time_zone: Option<Option<String>>,
+    #[serde(default)]
+    pub rrule: Option<Option<String>>,
+    #[serde(default)]
+    pub repeat_from: Option<Option<String>>,
+    #[serde(default)]
+    pub est_pomos: Option<Option<i64>>,
+    #[serde(default)]
+    pub est_duration_min: Option<Option<i64>>,
 }
 
 #[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
@@ -146,9 +173,10 @@ pub async fn create_task(pool: &SqlitePool, bus: &EventBus, input: NewTask) -> R
 
     sqlx::query(
         "INSERT INTO tasks (id, project_id, parent_id, title, kind, status, priority,
-                            start_at, due_at, is_all_day, pinned, sort_orders_json,
-                            created_at, updated_at)
-         VALUES (?, ?, ?, ?, 'TASK', 'ACTIVE', ?, ?, ?, ?, 0, json_object('project', ?), ?, ?)",
+                            start_at, due_at, is_all_day, duration_min, time_zone, rrule,
+                            repeat_from, pinned, sort_orders_json, created_at, updated_at)
+         VALUES (?, ?, ?, ?, 'TASK', 'ACTIVE', ?, ?, ?, ?, ?, ?, ?, ?, 0,
+                 json_object('project', ?), ?, ?)",
     )
     .bind(&id)
     .bind(&input.project_id)
@@ -158,6 +186,10 @@ pub async fn create_task(pool: &SqlitePool, bus: &EventBus, input: NewTask) -> R
     .bind(&input.start_at)
     .bind(&input.due_at)
     .bind(input.is_all_day.unwrap_or(true))
+    .bind(input.duration_min)
+    .bind(&input.time_zone)
+    .bind(&input.rrule)
+    .bind(&input.repeat_from)
     .bind(next_order)
     .bind(&ts)
     .bind(&ts)
@@ -166,6 +198,8 @@ pub async fn create_task(pool: &SqlitePool, bus: &EventBus, input: NewTask) -> R
 
     let payload = serde_json::json!({ "title": input.title, "projectId": input.project_id });
     append_changelog(&mut tx, "task", &id, ChangeOp::Insert, &payload).await?;
+    activity::log(&mut tx, "task", &id, "created", &serde_json::json!({ "title": input.title }))
+        .await?;
     tx.commit().await?;
 
     bus.emit(DomainEvent::TaskCreated { id: id.clone() });
@@ -220,6 +254,24 @@ pub async fn update_task(pool: &SqlitePool, bus: &EventBus, id: &str, patch: Tas
     if let Some(v) = &patch.section_id {
         qb.push(", section_id = ").push_bind(v.clone());
     }
+    if let Some(v) = &patch.duration_min {
+        qb.push(", duration_min = ").push_bind(*v);
+    }
+    if let Some(v) = &patch.time_zone {
+        qb.push(", time_zone = ").push_bind(v.clone());
+    }
+    if let Some(v) = &patch.rrule {
+        qb.push(", rrule = ").push_bind(v.clone());
+    }
+    if let Some(v) = &patch.repeat_from {
+        qb.push(", repeat_from = ").push_bind(v.clone());
+    }
+    if let Some(v) = &patch.est_pomos {
+        qb.push(", est_pomos = ").push_bind(*v);
+    }
+    if let Some(v) = &patch.est_duration_min {
+        qb.push(", est_duration_min = ").push_bind(*v);
+    }
     qb.push(" WHERE id = ").push_bind(id);
     qb.push(" AND deleted_at IS NULL");
 
@@ -230,6 +282,7 @@ pub async fn update_task(pool: &SqlitePool, bus: &EventBus, id: &str, patch: Tas
     }
     let payload = serde_json::json!({ "patch": "update" });
     append_changelog(&mut tx, "task", id, ChangeOp::Update, &payload).await?;
+    activity::log(&mut tx, "task", id, "edited", &serde_json::json!({})).await?;
     tx.commit().await?;
 
     bus.emit(DomainEvent::TaskUpdated { id: id.to_string() });
@@ -252,9 +305,51 @@ async fn subtree_ids(pool: &SqlitePool, id: &str) -> Result<Vec<String>> {
     .await?)
 }
 
+/// Record one closed occurrence in `task_completions` — the durable per-instance
+/// history that recurrence end-counting (`COUNT=`) and the Phase 9 stats engine
+/// read. Written inside the caller's transaction.
+async fn record_completion(
+    conn: &mut SqliteConnection,
+    task_id: &str,
+    occurrence_at: Option<&str>,
+    completed_at: &str,
+    status: &str,
+) -> Result<()> {
+    sqlx::query(
+        "INSERT INTO task_completions
+             (id, task_id, occurrence_at, completed_at, status, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?)",
+    )
+    .bind(new_id())
+    .bind(task_id)
+    .bind(occurrence_at)
+    .bind(completed_at)
+    .bind(status)
+    .bind(completed_at)
+    .bind(completed_at)
+    .execute(conn)
+    .await?;
+    Ok(())
+}
+
 /// Completing a parent completes all open descendants (docs/decisions.md).
 /// Reopening a parent does NOT reopen children.
+///
+/// A recurring task (one with an `rrule` and a start/due anchor) instead
+/// *advances in place*: completing the current occurrence records it in
+/// `task_completions`, rolls the task's dates to the next occurrence, and leaves
+/// it ACTIVE — until an end condition (`COUNT=`/`UNTIL=`) is reached, at which
+/// point it completes for real. Recurrence acts on the task itself, not its
+/// subtree (docs/decisions.md).
 pub async fn complete_task(pool: &SqlitePool, bus: &EventBus, id: &str) -> Result<Vec<String>> {
+    let top = get_task(pool, id).await?;
+    let is_recurring = top.rrule.as_deref().is_some_and(|r| !r.trim().is_empty())
+        && (top.due_at.is_some() || top.start_at.is_some())
+        && top.status == "ACTIVE";
+    if is_recurring {
+        return advance_recurrence(pool, bus, &top).await;
+    }
+
     let ids = subtree_ids(pool, id).await?;
     if ids.is_empty() {
         return Err(RepoError::NotFound(format!("task {id}")));
@@ -281,6 +376,7 @@ pub async fn complete_task(pool: &SqlitePool, bus: &EventBus, id: &str) -> Resul
                 &serde_json::json!({ "status": "COMPLETED" }),
             )
             .await?;
+            activity::log(&mut tx, "task", task_id, "completed", &serde_json::json!({})).await?;
             completed.push(task_id.clone());
         }
     }
@@ -292,8 +388,130 @@ pub async fn complete_task(pool: &SqlitePool, bus: &EventBus, id: &str) -> Resul
     Ok(completed)
 }
 
+/// Close the current occurrence of a recurring task and roll it forward. Returns
+/// the ids that ended up COMPLETED — empty while the series continues, `[id]`
+/// once it ends.
+async fn advance_recurrence(pool: &SqlitePool, bus: &EventBus, top: &Task) -> Result<Vec<String>> {
+    let ts = now();
+    let occurrence = top.due_at.as_deref().or(top.start_at.as_deref());
+    let mut tx = pool.begin().await?;
+
+    record_completion(&mut tx, &top.id, occurrence, &ts, "COMPLETED").await?;
+
+    // Occurrences closed so far (including the one just recorded) bound `COUNT=`.
+    let completed_so_far: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM task_completions
+         WHERE task_id = ? AND status = 'COMPLETED' AND deleted_at IS NULL",
+    )
+    .bind(&top.id)
+    .fetch_one(&mut *tx)
+    .await?;
+
+    let next = next_occurrence(NextInput {
+        rrule: top.rrule.as_deref().unwrap_or_default(),
+        start_at: top.start_at.as_deref(),
+        due_at: top.due_at.as_deref(),
+        is_all_day: top.is_all_day,
+        repeat_from: RepeatFrom::parse(top.repeat_from.as_deref()),
+        completed_at: &ts,
+        tz_name: top.time_zone.as_deref(),
+        completed_so_far: completed_so_far.max(0) as u32,
+    })?;
+
+    let ended = match &next {
+        Some(occ) => {
+            sqlx::query(
+                "UPDATE tasks SET start_at = ?, due_at = ?, completed_at = NULL, updated_at = ?
+                 WHERE id = ?",
+            )
+            .bind(&occ.start_at)
+            .bind(&occ.due_at)
+            .bind(&ts)
+            .bind(&top.id)
+            .execute(&mut *tx)
+            .await?;
+            append_changelog(
+                &mut tx,
+                "task",
+                &top.id,
+                ChangeOp::Update,
+                &serde_json::json!({ "recurrence": "advanced", "dueAt": occ.due_at }),
+            )
+            .await?;
+            activity::log(
+                &mut tx,
+                "task",
+                &top.id,
+                "recurrence_advanced",
+                &serde_json::json!({ "dueAt": occ.due_at, "startAt": occ.start_at }),
+            )
+            .await?;
+            false
+        }
+        None => {
+            sqlx::query(
+                "UPDATE tasks SET status = 'COMPLETED', completed_at = ?, updated_at = ?
+                 WHERE id = ?",
+            )
+            .bind(&ts)
+            .bind(&ts)
+            .bind(&top.id)
+            .execute(&mut *tx)
+            .await?;
+            append_changelog(
+                &mut tx,
+                "task",
+                &top.id,
+                ChangeOp::Update,
+                &serde_json::json!({ "status": "COMPLETED", "recurrence": "ended" }),
+            )
+            .await?;
+            activity::log(
+                &mut tx,
+                "task",
+                &top.id,
+                "completed",
+                &serde_json::json!({ "recurrence": "ended" }),
+            )
+            .await?;
+            true
+        }
+    };
+    tx.commit().await?;
+
+    if ended {
+        bus.emit(DomainEvent::TaskCompleted { ids: vec![top.id.clone()] });
+        Ok(vec![top.id.clone()])
+    } else {
+        bus.emit(DomainEvent::TaskUpdated { id: top.id.clone() });
+        Ok(Vec::new())
+    }
+}
+
 pub async fn reopen_task(pool: &SqlitePool, bus: &EventBus, id: &str) -> Result<()> {
     set_single_status(pool, bus, id, "ACTIVE", &["COMPLETED", "WONT_DO"], true).await
+}
+
+/// Pin / unpin a task. Pinned tasks float to the top of their views.
+pub async fn set_pinned(pool: &SqlitePool, bus: &EventBus, id: &str, pinned: bool) -> Result<()> {
+    let ts = now();
+    let mut tx = pool.begin().await?;
+    let res = sqlx::query(
+        "UPDATE tasks SET pinned = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL",
+    )
+    .bind(pinned)
+    .bind(&ts)
+    .bind(id)
+    .execute(&mut *tx)
+    .await?;
+    if res.rows_affected() == 0 {
+        return Err(RepoError::NotFound(format!("task {id}")));
+    }
+    append_changelog(&mut tx, "task", id, ChangeOp::Update, &serde_json::json!({ "pinned": pinned }))
+        .await?;
+    tx.commit().await?;
+    bus.emit(DomainEvent::TaskPinned { id: id.to_string() });
+    Ok(())
 }
 
 pub async fn trash_task(pool: &SqlitePool, bus: &EventBus, id: &str) -> Result<Vec<String>> {
@@ -713,6 +931,10 @@ pub(crate) mod tests {
             start_at: None,
             due_at: None,
             is_all_day: None,
+            duration_min: None,
+            time_zone: None,
+            rrule: None,
+            repeat_from: None,
         }
     }
 
@@ -1033,5 +1255,99 @@ pub(crate) mod tests {
             .await
             .unwrap();
         assert_eq!(raw, 1);
+    }
+
+    // ---- Recurrence advance (engine wired into completion) -----------------
+
+    fn recurring(project: &str, title: &str, rrule: &str, due: &str) -> NewTask {
+        NewTask {
+            due_at: Some(due.into()),
+            is_all_day: Some(true),
+            rrule: Some(rrule.into()),
+            ..quick(project, title)
+        }
+    }
+
+    async fn completion_count(pool: &SqlitePool, task_id: &str) -> i64 {
+        sqlx::query_scalar("SELECT COUNT(*) FROM task_completions WHERE task_id = ?")
+            .bind(task_id)
+            .fetch_one(pool)
+            .await
+            .unwrap()
+    }
+
+    #[tokio::test]
+    async fn recurring_task_advances_in_place_and_stays_active() {
+        let (pool, bus) = setup().await;
+        let t = create_task(
+            &pool,
+            &bus,
+            recurring("inbox", "water plants", "FREQ=DAILY", "2026-03-10T00:00:00.000Z"),
+        )
+        .await
+        .unwrap();
+
+        // Completing an occurrence rolls the date forward; nothing is "completed".
+        let completed = complete_task(&pool, &bus, &t.id).await.unwrap();
+        assert!(completed.is_empty());
+
+        let rolled = get_task(&pool, &t.id).await.unwrap();
+        assert_eq!(rolled.status, "ACTIVE");
+        assert_eq!(rolled.due_at.as_deref(), Some("2026-03-11T00:00:00.000Z"));
+        assert_eq!(completion_count(&pool, &t.id).await, 1);
+    }
+
+    #[tokio::test]
+    async fn count_end_condition_completes_after_n_occurrences() {
+        let (pool, bus) = setup().await;
+        let t = create_task(
+            &pool,
+            &bus,
+            recurring("inbox", "standup", "FREQ=DAILY;COUNT=2", "2026-03-10T00:00:00.000Z"),
+        )
+        .await
+        .unwrap();
+
+        // First close advances to occurrence 2 and stays active.
+        assert!(complete_task(&pool, &bus, &t.id).await.unwrap().is_empty());
+        assert_eq!(get_task(&pool, &t.id).await.unwrap().due_at.as_deref(), Some("2026-03-11T00:00:00.000Z"));
+
+        // Second close hits COUNT=2 → the series ends and the task completes.
+        let completed = complete_task(&pool, &bus, &t.id).await.unwrap();
+        assert_eq!(completed, vec![t.id.clone()]);
+        assert_eq!(get_task(&pool, &t.id).await.unwrap().status, "COMPLETED");
+        assert_eq!(completion_count(&pool, &t.id).await, 2);
+    }
+
+    #[tokio::test]
+    async fn activity_log_records_create_edit_and_complete() {
+        let (pool, bus) = setup().await;
+        let t = create_task(&pool, &bus, quick("inbox", "log me")).await.unwrap();
+        update_task(&pool, &bus, &t.id, TaskPatch { title: Some("logged".into()), ..Default::default() })
+            .await
+            .unwrap();
+        complete_task(&pool, &bus, &t.id).await.unwrap();
+
+        let actions: Vec<String> = crate::repo::activity::list_activity(&pool, "task", &t.id)
+            .await
+            .unwrap()
+            .into_iter()
+            .map(|e| e.action)
+            .collect();
+        assert!(actions.contains(&"created".to_string()));
+        assert!(actions.contains(&"edited".to_string()));
+        assert!(actions.contains(&"completed".to_string()));
+    }
+
+    #[tokio::test]
+    async fn set_pinned_toggles_flag() {
+        let (pool, bus) = setup().await;
+        let t = create_task(&pool, &bus, quick("inbox", "important")).await.unwrap();
+        assert!(!t.pinned);
+
+        set_pinned(&pool, &bus, &t.id, true).await.unwrap();
+        assert!(get_task(&pool, &t.id).await.unwrap().pinned);
+        set_pinned(&pool, &bus, &t.id, false).await.unwrap();
+        assert!(!get_task(&pool, &t.id).await.unwrap().pinned);
     }
 }

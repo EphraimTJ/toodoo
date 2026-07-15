@@ -43,6 +43,14 @@ pub enum DomainEvent {
     TagDeleted { id: String },
     #[serde(rename = "task.tags_changed")]
     TaskTagsChanged { task_id: String },
+    #[serde(rename = "task.pinned")]
+    TaskPinned { id: String },
+    #[serde(rename = "reminder.changed")]
+    ReminderChanged { task_id: String },
+    #[serde(rename = "reminder.fired")]
+    ReminderFired { task_id: String, reminder_id: String },
+    #[serde(rename = "template.changed")]
+    TemplateChanged,
     #[serde(rename = "seed.completed")]
     SeedCompleted,
     #[serde(rename = "setting.changed")]

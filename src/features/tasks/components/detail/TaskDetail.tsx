@@ -5,8 +5,11 @@ import { api, type Priority, type Task } from "../../../../lib/api";
 import { useUiStore } from "../../../../lib/uiStore";
 import { useTags, useTagMutations } from "../../../tags/hooks/useTags";
 import { useTaskMutations } from "../../hooks/useTasks";
+import { ActivityLog } from "./ActivityLog";
 import { DatePicker } from "./DatePicker";
 import { DescriptionEditor } from "./DescriptionEditor";
+import { Reminders } from "./Reminders";
+import { RepeatPicker } from "./RepeatPicker";
 
 const PRIORITIES: [Priority, string, string][] = [
   [5, "High", "text-red-500"],
@@ -228,7 +231,8 @@ function TagPicker({ task }: { task: Task }) {
 
 export function TaskDetail() {
   const { selectedTaskId, selectTask } = useUiStore();
-  const { updateTask, trashTask, restoreTask, completeTask, reopenTask } = useTaskMutations();
+  const { updateTask, trashTask, restoreTask, completeTask, reopenTask, setPinned } =
+    useTaskMutations();
 
   const { data: task } = useQuery({
     queryKey: ["tasks", "detail", selectedTaskId],
@@ -271,11 +275,24 @@ export function TaskDetail() {
           value={task.dueAt}
           onChange={(dueAt) => updateTask.mutate({ id: task.id, patch: { dueAt } })}
         />
+        <RepeatPicker task={task} />
+        <button
+          type="button"
+          aria-label={task.pinned ? "Unpin task" : "Pin task"}
+          aria-pressed={task.pinned}
+          disabled={trashed}
+          onClick={() => setPinned.mutate({ id: task.id, pinned: !task.pinned })}
+          className={`ml-auto rounded-md border border-border px-2 py-1 text-xs ${
+            task.pinned ? "border-accent text-accent" : "text-text-muted hover:text-text"
+          }`}
+        >
+          📌
+        </button>
         <DropdownMenu.Root>
           <DropdownMenu.Trigger asChild>
             <button
               type="button"
-              className={`ml-auto rounded-md border border-border px-2 py-1 text-xs ${priority[2]}`}
+              className={`rounded-md border border-border px-2 py-1 text-xs ${priority[2]}`}
             >
               ⚑ {priority[1]}
             </button>
@@ -315,8 +332,10 @@ export function TaskDetail() {
 
       <TagPicker task={task} />
       <DescriptionEditor task={task} />
+      <Reminders task={task} />
       <CheckItems task={task} />
       <Subtasks task={task} />
+      <ActivityLog task={task} />
 
       <div className="mt-auto flex justify-end gap-2 pt-4">
         {trashed ? (

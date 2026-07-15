@@ -24,10 +24,17 @@ export function useDomainEvents(): void {
           case "seed":
             void queryClient.invalidateQueries({ queryKey: ["tasks"] });
             void queryClient.invalidateQueries({ queryKey: ["checkItems"] });
+            void queryClient.invalidateQueries({ queryKey: ["activity"] });
             void queryClient.invalidateQueries({ queryKey: ["smartCounts"] });
             if (entity === "seed") {
               void queryClient.invalidateQueries({ queryKey: ["projects"] });
             }
+            break;
+          case "reminder":
+            void queryClient.invalidateQueries({ queryKey: ["reminders"] });
+            break;
+          case "template":
+            void queryClient.invalidateQueries({ queryKey: ["templates"] });
             break;
           case "project":
           case "folder":

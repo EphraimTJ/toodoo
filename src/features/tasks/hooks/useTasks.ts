@@ -71,6 +71,10 @@ export function useTaskMutations() {
       api.reorderTask(id, afterId),
     onSuccess: invalidate,
   });
+  const setPinned = useMutation({
+    mutationFn: ({ id, pinned }: { id: string; pinned: boolean }) => api.setTaskPinned(id, pinned),
+    onSuccess: invalidate,
+  });
 
   return {
     createTask,
@@ -82,6 +86,7 @@ export function useTaskMutations() {
     deleteTaskForever,
     moveTask,
     reorderTask,
+    setPinned,
   };
 }
 

@@ -5,13 +5,17 @@ pub mod repo;
 use serde_json::Value;
 use sqlx::SqlitePool;
 use tauri::{Emitter, Manager, State};
+use tauri_plugin_notification::NotificationExt;
 
 use events::EventBus;
+use repo::activity::ActivityEntry;
 use repo::check_items::CheckItem;
 use repo::folders::{Folder, FolderPatch};
 use repo::projects::{NewProject, Project, ProjectPatch};
+use repo::reminders::Reminder;
 use repo::tags::Tag;
 use repo::tasks::{NewTask, SmartCounts, SmartView, Task, TaskPatch};
+use repo::templates::{TaskTemplate, TemplatePayload};
 
 pub struct AppState {
     pool: SqlitePool,
@@ -276,10 +280,104 @@ async fn seed_demo_data(state: State<'_, AppState>, tasks: usize) -> CmdResult<(
     repo::seed::seed_demo_data(&state.pool, &state.bus, 20, tasks).await.map_err(err)
 }
 
+// ---- recurrence, reminders, activity, pin ---------------------------------------
+
+#[tauri::command]
+async fn set_task_pinned(state: State<'_, AppState>, id: String, pinned: bool) -> CmdResult<()> {
+    repo::tasks::set_pinned(&state.pool, &state.bus, &id, pinned).await.map_err(err)
+}
+
+#[tauri::command]
+async fn list_reminders(state: State<'_, AppState>, task_id: String) -> CmdResult<Vec<Reminder>> {
+    repo::reminders::list_reminders(&state.pool, &task_id).await.map_err(err)
+}
+
+#[tauri::command]
+async fn add_reminder(
+    state: State<'_, AppState>,
+    task_id: String,
+    trigger_kind: String,
+    at: Option<String>,
+    offset_min: Option<i64>,
+) -> CmdResult<Reminder> {
+    repo::reminders::add_reminder(
+        &state.pool,
+        &state.bus,
+        &task_id,
+        &trigger_kind,
+        at.as_deref(),
+        offset_min,
+    )
+    .await
+    .map_err(err)
+}
+
+#[tauri::command]
+async fn snooze_reminder(state: State<'_, AppState>, id: String, until: String) -> CmdResult<()> {
+    repo::reminders::snooze(&state.pool, &state.bus, &id, &until).await.map_err(err)
+}
+
+#[tauri::command]
+async fn delete_reminder(state: State<'_, AppState>, id: String) -> CmdResult<()> {
+    repo::reminders::delete_reminder(&state.pool, &state.bus, &id).await.map_err(err)
+}
+
+#[tauri::command]
+async fn list_activity(
+    state: State<'_, AppState>,
+    entity_kind: String,
+    entity_id: String,
+) -> CmdResult<Vec<ActivityEntry>> {
+    repo::activity::list_activity(&state.pool, &entity_kind, &entity_id).await.map_err(err)
+}
+
+#[tauri::command]
+async fn list_templates(state: State<'_, AppState>) -> CmdResult<Vec<TaskTemplate>> {
+    repo::templates::list_templates(&state.pool).await.map_err(err)
+}
+
+#[tauri::command]
+async fn create_template(
+    state: State<'_, AppState>,
+    name: String,
+    payload: TemplatePayload,
+) -> CmdResult<TaskTemplate> {
+    repo::templates::create_template(&state.pool, &state.bus, &name, &payload).await.map_err(err)
+}
+
+#[tauri::command]
+async fn update_template(
+    state: State<'_, AppState>,
+    id: String,
+    name: Option<String>,
+    payload: Option<TemplatePayload>,
+) -> CmdResult<()> {
+    repo::templates::update_template(&state.pool, &state.bus, &id, name.as_deref(), payload.as_ref())
+        .await
+        .map_err(err)
+}
+
+#[tauri::command]
+async fn delete_template(state: State<'_, AppState>, id: String) -> CmdResult<()> {
+    repo::templates::delete_template(&state.pool, &state.bus, &id).await.map_err(err)
+}
+
+#[tauri::command]
+async fn instantiate_template(
+    state: State<'_, AppState>,
+    template_id: String,
+    project_id: String,
+) -> CmdResult<Task> {
+    repo::templates::instantiate_template(&state.pool, &state.bus, &template_id, &project_id)
+        .await
+        .map_err(err)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_notification::init())
         .setup(|app| {
             let data_dir = app.path().app_data_dir()?;
             std::fs::create_dir_all(&data_dir)?;
@@ -294,6 +392,47 @@ pub fn run() {
             tauri::async_runtime::spawn(async move {
                 while let Ok(event) = rx.recv().await {
                     let _ = handle.emit("domain-event", &event);
+                }
+            });
+
+            // Reminder scheduler: every 30s fire any reminder whose time has
+            // arrived (including ones missed while the app was closed — the
+            // first tick runs immediately), then record the fire so it doesn't
+            // repeat. `mark_fired` before emit keeps a crash from double-nagging.
+            let sched_pool = pool.clone();
+            let sched_bus = bus.clone();
+            let sched_handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                let mut tick = tokio::time::interval(std::time::Duration::from_secs(30));
+                loop {
+                    tick.tick().await;
+                    let due = match repo::reminders::due_reminders(&sched_pool, chrono::Utc::now())
+                        .await
+                    {
+                        Ok(due) => due,
+                        Err(e) => {
+                            eprintln!("reminder scan failed: {e}");
+                            continue;
+                        }
+                    };
+                    for r in due {
+                        let _ = sched_handle
+                            .notification()
+                            .builder()
+                            .title("Toodoo")
+                            .body(&r.task_title)
+                            .show();
+                        if let Err(e) =
+                            repo::reminders::mark_fired(&sched_pool, &r.reminder_id, &r.fire_at).await
+                        {
+                            eprintln!("mark_fired failed: {e}");
+                            continue;
+                        }
+                        sched_bus.emit(events::DomainEvent::ReminderFired {
+                            task_id: r.task_id,
+                            reminder_id: r.reminder_id,
+                        });
+                    }
                 }
             });
 
@@ -337,7 +476,18 @@ pub fn run() {
             unassign_tag,
             get_setting,
             set_setting,
-            seed_demo_data
+            seed_demo_data,
+            set_task_pinned,
+            list_reminders,
+            add_reminder,
+            snooze_reminder,
+            delete_reminder,
+            list_activity,
+            list_templates,
+            create_template,
+            update_template,
+            delete_template,
+            instantiate_template
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

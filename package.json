@@ -26,11 +26,13 @@
     "@tiptap/extension-placeholder": "^3.27.4",
     "@tiptap/react": "^3.27.4",
     "@tiptap/starter-kit": "^3.27.4",
+    "chrono-node": "^2.10.0",
     "cmdk": "^1.1.1",
     "date-fns": "^4.4.0",
     "radix-ui": "^1.6.2",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "rrule": "^2.8.1",
     "zustand": "^5.0.14"
   },
   "devDependencies": {

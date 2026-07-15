@@ -5,6 +5,53 @@ ambiguity we resolved by judgment call), with the reasoning. Newest entries at
 the top. Never rewrite history — if a decision is reversed, add a new entry
 that supersedes the old one.
 
+## 2026-07-15 — Recurring completion advances in place; subtree not cascaded
+
+**Decision:** Completing a recurring task (one with an `rrule` and a start/due
+anchor) does not mark it COMPLETED. Instead it records the finished occurrence
+in `task_completions`, rolls the task's `start_at`/`due_at` to the next
+occurrence, and leaves it ACTIVE. When an end condition is reached
+(`next_occurrence` returns `None` for `COUNT=`/`UNTIL=`), the task completes for
+real. Recurrence acts on the task itself only — its subtasks are **not**
+cascade-completed on an advance (unlike a normal completion).
+
+**Why:** Matches TickTick, where a recurring task reappears with its next date
+rather than disappearing into Completed. Advancing the subtree would fight the
+"repeat the whole checklist" model and produce contradictory complete-then-
+reopen history; keeping recurrence on the parent is simpler and predictable.
+
+**Notes:** `COUNT=` progress is derived by counting `task_completions` rows
+(status `COMPLETED`) for the task, including the occurrence just recorded, and
+enforced in the pure `recurrence::next_occurrence` engine. In Phase 2 a
+`task_completions` row is written **only** for recurring tasks (the data the
+recurrence engine needs); general per-completion history for the Phase 9 stats
+engine is deferred to that phase. The `repeat_from = COMPLETION` vs `DUE` basis
+and DST wall-clock handling live in `recurrence.rs` and are unit-tested there.
+
+## 2026-07-15 — Reminder scheduler polls every 30s with launch catch-up
+
+**Decision:** A background task polls `reminders::due_reminders` every 30
+seconds, fires a native notification per due reminder, then stamps
+`last_fired_at` so it never double-fires. The first tick runs immediately on
+launch, so reminders whose time passed while the app was closed still fire
+(catch-up). All-day tasks' relative reminders anchor at 09:00 local
+(`ALL_DAY_REMINDER_TIME`); a completed or trashed task never nags.
+
+**Why:** Desktop apps can't rely on OS-scheduled alarms while closed; a poll
+loop plus a catch-up pass is the simplest correct approach and keeps the
+fire-time math pure and testable. 30s is well within a minute-granular UX.
+
+## 2026-07-15 — Browser API stub approximates recurrence (no COUNT)
+
+**Decision:** The in-memory browser stub (`src/lib/api.ts`, used by vite dev and
+Playwright) advances recurring tasks by `FREQ`/`INTERVAL` and honors `UNTIL`,
+but does **not** enforce `COUNT=` — it advances indefinitely. The Rust
+repository layer remains the single source of truth for recurrence.
+
+**Why:** The stub exists to exercise UI flows, not to reimplement the engine.
+`COUNT` end-counting needs the `task_completions` ledger, which is a backend
+concern; duplicating it in the stub would be effort without a UI payoff.
+
 ## 2026-07-15 — Completing a parent task completes its subtasks (user-approved)
 
 **Decision:** Checking off a parent marks every open descendant COMPLETED in

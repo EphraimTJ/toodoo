@@ -25,16 +25,17 @@ This is the checklist the whole project is graded against, converted from §3 of
 - [x] Due date
 - [ ] All-day vs. timed
 - [ ] Task duration (time spans on calendar)
-- [ ] Multiple reminders per task
-  - [ ] Absolute reminders
-  - [ ] Relative reminders ("5 min before", "1 day before at 9am")
-  - [ ] Snooze
+- [ ] Multiple reminders per task — add/list/delete shipped; scheduler fires them
+  - [ ] Absolute reminders — repo + scheduler shipped; picker UI pending
+  - [x] Relative reminders ("5 min before", "1 day before at 9am")
+  - [ ] Snooze — repo + scheduler shipped; UI control pending (notification action)
 - [ ] Recurring tasks
-  - [ ] Daily/weekly/monthly/yearly
-  - [ ] Custom RRULEs (e.g., "last Friday of month")
+  - [x] Daily/weekly/monthly/yearly
+  - [ ] Custom RRULEs (e.g., "last Friday of month") — engine handles them; only
+        weekly-by-weekday exposed in the picker so far
   - [ ] Lunar-calendar option (stretch)
-  - [ ] "Repeat after completion" vs. fixed schedule
-  - [ ] End conditions (never / after N / until date)
+  - [x] "Repeat after completion" vs. fixed schedule
+  - [x] End conditions (never / after N / until date)
 - [ ] Smart date recognition (NLP quick-add)
   - [ ] Parse dates and times
   - [ ] Parse recurrence ("every friday")
@@ -45,9 +46,9 @@ This is the checklist the whole project is graded against, converted from §3 of
 - [ ] Task templates
 - [ ] Attachments (files, images, audio) stored locally
   - [ ] Per-task gallery
-- [ ] Task activity log (created, completed, edited history)
+- [x] Task activity log (created, completed, edited history)
 - [ ] Comments on tasks (single-user: running note/log thread)
-- [ ] Pin tasks
+- [x] Pin tasks
 - [ ] "Won't Do" status
 - [ ] Task duplication
 - [ ] Convert note ↔ task

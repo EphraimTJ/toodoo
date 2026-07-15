@@ -20,7 +20,8 @@ fn to_fts_query(input: &str) -> Option<String> {
 
 const TASK_COLUMNS: &str =
     "t.id, t.project_id, t.section_id, t.parent_id, t.title, t.content_rich, t.content_plain, \
-     t.kind, t.status, t.priority, t.start_at, t.due_at, t.is_all_day, t.duration_min, t.pinned, \
+     t.kind, t.status, t.priority, t.start_at, t.due_at, t.is_all_day, t.duration_min, \
+     t.time_zone, t.rrule, t.repeat_from, t.pinned, t.est_pomos, t.est_duration_min, \
      CAST(json_extract(t.sort_orders_json, '$.project') AS INTEGER) AS sort_order, \
      t.completed_at, t.created_at, t.updated_at";
 
