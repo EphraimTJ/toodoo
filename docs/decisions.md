@@ -27,7 +27,7 @@ creating a subtask deeper than 4 levels, like TickTick desktop.
 
 ## 2026-07-15 — Smart-list date windows
 
-**Decision:** A task's *effective date* is its due date, else its start date.
+**Decision:** A task's _effective date_ is its due date, else its start date.
 Today and Next 7 Days include overdue tasks; Next 7 Days spans today..+6.
 All-day tasks compare by stored calendar date; timed tasks convert to the
 viewer's local date (frontend passes local date + UTC offset). Matches

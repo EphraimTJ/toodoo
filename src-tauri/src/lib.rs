@@ -168,6 +168,11 @@ async fn smart_counts(
 }
 
 #[tauri::command]
+async fn list_tag_tasks(state: State<'_, AppState>, tag_id: String) -> CmdResult<Vec<Task>> {
+    repo::tasks::list_tag_tasks(&state.pool, &tag_id).await.map_err(err)
+}
+
+#[tauri::command]
 async fn search_tasks(state: State<'_, AppState>, query: String) -> CmdResult<Vec<Task>> {
     repo::search::search_tasks(&state.pool, &query, 50).await.map_err(err)
 }
@@ -317,6 +322,7 @@ pub fn run() {
             reorder_task,
             list_project_tasks,
             list_smart,
+            list_tag_tasks,
             smart_counts,
             search_tasks,
             list_check_items,

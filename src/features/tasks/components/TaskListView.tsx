@@ -9,7 +9,7 @@ import { useProjects } from "../../projects/hooks/useProjects";
 import { useTags } from "../../tags/hooks/useTags";
 import { flattenTree, useTaskMutations, useViewTasks, type TreeRow } from "../hooks/useTasks";
 import { useViewOptions, type GroupMode, type SortMode } from "../hooks/useViewOptions";
-import { organizeTasks } from "../lib/sortGroup";
+import { completedDateLabel, organizeTasks } from "../lib/sortGroup";
 import { BatchToolbar } from "./BatchToolbar";
 import { TaskAddBar } from "./TaskAddBar";
 import { TaskRow } from "./TaskRow";
@@ -53,7 +53,7 @@ export function TaskListView({ view }: { view: ViewSelection }) {
   const flatView = isTrash || isCompletedView;
 
   const groupChoices: [GroupMode, string][] =
-    view.kind === "smart"
+    view.kind !== "project"
       ? [
           ["none", "None"],
           ["date", "Date"],
@@ -71,7 +71,9 @@ export function TaskListView({ view }: { view: ViewSelection }) {
   const title =
     view.kind === "smart"
       ? SMART_TITLES[view.view]
-      : ((projects ?? []).find((p) => p.id === view.projectId)?.name ?? "…");
+      : view.kind === "tag"
+        ? `#${(tags ?? []).find((t) => t.id === view.tagId)?.name ?? "…"}`
+        : ((projects ?? []).find((p) => p.id === view.projectId)?.name ?? "…");
 
   const dragEnabled =
     view.kind === "project" && options.sort === "custom" && options.group === "none";
@@ -81,7 +83,19 @@ export function TaskListView({ view }: { view: ViewSelection }) {
     const out: RenderItem[] = [];
     let ids: string[] = [];
 
-    if (flatView) {
+    if (isCompletedView) {
+      // Completed-by-date browsing: headers per completion day, newest first
+      // (the backend already orders by completed_at DESC).
+      let currentLabel = "";
+      for (const row of flattenTree(all)) {
+        const label = completedDateLabel(row.task);
+        if (row.depth === 0 && label !== currentLabel) {
+          currentLabel = label;
+          out.push({ kind: "group", label });
+        }
+        out.push({ kind: "task", row });
+      }
+    } else if (flatView) {
       for (const row of flattenTree(all)) out.push({ kind: "task", row });
     } else {
       const active = all.filter((t) => t.status === "ACTIVE");
@@ -100,7 +114,7 @@ export function TaskListView({ view }: { view: ViewSelection }) {
       }
     }
     return { items: out, activeIds: ids };
-  }, [tasks, options, tags, projects, completedOpen, flatView]);
+  }, [tasks, options, tags, projects, completedOpen, flatView, isCompletedView]);
 
   const scrollRef = useRef<HTMLDivElement>(null);
   // eslint-disable-next-line react-hooks/incompatible-library -- virtualizer identity is managed by TanStack Virtual itself

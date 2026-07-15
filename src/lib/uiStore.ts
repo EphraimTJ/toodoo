@@ -2,10 +2,19 @@ import { create } from "zustand";
 import type { SmartView } from "./api";
 
 export type ViewSelection =
-  { kind: "project"; projectId: string } | { kind: "smart"; view: SmartView };
+  | { kind: "project"; projectId: string }
+  | { kind: "smart"; view: SmartView }
+  | { kind: "tag"; tagId: string };
 
 export function viewKey(view: ViewSelection): string {
-  return view.kind === "project" ? `project:${view.projectId}` : `smart:${view.view}`;
+  switch (view.kind) {
+    case "project":
+      return `project:${view.projectId}`;
+    case "smart":
+      return `smart:${view.view}`;
+    case "tag":
+      return `tag:${view.tagId}`;
+  }
 }
 
 interface UiState {

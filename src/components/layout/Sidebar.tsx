@@ -2,6 +2,7 @@ import type { SmartView } from "../../lib/api";
 import { useUiStore } from "../../lib/uiStore";
 import { ThemeToggle } from "../../features/settings/components/ThemeToggle";
 import { SidebarProjects } from "../../features/projects/components/SidebarProjects";
+import { SidebarTags } from "../../features/tags/components/SidebarTags";
 import { useSmartCounts } from "../../features/tasks/hooks/useTasks";
 
 const SMART_LISTS: { view: SmartView; label: string; countKey?: "today" | "tomorrow" | "next7" }[] =
@@ -69,6 +70,7 @@ export function Sidebar() {
         </ul>
 
         <SidebarProjects />
+        <SidebarTags />
       </nav>
     </aside>
   );

@@ -8,6 +8,7 @@ import { useUiStore } from "../../../lib/uiStore";
 import { useFolders, useProjectMutations, useProjects } from "../hooks/useProjects";
 
 const PROJECT_COLORS = ["#4772fa", "#e0362a", "#f0a825", "#35b979", "#9d6ff0", "#71717a"];
+const PROJECT_ICONS = ["📋", "🏠", "💼", "🛒", "🎯", "📚", "💪", "✈️", "🎨"];
 
 const menuItem =
   "flex w-full cursor-pointer select-none rounded px-2 py-1 text-left text-sm outline-none hover:bg-bg data-[highlighted]:bg-bg";
@@ -109,6 +110,30 @@ function ProjectRow({ project }: { project: Project }) {
                       onSelect={() => updateProject.mutate({ id: project.id, patch: { color } })}
                     />
                   ))}
+                </DropdownMenu.SubContent>
+              </DropdownMenu.Portal>
+            </DropdownMenu.Sub>
+            <DropdownMenu.Sub>
+              <DropdownMenu.SubTrigger className={menuItem}>Icon</DropdownMenu.SubTrigger>
+              <DropdownMenu.Portal>
+                <DropdownMenu.SubContent className="z-50 grid w-40 grid-cols-5 gap-1 rounded-md border border-border bg-surface p-2 shadow-lg">
+                  {PROJECT_ICONS.map((icon) => (
+                    <DropdownMenu.Item
+                      key={icon}
+                      aria-label={`Set icon ${icon}`}
+                      className="flex h-6 w-6 cursor-pointer items-center justify-center rounded outline-none hover:bg-bg data-[highlighted]:bg-bg"
+                      onSelect={() => updateProject.mutate({ id: project.id, patch: { icon } })}
+                    >
+                      {icon}
+                    </DropdownMenu.Item>
+                  ))}
+                  <DropdownMenu.Item
+                    aria-label="Remove icon"
+                    className="flex h-6 w-6 cursor-pointer items-center justify-center rounded text-xs text-text-muted outline-none hover:bg-bg data-[highlighted]:bg-bg"
+                    onSelect={() => updateProject.mutate({ id: project.id, patch: { icon: null } })}
+                  >
+                    ✕
+                  </DropdownMenu.Item>
                 </DropdownMenu.SubContent>
               </DropdownMenu.Portal>
             </DropdownMenu.Sub>

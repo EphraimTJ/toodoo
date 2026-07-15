@@ -125,10 +125,13 @@ function Subtasks({ task }: { task: Task }) {
   );
 }
 
+const TAG_COLORS = ["#4772fa", "#e0362a", "#f0a825", "#35b979", "#9d6ff0", "#71717a"];
+
 function TagPicker({ task }: { task: Task }) {
   const { data: tags } = useTags();
   const { createTag, assignTag, unassignTag } = useTagMutations();
   const [draft, setDraft] = useState("");
+  const [draftColor, setDraftColor] = useState(TAG_COLORS[0]);
 
   const assigned = (tags ?? []).filter((t) => task.tagIds.includes(t.id));
   const available = (tags ?? []).filter((t) => !task.tagIds.includes(t.id));
@@ -172,7 +175,7 @@ function TagPicker({ task }: { task: Task }) {
               onKeyDown={(e) => {
                 if (e.key === "Enter" && draft.trim()) {
                   createTag.mutate(
-                    { name: draft.trim() },
+                    { name: draft.trim(), color: draftColor },
                     {
                       onSuccess: (tag) => assignTag.mutate({ taskId: task.id, tagId: tag.id }),
                     },
@@ -184,6 +187,22 @@ function TagPicker({ task }: { task: Task }) {
               aria-label="Tag name"
               className="mb-1 w-full rounded border border-border bg-bg px-2 py-1 text-xs outline-none focus:border-accent"
             />
+            <div className="mb-1 flex gap-1.5 px-0.5" aria-label="New tag color">
+              {TAG_COLORS.map((color) => (
+                <button
+                  key={color}
+                  type="button"
+                  aria-label={`New tag color ${color}`}
+                  onClick={() => setDraftColor(color)}
+                  className={`h-4 w-4 rounded-full ${
+                    draftColor === color
+                      ? "ring-2 ring-accent ring-offset-1 ring-offset-surface"
+                      : ""
+                  }`}
+                  style={{ backgroundColor: color }}
+                />
+              ))}
+            </div>
             {available
               .filter((t) => t.name.toLowerCase().includes(draft.trim().toLowerCase()))
               .map((tag) => (

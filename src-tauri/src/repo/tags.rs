@@ -233,6 +233,30 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn list_tag_tasks_filters_by_tag_and_excludes_trashed() {
+        use crate::repo::tasks::{list_tag_tasks, trash_task};
+
+        let pool = connect_in_memory().await.unwrap();
+        let bus = EventBus::new();
+        let tagged = create_task(&pool, &bus, quick("inbox", "tagged")).await.unwrap();
+        let other = create_task(&pool, &bus, quick("inbox", "untagged")).await.unwrap();
+        let doomed = create_task(&pool, &bus, quick("inbox", "tagged then trashed")).await.unwrap();
+        let tag = create_tag(&pool, &bus, "focus", None).await.unwrap();
+        assign_tag(&pool, &bus, &tagged.id, &tag.id).await.unwrap();
+        assign_tag(&pool, &bus, &doomed.id, &tag.id).await.unwrap();
+        trash_task(&pool, &bus, &doomed.id).await.unwrap();
+
+        let hits = list_tag_tasks(&pool, &tag.id).await.unwrap();
+        let titles: Vec<&str> = hits.iter().map(|t| t.title.as_str()).collect();
+        assert_eq!(titles, vec!["tagged"]);
+        assert!(!titles.contains(&other.title.as_str()));
+
+        // Unassigning removes it from the view.
+        unassign_tag(&pool, &bus, &tagged.id, &tag.id).await.unwrap();
+        assert!(list_tag_tasks(&pool, &tag.id).await.unwrap().is_empty());
+    }
+
+    #[tokio::test]
     async fn deleting_tag_unassigns_but_keeps_tasks() {
         let pool = connect_in_memory().await.unwrap();
         let bus = EventBus::new();

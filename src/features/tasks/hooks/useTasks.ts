@@ -5,8 +5,16 @@ import { viewKey, type ViewSelection } from "../../../lib/uiStore";
 export function useViewTasks(view: ViewSelection) {
   return useQuery({
     queryKey: ["tasks", viewKey(view)],
-    queryFn: () =>
-      view.kind === "project" ? api.listProjectTasks(view.projectId) : api.listSmart(view.view),
+    queryFn: () => {
+      switch (view.kind) {
+        case "project":
+          return api.listProjectTasks(view.projectId);
+        case "tag":
+          return api.listTagTasks(view.tagId);
+        case "smart":
+          return api.listSmart(view.view);
+      }
+    },
   });
 }
 

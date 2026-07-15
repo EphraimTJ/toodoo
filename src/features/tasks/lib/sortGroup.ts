@@ -1,4 +1,4 @@
-import { format, isToday, isTomorrow, parseISO, startOfDay } from "date-fns";
+import { format, isToday, isTomorrow, isYesterday, parseISO, startOfDay } from "date-fns";
 import type { Project, Tag, Task } from "../../../lib/api";
 import { flattenTree, type TreeRow } from "../hooks/useTasks";
 import type { GroupMode, SortMode } from "../hooks/useViewOptions";
@@ -98,6 +98,15 @@ export function organizeTasks(
     groups.set(currentLabel, bucket);
   }
   return [...groups.entries()].map(([label, rows]) => ({ label, rows }));
+}
+
+/** Header label for completed-by-date browsing in the Completed view. */
+export function completedDateLabel(task: Task): string {
+  if (!task.completedAt) return "Earlier";
+  const date = parseISO(task.completedAt);
+  if (isToday(date)) return "Today";
+  if (isYesterday(date)) return "Yesterday";
+  return format(date, "MMM d, yyyy");
 }
 
 export function dueChip(task: Task): { text: string; overdue: boolean } | null {

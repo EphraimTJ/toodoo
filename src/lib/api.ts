@@ -151,6 +151,7 @@ export interface Api {
   moveTask(id: string, projectId: string): Promise<void>;
   reorderTask(id: string, afterId: string | null): Promise<void>;
   listProjectTasks(projectId: string): Promise<Task[]>;
+  listTagTasks(tagId: string): Promise<Task[]>;
   listSmart(view: SmartView): Promise<Task[]>;
   smartCounts(): Promise<SmartCounts>;
   searchTasks(query: string): Promise<Task[]>;
@@ -195,6 +196,7 @@ const tauriApi: Api = {
   moveTask: (id, projectId) => invoke("move_task", { id, projectId }),
   reorderTask: (id, afterId) => invoke("reorder_task", { id, afterId }),
   listProjectTasks: (projectId) => invoke("list_project_tasks", { projectId }),
+  listTagTasks: (tagId) => invoke("list_tag_tasks", { tagId }),
   listSmart: (view) => invoke("list_smart", { view, ...localDateParams() }),
   smartCounts: () => invoke("smart_counts", localDateParams()),
   searchTasks: (query) => invoke("search_tasks", { query }),
@@ -440,6 +442,8 @@ function browserStubApi(): Api {
           .filter((t) => t.projectId === projectId && liveTask(t))
           .sort((a, b) => (a.sortOrder ?? 0) - (b.sortOrder ?? 0)),
       ),
+    listTagTasks: async (tagId) =>
+      clone(tasks.filter((t) => liveTask(t) && t.tagIds.includes(tagId))),
     listSmart: async (view) => {
       const { today } = localDateParams();
       const active = tasks.filter((t) => t.status === "ACTIVE");

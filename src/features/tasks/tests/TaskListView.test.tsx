@@ -2,17 +2,17 @@ import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { INBOX_ID } from "../../../lib/api";
-import { useUiStore } from "../../../lib/uiStore";
+import { api, INBOX_ID } from "../../../lib/api";
+import { useUiStore, type ViewSelection } from "../../../lib/uiStore";
 import { TaskListView } from "../components/TaskListView";
 
-function renderView() {
+function renderView(view: ViewSelection = { kind: "project", projectId: INBOX_ID }) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
   return render(
     <QueryClientProvider client={queryClient}>
-      <TaskListView view={{ kind: "project", projectId: INBOX_ID }} />
+      <TaskListView view={view} />
     </QueryClientProvider>,
   );
 }
@@ -64,6 +64,31 @@ describe("TaskListView", () => {
       "aria-checked",
       "true",
     );
+  });
+
+  it("groups the Completed view by completion date", async () => {
+    const unique = `Shipped it ${Date.now()}`;
+    const task = await api.createTask({ projectId: INBOX_ID, title: unique });
+    await api.completeTask(task.id);
+
+    renderView({ kind: "smart", view: "completed" });
+
+    expect(await screen.findByText(unique)).toBeInTheDocument();
+    // Completed just now → grouped under a "Today" date header.
+    expect(screen.getByText("Today")).toBeInTheDocument();
+  });
+
+  it("shows tasks carrying a tag in the tag view, titled with the tag name", async () => {
+    const tag = await api.createTag(`focus-${Date.now()}`, "#35b979");
+    const inTag = await api.createTask({ projectId: INBOX_ID, title: `Tagged ${Date.now()}` });
+    const outOfTag = await api.createTask({ projectId: INBOX_ID, title: `Plain ${Date.now()}` });
+    await api.assignTag(inTag.id, tag.id);
+
+    renderView({ kind: "tag", tagId: tag.id });
+
+    expect(await screen.findByText(inTag.title)).toBeInTheDocument();
+    expect(screen.queryByText(outOfTag.title)).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: `#${tag.name}` })).toBeInTheDocument();
   });
 
   it("edits a title in place on double-click", async () => {

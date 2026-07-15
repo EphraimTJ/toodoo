@@ -656,6 +656,23 @@ pub async fn list_smart(
     Ok(tasks)
 }
 
+/// Every live (non-trashed) task carrying the tag — the "filter by tag" view.
+pub async fn list_tag_tasks(pool: &SqlitePool, tag_id: &str) -> Result<Vec<Task>> {
+    let mut tasks: Vec<Task> = sqlx::query_as(&format!(
+        "SELECT {COLUMNS} FROM tasks
+         WHERE deleted_at IS NULL AND status <> 'TRASHED'
+           AND id IN (SELECT task_id FROM task_tags
+                      WHERE tag_id = ? AND deleted_at IS NULL)
+         ORDER BY status, CAST(COALESCE(json_extract(sort_orders_json, '$.project'), 0) AS INTEGER),
+                  created_at"
+    ))
+    .bind(tag_id)
+    .fetch_all(pool)
+    .await?;
+    attach_tags(pool, &mut tasks).await?;
+    Ok(tasks)
+}
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SmartCounts {

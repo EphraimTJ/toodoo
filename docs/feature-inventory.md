@@ -62,7 +62,7 @@ This is the checklist the whole project is graded against, converted from §3 of
 - [x] Unlimited lists/projects (no cap)
 - [x] Folders to group lists
 - [x] List colors
-- [ ] List icons/emojis
+- [x] List icons/emojis
 - [ ] View-type memory per list
 - [ ] Smart Lists
   - [x] Today
@@ -81,18 +81,18 @@ This is the checklist the whole project is graded against, converted from §3 of
   - [ ] Advanced text syntax
 - [ ] Tags
   - [ ] Nested tags
-  - [ ] Tag colors
+  - [x] Tag colors
   - [ ] Tag manager (rename/merge/delete)
-  - [ ] Filter by tag
+  - [x] Filter by tag
 - [x] Sorting: by date, priority, title, tag, custom (manual drag)
 - [x] Grouping: by list, date, priority, tag, none
 - [x] Completed tasks: show/hide per list
-- [ ] Completed-by-date browsing
+- [x] Completed-by-date browsing
 - [x] Trash with restore
 
 ## 3.3 Views
 
-- [ ] List view (classic)
+- [x] List view (classic)
 - [ ] Kanban view per list
   - [ ] Custom columns/sections
   - [ ] Drag between columns
