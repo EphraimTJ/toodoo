@@ -41,7 +41,7 @@ mod tests {
     async fn migrations_apply_cleanly_on_fresh_db() {
         let pool = connect_in_memory().await.expect("migrate");
         // Spot-check a few tables from migration 0001.
-        for table in ["tasks", "projects", "habits", "changelog", "settings"] {
+        for table in ["tasks", "habits", "changelog", "settings"] {
             let n: i64 =
                 sqlx::query_scalar(&format!("SELECT COUNT(*) FROM {table}"))
                     .fetch_one(&pool)
@@ -49,5 +49,11 @@ mod tests {
                     .unwrap_or_else(|e| panic!("table {table} missing: {e}"));
             assert_eq!(n, 0);
         }
+        // Migration 0002 seeds exactly one project: the Inbox.
+        let projects: Vec<String> = sqlx::query_scalar("SELECT id FROM projects")
+            .fetch_all(&pool)
+            .await
+            .unwrap();
+        assert_eq!(projects, vec!["inbox".to_string()]);
     }
 }
