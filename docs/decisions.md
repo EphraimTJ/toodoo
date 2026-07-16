@@ -5,6 +5,40 @@ ambiguity we resolved by judgment call), with the reasoning. Newest entries at
 the top. Never rewrite history — if a decision is reversed, add a new entry
 that supersedes the old one.
 
+## 2026-07-16 — Search (Phase 12A, user-approved)
+
+**Dedicated Search view**, not a two-mode ⌘K palette. The palette stays the
+quick task-jump + list-jump surface and gains a "Search everything for '<q>'"
+item that hands off to the full Search view (query box + list/tag/date/status
+facets + result groups + recent + saved). Filters/recent/saved need more room
+than a palette dropdown affords.
+
+**FTS5 for habits and tags** via migration **0007** (external-content virtual
+tables + insert/update/delete triggers, mirroring the tasks/check-items pattern
+from 0002), **backfilled** from existing rows since habits/tags may predate the
+migration. Chosen over a LIKE query for consistency with the rest of search.
+
+**Coverage note:** the §3.9 "global search" box is checked for every entity that
+exists today — tasks, descriptions, check items, notes (which are NOTE-kind
+tasks, already in `tasks_fts`), habits, and tags. **Comments and attachment
+filenames are NOT yet searchable**; those tables/features arrive in 12B, which
+will add their FTS triggers. This is an intentional partial close of the box.
+
+**Recent searches = settings ring buffer** (`search.recent`, capped at 12, pure
+`push_recent`: trim/blank-skip/case-insensitive-dedupe/newest-first/cap — unit
+-tested with a TS mirror `recent.ts`). **Saved searches = the `saved_searches`
+table** (from migration 0001; no new table), query + `filters_json`.
+
+**Live search:** task mutations now invalidate the `["search"]` query key so
+results update when a matched task is completed/edited/trashed (previously only
+`["tasks"]`/`["smartCounts"]`/`["stats"]`).
+
+**Stub does substring; FTS relevance/ranking is Rust-only** (consistent with the
+2026-07-14 E2E decision). Playwright drives the Search UI against the stub;
+FTS-specific behavior (prefix/porter stemming, injection safety) is covered by
+Rust tests. No native behavior in this slice, so no `manual-test-checklist.md`
+entry (that file is first created in 12D).
+
 ## 2026-07-16 — Data Safety & Import/Export (user-approved)
 
 **Backups are the DB file only** (no zip). Attachments (§3.1) aren't implemented,

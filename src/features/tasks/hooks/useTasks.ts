@@ -42,6 +42,8 @@ export function useTaskMutations() {
     void queryClient.invalidateQueries({ queryKey: ["smartCounts"] });
     // Completing/reopening a task moves the achievement score and summary.
     void queryClient.invalidateQueries({ queryKey: ["stats"] });
+    // Edited/completed/trashed tasks change what search returns.
+    void queryClient.invalidateQueries({ queryKey: ["search"] });
   };
 
   const createTask = useMutation({
@@ -108,6 +110,7 @@ export function useBatchMutations() {
     void queryClient.invalidateQueries({ queryKey: ["tasks"] });
     void queryClient.invalidateQueries({ queryKey: ["smartCounts"] });
     void queryClient.invalidateQueries({ queryKey: ["stats"] });
+    void queryClient.invalidateQueries({ queryKey: ["search"] });
   };
 
   return useMutation({

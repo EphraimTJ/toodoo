@@ -12,6 +12,7 @@ import { NoteListView } from "../../features/notes/components/NoteListView";
 import { StickyBoard } from "../../features/sticky/components/StickyBoard";
 import { TimelineView } from "../../features/timeline/components/TimelineView";
 import { StatsView } from "../../features/stats/components/StatsView";
+import { SearchView } from "../../features/search/components/SearchView";
 
 export function ListPane() {
   const view = useUiStore((s) => s.view);
@@ -34,6 +35,8 @@ export function ListPane() {
     content = <StickyBoard />;
   } else if (view.kind === "stats") {
     content = <StatsView />;
+  } else if (view.kind === "search") {
+    content = <SearchView />;
   } else if (view.kind === "project") {
     const project = (projects ?? []).find((p) => p.id === view.projectId);
     content =

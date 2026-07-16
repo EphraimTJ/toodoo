@@ -39,6 +39,17 @@ export function Sidebar() {
           <li>
             <button
               type="button"
+              onClick={() => useUiStore.getState().openSearch()}
+              className={`flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-bg ${
+                view.kind === "search" ? "bg-bg font-medium text-accent" : ""
+              }`}
+            >
+              🔍 Search
+            </button>
+          </li>
+          <li>
+            <button
+              type="button"
               onClick={() => setView({ kind: "project", projectId: "inbox" })}
               className={`flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left text-sm hover:bg-bg ${
                 view.kind === "project" && view.projectId === "inbox"

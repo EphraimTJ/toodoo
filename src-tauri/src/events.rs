@@ -75,6 +75,8 @@ pub enum DomainEvent {
     SeedCompleted,
     #[serde(rename = "setting.changed")]
     SettingChanged { key: String },
+    #[serde(rename = "savedsearch.changed")]
+    SavedSearchChanged,
 }
 
 #[derive(Clone)]

@@ -84,6 +84,9 @@ export function useDomainEvents(): void {
           case "setting":
             void queryClient.invalidateQueries({ queryKey: ["setting"] });
             break;
+          case "savedsearch":
+            void queryClient.invalidateQueries({ queryKey: ["savedSearches"] });
+            break;
         }
       }).then((fn) => {
         if (disposed) fn();

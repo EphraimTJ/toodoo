@@ -207,6 +207,48 @@ async fn search_tasks(state: State<'_, AppState>, query: String) -> CmdResult<Ve
     repo::search::search_tasks(&state.pool, &query, 50).await.map_err(err)
 }
 
+#[tauri::command]
+async fn search_all(
+    state: State<'_, AppState>,
+    query: String,
+    filters: repo::search::SearchFilters,
+) -> CmdResult<repo::search::SearchResults> {
+    repo::search::search_all(&state.pool, &query, &filters, 50).await.map_err(err)
+}
+
+#[tauri::command]
+async fn recent_searches(state: State<'_, AppState>) -> CmdResult<Vec<String>> {
+    repo::search::recent_searches(&state.pool).await.map_err(err)
+}
+
+#[tauri::command]
+async fn add_recent_search(state: State<'_, AppState>, query: String) -> CmdResult<Vec<String>> {
+    repo::search::add_recent_search(&state.pool, &state.bus, &query).await.map_err(err)
+}
+
+#[tauri::command]
+async fn list_saved_searches(
+    state: State<'_, AppState>,
+) -> CmdResult<Vec<repo::saved_searches::SavedSearch>> {
+    repo::saved_searches::list_saved_searches(&state.pool).await.map_err(err)
+}
+
+#[tauri::command]
+async fn create_saved_search(
+    state: State<'_, AppState>,
+    query: String,
+    filters_json: Option<String>,
+) -> CmdResult<repo::saved_searches::SavedSearch> {
+    repo::saved_searches::create_saved_search(&state.pool, &state.bus, &query, filters_json.as_deref())
+        .await
+        .map_err(err)
+}
+
+#[tauri::command]
+async fn delete_saved_search(state: State<'_, AppState>, id: String) -> CmdResult<()> {
+    repo::saved_searches::delete_saved_search(&state.pool, &state.bus, &id).await.map_err(err)
+}
+
 // ---- check items & tags --------------------------------------------------------
 
 #[tauri::command]
@@ -1329,6 +1371,12 @@ pub fn run() {
             list_tag_tasks,
             smart_counts,
             search_tasks,
+            search_all,
+            recent_searches,
+            add_recent_search,
+            list_saved_searches,
+            create_saved_search,
+            delete_saved_search,
             list_check_items,
             add_check_item,
             set_check_item,

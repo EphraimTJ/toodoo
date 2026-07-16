@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { evaluateRule, parseQuery, resolveQuery } from "../features/filters/lib/rule";
 import { completionPoints, levelFor } from "../features/stats/lib/score";
 import { parseCsv } from "../features/settings/lib/importers";
+import { pushRecent, RECENT_CAP } from "../features/search/lib/recent";
 import {
   completionRate as habitCompletionRate,
   isScheduled as habitIsScheduled,
@@ -314,6 +315,32 @@ export interface BackupConfig {
   lastAt: string | null;
 }
 
+// ---- Search -----------------------------------------------------------------
+
+export interface SearchFilters {
+  projectId?: string;
+  tagId?: string;
+  status?: string; // ACTIVE | COMPLETED
+  dueFrom?: string;
+  dueTo?: string;
+}
+export interface SearchHit {
+  id: string;
+  name: string;
+}
+export interface SearchResults {
+  tasks: Task[];
+  habits: SearchHit[];
+  tags: SearchHit[];
+}
+export interface SavedSearch {
+  id: string;
+  query: string;
+  filtersJson: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 // ---- Habits -----------------------------------------------------------------
 
 export type GoalKind = "CHECK" | "AMOUNT";
@@ -515,6 +542,12 @@ export interface Api {
   listSmart(view: SmartView): Promise<Task[]>;
   smartCounts(): Promise<SmartCounts>;
   searchTasks(query: string): Promise<Task[]>;
+  searchAll(query: string, filters: SearchFilters): Promise<SearchResults>;
+  recentSearches(): Promise<string[]>;
+  addRecentSearch(query: string): Promise<string[]>;
+  listSavedSearches(): Promise<SavedSearch[]>;
+  createSavedSearch(query: string, filtersJson: string | null): Promise<SavedSearch>;
+  deleteSavedSearch(id: string): Promise<void>;
 
   listCheckItems(taskId: string): Promise<CheckItem[]>;
   addCheckItem(taskId: string, title: string): Promise<CheckItem>;
@@ -725,6 +758,13 @@ const tauriApi: Api = {
   listSmart: (view) => invoke("list_smart", { view, ...localDateParams() }),
   smartCounts: () => invoke("smart_counts", localDateParams()),
   searchTasks: (query) => invoke("search_tasks", { query }),
+  searchAll: (query, filters) => invoke("search_all", { query, filters }),
+  recentSearches: () => invoke("recent_searches"),
+  addRecentSearch: (query) => invoke("add_recent_search", { query }),
+  listSavedSearches: () => invoke("list_saved_searches"),
+  createSavedSearch: (query, filtersJson) =>
+    invoke("create_saved_search", { query, filtersJson }),
+  deleteSavedSearch: (id) => invoke("delete_saved_search", { id }),
 
   listCheckItems: (taskId) => invoke("list_check_items", { taskId }),
   addCheckItem: (taskId, title) => invoke("add_check_item", { taskId, title }),
@@ -969,6 +1009,8 @@ function browserStubApi(): Api {
   // Backups can't run server-side in the browser; the stub keeps an in-memory list.
   const backups: BackupInfo[] = [];
   const backupCfg: BackupConfig = { autoEnabled: true, keep: 10, lastAt: null };
+  let recentSearchList: string[] = [];
+  const savedSearchList: SavedSearch[] = [];
   const nowIso = () => new Date().toISOString();
   const uid = () => crypto.randomUUID();
 
@@ -1361,6 +1403,46 @@ function browserStubApi(): Api {
               itemHits.has(t.id)),
         ),
       );
+    },
+    searchAll: async (query, filters) => {
+      const q = query.trim().toLowerCase();
+      if (!q) return { tasks: [], habits: [], tags: [] };
+      const itemHits = new Set(
+        checkItems.filter((c) => c.title.toLowerCase().includes(q)).map((c) => c.taskId),
+      );
+      let ts = tasks.filter(
+        (t) =>
+          liveTask(t) &&
+          (t.title.toLowerCase().includes(q) ||
+            (t.contentPlain ?? "").toLowerCase().includes(q) ||
+            itemHits.has(t.id)),
+      );
+      if (filters.projectId) ts = ts.filter((t) => t.projectId === filters.projectId);
+      if (filters.status) ts = ts.filter((t) => t.status === filters.status);
+      if (filters.tagId) ts = ts.filter((t) => (t.tagIds ?? []).includes(filters.tagId!));
+      if (filters.dueFrom) ts = ts.filter((t) => t.dueAt != null && t.dueAt.slice(0, 10) >= filters.dueFrom!);
+      if (filters.dueTo) ts = ts.filter((t) => t.dueAt != null && t.dueAt.slice(0, 10) <= filters.dueTo!);
+      return {
+        tasks: clone(ts),
+        habits: habits.filter((h) => h.name.toLowerCase().includes(q)).map((h) => ({ id: h.id, name: h.name })),
+        tags: tags.filter((t) => t.name.toLowerCase().includes(q)).map((t) => ({ id: t.id, name: t.name })),
+      };
+    },
+    recentSearches: async () => [...recentSearchList],
+    addRecentSearch: async (query) => {
+      recentSearchList = pushRecent(recentSearchList, query, RECENT_CAP);
+      return [...recentSearchList];
+    },
+    listSavedSearches: async () => savedSearchList.map((s) => ({ ...s })),
+    createSavedSearch: async (query, filtersJson) => {
+      const now = nowIso();
+      const s: SavedSearch = { id: uid(), query, filtersJson, createdAt: now, updatedAt: now };
+      savedSearchList.unshift(s);
+      return { ...s };
+    },
+    deleteSavedSearch: async (id) => {
+      const i = savedSearchList.findIndex((s) => s.id === id);
+      if (i >= 0) savedSearchList.splice(i, 1);
     },
 
     listCheckItems: async (taskId) =>

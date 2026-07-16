@@ -196,11 +196,11 @@ This is the checklist the whole project is graded against, converted from §3 of
 
 ## 3.9 Search
 
-- [ ] Global full-text search across tasks, descriptions, check items, notes,
-      comments, attachments' names, habits, tags
-- [ ] Search filters (list, tag, date, completed)
-- [ ] Recent searches
-- [ ] Saved searches
+- [x] Global full-text search across tasks, descriptions, check items, notes,
+      habits, tags (comments + attachment names join in 12B when they ship)
+- [x] Search filters (list, tag, date, completed)
+- [x] Recent searches
+- [x] Saved searches
 
 ## 3.10 Statistics & Gamification
 

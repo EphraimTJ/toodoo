@@ -12,7 +12,8 @@ export type ViewSelection =
   | { kind: "habits" }
   | { kind: "countdown" }
   | { kind: "sticky" }
-  | { kind: "stats" };
+  | { kind: "stats" }
+  | { kind: "search" };
 
 export function viewKey(view: ViewSelection): string {
   switch (view.kind) {
@@ -38,6 +39,8 @@ export function viewKey(view: ViewSelection): string {
       return "sticky";
     case "stats":
       return "stats";
+    case "search":
+      return "search";
   }
 }
 
@@ -47,6 +50,8 @@ interface UiState {
   multiSelect: ReadonlySet<string>;
   paletteOpen: boolean;
   focusTaskId: string | null;
+  /** Query to seed the Search view when it opens (consumed on mount). */
+  searchSeed: string;
 
   setView(view: ViewSelection): void;
   selectTask(id: string | null): void;
@@ -54,6 +59,7 @@ interface UiState {
   clearMultiSelect(): void;
   setPaletteOpen(open: boolean): void;
   openFocus(taskId?: string | null): void;
+  openSearch(query?: string): void;
 }
 
 export const useUiStore = create<UiState>((set) => ({
@@ -62,9 +68,12 @@ export const useUiStore = create<UiState>((set) => ({
   multiSelect: new Set<string>(),
   paletteOpen: false,
   focusTaskId: null,
+  searchSeed: "",
 
   setView: (view) => set({ view, selectedTaskId: null, multiSelect: new Set() }),
   openFocus: (taskId = null) => set({ view: { kind: "focus" }, focusTaskId: taskId }),
+  openSearch: (query = "") =>
+    set({ view: { kind: "search" }, searchSeed: query, selectedTaskId: null, paletteOpen: false }),
   selectTask: (selectedTaskId) => set({ selectedTaskId }),
   toggleMultiSelect: (id) =>
     set((s) => {

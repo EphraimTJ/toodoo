@@ -22,6 +22,7 @@ pub mod projects;
 pub mod query;
 pub mod recurrence;
 pub mod reminders;
+pub mod saved_searches;
 pub mod search;
 pub mod sections;
 pub mod seed;
