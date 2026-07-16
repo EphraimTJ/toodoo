@@ -34,10 +34,18 @@ use repo::templates::{TaskTemplate, TemplatePayload};
 pub struct AppState {
     pool: SqlitePool,
     bus: EventBus,
+    /// The app data directory (holds the DB, `backups/`, and staged restores).
+    data_dir: std::path::PathBuf,
     /// The API bearer token, shared with a running server so regeneration is live.
     api_token: std::sync::Arc<std::sync::RwLock<String>>,
     /// The running REST server, if enabled.
     api_server: std::sync::Mutex<Option<api::ServerHandle>>,
+}
+
+impl AppState {
+    fn backups_dir(&self) -> std::path::PathBuf {
+        self.data_dir.join("backups")
+    }
 }
 
 type CmdResult<T> = Result<T, String>;
@@ -1043,6 +1051,67 @@ fn copy_task_link(id: String) -> String {
     format!("toodoo://task/{id}")
 }
 
+// ---- data: import / export / backups -------------------------------------------
+
+#[tauri::command]
+async fn export_json(state: State<'_, AppState>) -> CmdResult<String> {
+    repo::exporters::export_json(&state.pool).await.map_err(err)
+}
+
+#[tauri::command]
+async fn export_csv(state: State<'_, AppState>) -> CmdResult<String> {
+    repo::exporters::export_csv(&state.pool).await.map_err(err)
+}
+
+#[tauri::command]
+async fn export_markdown(state: State<'_, AppState>) -> CmdResult<String> {
+    repo::exporters::export_markdown(&state.pool).await.map_err(err)
+}
+
+#[tauri::command]
+async fn import_csv(state: State<'_, AppState>, kind: String, text: String) -> CmdResult<usize> {
+    let kind = repo::importers::ImportKind::parse(&kind)
+        .ok_or_else(|| format!("unknown import kind: {kind}"))?;
+    let rows = repo::importers::parse_csv(kind, &text);
+    repo::importers::import_tasks(&state.pool, &state.bus, rows).await.map_err(err)
+}
+
+#[tauri::command]
+async fn create_backup(state: State<'_, AppState>) -> CmdResult<repo::backup::BackupInfo> {
+    repo::backup::backup_now(&state.pool, &state.bus, &state.backups_dir()).await.map_err(err)
+}
+
+#[tauri::command]
+async fn list_backups(state: State<'_, AppState>) -> CmdResult<Vec<repo::backup::BackupInfo>> {
+    repo::backup::list_backups(&state.backups_dir()).map_err(err)
+}
+
+#[tauri::command]
+async fn restore_backup(state: State<'_, AppState>, path: String) -> CmdResult<()> {
+    // Stage the snapshot; it is swapped in on the next launch (before the pool opens).
+    let staged = state.data_dir.join(repo::backup::PENDING_RESTORE);
+    repo::backup::stage_restore(std::path::Path::new(&path), &staged).map_err(err)
+}
+
+#[tauri::command]
+async fn delete_backup(path: String) -> CmdResult<()> {
+    repo::backup::delete_backup(std::path::Path::new(&path)).map_err(err)
+}
+
+#[tauri::command]
+async fn backup_config(state: State<'_, AppState>) -> CmdResult<repo::backup::BackupConfig> {
+    repo::backup::config(&state.pool).await.map_err(err)
+}
+
+#[tauri::command]
+async fn set_backup_config(
+    state: State<'_, AppState>,
+    auto_enabled: bool,
+    keep: i64,
+) -> CmdResult<repo::backup::BackupConfig> {
+    repo::backup::set_config(&state.pool, &state.bus, auto_enabled, keep).await.map_err(err)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -1053,6 +1122,14 @@ pub fn run() {
             let data_dir = app.path().app_data_dir()?;
             std::fs::create_dir_all(&data_dir)?;
             let db_path = data_dir.join("toodoo.db");
+
+            // Apply a staged restore before opening the pool, so we never swap
+            // the database out from under a live connection.
+            match repo::backup::apply_pending_restore(&data_dir) {
+                Ok(true) => eprintln!("restored database from a staged backup"),
+                Ok(false) => {}
+                Err(e) => eprintln!("pending restore failed: {e}"),
+            }
 
             let pool = tauri::async_runtime::block_on(repo::db::connect(&db_path))?;
             let bus = EventBus::new();
@@ -1173,6 +1250,40 @@ pub fn run() {
                 }
             });
 
+            // Daily auto-backup: every hour, if enabled and no backup exists for
+            // today's local date, snapshot into `backups/` and prune to `keep`.
+            let bk_pool = pool.clone();
+            let bk_bus = bus.clone();
+            let bk_dir = data_dir.join("backups");
+            tauri::async_runtime::spawn(async move {
+                let mut tick = tokio::time::interval(std::time::Duration::from_secs(3600));
+                loop {
+                    tick.tick().await;
+                    let cfg = match repo::backup::config(&bk_pool).await {
+                        Ok(c) => c,
+                        Err(e) => {
+                            eprintln!("backup config read failed: {e}");
+                            continue;
+                        }
+                    };
+                    if !cfg.auto_enabled {
+                        continue;
+                    }
+                    let today = chrono::Local::now().format("%Y-%m-%d").to_string();
+                    let done_today = repo::backup::last_backup_day(&bk_pool)
+                        .await
+                        .ok()
+                        .flatten()
+                        .is_some_and(|d| d == today);
+                    if done_today {
+                        continue;
+                    }
+                    if let Err(e) = repo::backup::backup_now(&bk_pool, &bk_bus, &bk_dir).await {
+                        eprintln!("auto-backup failed: {e}");
+                    }
+                }
+            });
+
             // Local REST API: load (or mint) the bearer token, and start the
             // server now if the user previously enabled it. Binds 127.0.0.1 only.
             let api_token = tauri::async_runtime::block_on(api::get_or_create_token(&pool, &bus))?;
@@ -1190,7 +1301,7 @@ pub fn run() {
                 }
             }
 
-            app.manage(AppState { pool, bus, api_token, api_server });
+            app.manage(AppState { pool, bus, data_dir, api_token, api_server });
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -1315,7 +1426,17 @@ pub fn run() {
             api_config,
             api_set_enabled,
             api_regenerate_token,
-            copy_task_link
+            copy_task_link,
+            export_json,
+            export_csv,
+            export_markdown,
+            import_csv,
+            create_backup,
+            list_backups,
+            restore_backup,
+            delete_backup,
+            backup_config,
+            set_backup_config
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

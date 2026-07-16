@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { evaluateRule, parseQuery, resolveQuery } from "../features/filters/lib/rule";
 import { completionPoints, levelFor } from "../features/stats/lib/score";
+import { parseCsv } from "../features/settings/lib/importers";
 import {
   completionRate as habitCompletionRate,
   isScheduled as habitIsScheduled,
@@ -296,6 +297,21 @@ export interface ApiConfig {
   enabled: boolean;
   port: number;
   token: string;
+}
+
+export type ImportKind = "ticktick" | "todoist" | "generic";
+
+export interface BackupInfo {
+  name: string;
+  path: string;
+  bytes: number;
+  createdAt: string;
+}
+
+export interface BackupConfig {
+  autoEnabled: boolean;
+  keep: number;
+  lastAt: string | null;
 }
 
 // ---- Habits -----------------------------------------------------------------
@@ -620,6 +636,17 @@ export interface Api {
   apiRegenerateToken(): Promise<string>;
   copyTaskLink(id: string): Promise<string>;
 
+  exportJson(): Promise<string>;
+  exportCsv(): Promise<string>;
+  exportMarkdown(): Promise<string>;
+  importCsv(kind: ImportKind, text: string): Promise<number>;
+  createBackup(): Promise<BackupInfo>;
+  listBackups(): Promise<BackupInfo[]>;
+  restoreBackup(path: string): Promise<void>;
+  deleteBackup(path: string): Promise<void>;
+  backupConfig(): Promise<BackupConfig>;
+  setBackupConfig(autoEnabled: boolean, keep: number): Promise<BackupConfig>;
+
   listHabits(includeArchived: boolean): Promise<Habit[]>;
   getHabit(id: string): Promise<Habit>;
   createHabit(input: HabitInput): Promise<Habit>;
@@ -833,6 +860,18 @@ const tauriApi: Api = {
   apiRegenerateToken: () => invoke("api_regenerate_token"),
   copyTaskLink: (id) => invoke("copy_task_link", { id }),
 
+  exportJson: () => invoke("export_json"),
+  exportCsv: () => invoke("export_csv"),
+  exportMarkdown: () => invoke("export_markdown"),
+  importCsv: (kind, text) => invoke("import_csv", { kind, text }),
+  createBackup: () => invoke("create_backup"),
+  listBackups: () => invoke("list_backups"),
+  restoreBackup: (path) => invoke("restore_backup", { path }),
+  deleteBackup: (path) => invoke("delete_backup", { path }),
+  backupConfig: () => invoke("backup_config"),
+  setBackupConfig: (autoEnabled, keep) =>
+    invoke("set_backup_config", { autoEnabled, keep }),
+
   listHabits: (includeArchived) => invoke("list_habits", { includeArchived }),
   getHabit: (id) => invoke("get_habit", { id }),
   createHabit: (input) => invoke("create_habit", { input }),
@@ -927,6 +966,9 @@ function browserStubApi(): Api {
   const achievements: { date: string; delta: number; reason: string }[] = [];
   const taskCompletions: { taskId: string; occurrenceAt: string | null; completedAt: string }[] = [];
   const apiCfg: ApiConfig = { enabled: false, port: 7420, token: "stub-token-000000000000" };
+  // Backups can't run server-side in the browser; the stub keeps an in-memory list.
+  const backups: BackupInfo[] = [];
+  const backupCfg: BackupConfig = { autoEnabled: true, keep: 10, lastAt: null };
   const nowIso = () => new Date().toISOString();
   const uid = () => crypto.randomUUID();
 
@@ -1935,6 +1977,88 @@ function browserStubApi(): Api {
       return apiCfg.token;
     },
     copyTaskLink: async (id) => `toodoo://task/${id}`,
+
+    // Exports build strings from the in-memory store, mirroring the Rust exporters.
+    exportJson: async () =>
+      JSON.stringify({ app: "toodoo", version: 1, projects, tasks, tags }, null, 2),
+    exportCsv: async () => {
+      const q = (s: string) => (/[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s);
+      const nameOf = (id: string) => projects.find((p) => p.id === id)?.name ?? "";
+      const header = ["List Name", "Title", "Content", "Priority", "Status", "Due Date", "Start Date", "Tags"];
+      const rows = tasks
+        .filter((t) => t.status !== "TRASHED")
+        .map((t) =>
+          [
+            nameOf(t.projectId),
+            t.title,
+            t.contentPlain ?? "",
+            String(t.priority),
+            t.status === "COMPLETED" ? "Completed" : "Normal",
+            t.dueAt ?? "",
+            t.startAt ?? "",
+            (t.tagIds ?? []).join(","),
+          ]
+            .map(q)
+            .join(","),
+        );
+      return [header.join(","), ...rows].join("\n") + "\n";
+    },
+    exportMarkdown: async () => {
+      let out = "# Toodoo export\n";
+      for (const p of projects) {
+        const items = tasks.filter((t) => t.projectId === p.id && t.status !== "TRASHED");
+        out += `\n## ${p.name}\n\n`;
+        if (items.length === 0) out += "_(empty)_\n";
+        for (const t of items) out += `- [${t.status === "COMPLETED" ? "x" : " "}] ${t.title}\n`;
+      }
+      return out;
+    },
+    importCsv: async (kind, text) => {
+      const rows = parseCsv(kind, text);
+      for (const row of rows) {
+        const name = row.list.trim();
+        let projectId = INBOX_ID;
+        if (name && name.toLowerCase() !== "inbox") {
+          const existing = projects.find((p) => p.name.toLowerCase() === name.toLowerCase());
+          projectId = existing ? existing.id : (await self.createProject({ name })).id;
+        }
+        const created = await self.createTask({
+          projectId,
+          title: row.title,
+          priority: (row.priority ?? undefined) as Priority | undefined,
+          dueAt: row.dueAt ?? undefined,
+          startAt: row.startAt ?? undefined,
+        });
+        if (row.content) await self.updateTask(created.id, { contentPlain: row.content });
+        if (row.completed) await self.completeTask(created.id);
+      }
+      return rows.length;
+    },
+    createBackup: async () => {
+      const info: BackupInfo = {
+        name: `toodoo-${new Date().toISOString().replace(/[:.]/g, "")}.db`,
+        path: `backups/stub-${backups.length + 1}.db`,
+        bytes: 4096,
+        createdAt: new Date().toISOString(),
+      };
+      backups.unshift(info);
+      backupCfg.lastAt = info.createdAt;
+      return info;
+    },
+    listBackups: async () => backups.map((b) => ({ ...b })),
+    restoreBackup: async () => {
+      /* staged for next launch — no-op in the browser */
+    },
+    deleteBackup: async (path) => {
+      const i = backups.findIndex((b) => b.path === path);
+      if (i >= 0) backups.splice(i, 1);
+    },
+    backupConfig: async () => ({ ...backupCfg }),
+    setBackupConfig: async (autoEnabled, keep) => {
+      backupCfg.autoEnabled = autoEnabled;
+      backupCfg.keep = Math.max(1, keep);
+      return { ...backupCfg };
+    },
 
     listHabits: async (includeArchived) =>
       clone(

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Dialog } from "radix-ui";
 import { ApiSettings } from "./ApiSettings";
+import { DataSettings } from "./DataSettings";
 
 /** Gear button in the sidebar header that opens the Settings modal. */
 export function SettingsDialog() {
@@ -26,10 +27,20 @@ export function SettingsDialog() {
           className="fixed left-1/2 top-1/2 z-50 w-[32rem] max-w-[90vw] -translate-x-1/2 -translate-y-1/2 rounded-lg border border-border bg-surface p-5 shadow-xl"
         >
           <Dialog.Title className="mb-4 text-base font-semibold">Settings</Dialog.Title>
-          <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-text-muted">
-            API &amp; Integrations
-          </h3>
-          <ApiSettings />
+          <div className="max-h-[70vh] space-y-6 overflow-y-auto pr-1">
+            <section>
+              <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-text-muted">
+                Data &amp; Backups
+              </h3>
+              <DataSettings />
+            </section>
+            <section>
+              <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-text-muted">
+                API &amp; Integrations
+              </h3>
+              <ApiSettings />
+            </section>
+          </div>
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>

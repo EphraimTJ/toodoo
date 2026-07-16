@@ -3,17 +3,20 @@
 //! appends to `changelog` and emits a `DomainEvent` on the bus.
 
 pub mod activity;
+pub mod backup;
 pub mod cal_subscriptions;
 pub mod calendar;
 pub mod check_items;
 pub mod countdowns;
 pub mod db;
+pub mod exporters;
 pub mod filter_rule;
 pub mod filters;
 pub mod focus;
 pub mod folders;
 pub mod habits;
 pub mod ics;
+pub mod importers;
 pub mod matrix;
 pub mod projects;
 pub mod query;

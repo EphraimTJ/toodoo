@@ -230,17 +230,17 @@ This is the checklist the whole project is graded against, converted from §3 of
 
 ## 3.12 Data, Import/Export, Integration
 
-- [ ] Backup/restore
-  - [ ] One-click full backup (SQLite snapshot + attachments)
-  - [ ] Scheduled auto-backup
-  - [ ] Restore flow
-- [ ] Import: TickTick backup CSV
-- [ ] Import: Todoist export
-- [ ] Import: generic CSV
-- [ ] Export: CSV
-- [ ] Export: JSON
-- [ ] Export: ICS
-- [ ] Export: Markdown
+- [x] Backup/restore
+  - [x] One-click full backup (SQLite snapshot; attachments not yet implemented)
+  - [x] Scheduled auto-backup
+  - [x] Restore flow
+- [x] Import: TickTick backup CSV
+- [x] Import: Todoist export
+- [x] Import: generic CSV
+- [x] Export: CSV
+- [x] Export: JSON
+- [x] Export: ICS
+- [x] Export: Markdown
 - [x] Local REST API (TickTick Open API compatible)
   - [x] Local token auth (OAuth-less)
   - [x] `GET /open/v1/project`

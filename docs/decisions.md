@@ -5,6 +5,40 @@ ambiguity we resolved by judgment call), with the reasoning. Newest entries at
 the top. Never rewrite history — if a decision is reversed, add a new entry
 that supersedes the old one.
 
+## 2026-07-16 — Data Safety & Import/Export (user-approved)
+
+**Backups are the DB file only** (no zip). Attachments (§3.1) aren't implemented,
+so a "full backup" is the single SQLite file. Snapshots use **`VACUUM INTO`** —
+which yields a clean, consistent copy even though the DB runs in **WAL** mode (a
+plain file copy could miss `-wal` contents). `VACUUM INTO` also silently no-ops on
+an in-memory source, so the backup unit test uses an on-disk source DB.
+
+**Restore is staged and applied on next launch.** `restore_backup` copies the
+chosen snapshot to `app_data_dir/pending-restore.db`; on startup, **before the
+pool opens**, `apply_pending_restore` swaps it onto `toodoo.db` (clearing stale
+`-wal`/`-shm`). This avoids reconnecting a live pool mid-session. The UI tells the
+user to relaunch.
+
+**Auto-backup is ON by default** — an hourly scheduler pass takes at most **one
+snapshot per local day** (deduped via `backup.lastAt`) and prunes to
+**`backup.keep` = 10**. Config lives in `settings` (no migration).
+
+**Imports append.** Each CSV row becomes a new task in the list named by its row
+(created if missing via `get_or_create_by_name`, case-insensitive; empty/"inbox"
+→ Inbox). No dedupe/merge. Tags are parsed but **not attached** on import (kept
+minimal; not required by the inventory).
+
+**Priority mapping:** TickTick 0/1/3/5 pass through (already our storage); Todoist
+CSV 4/3/2/1 → 5/3/1/0; generic accepts 0/1/3/5 or high/medium/low/none.
+
+**No Tauri fs/dialog plugin.** Exports move through the existing **Blob-download**
+path (`src/lib/download.ts`) and imports through a `<input type="file">`, both of
+which work in the Tauri webview *and* the vite-dev browser — so the exporters,
+importers, and the Playwright happy-path run against the browser stub. Backups
+(server-side snapshots) are **desktop-only**; the stub keeps an in-memory list so
+the Data panel still renders. New dep: **`csv`**. `importers.ts` mirrors the Rust
+parsers and is pinned to the same tests.
+
 ## 2026-07-16 — Local API, URL Scheme, MCP (user-approved)
 
 **MCP deferred.** The build plan marks MCP "optional"; it ships later as a thin
