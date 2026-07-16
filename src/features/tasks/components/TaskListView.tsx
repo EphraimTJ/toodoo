@@ -21,6 +21,7 @@ const SMART_TITLES: Record<SmartView, string> = {
   next7Days: "Next 7 Days",
   all: "All",
   completed: "Completed",
+  wontDo: "Won't Do",
   trash: "Trash",
 };
 
@@ -51,7 +52,8 @@ export function TaskListView({ view }: { view: ViewSelection }) {
 
   const isTrash = view.kind === "smart" && view.view === "trash";
   const isCompletedView = view.kind === "smart" && view.view === "completed";
-  const flatView = isTrash || isCompletedView;
+  const isWontDo = view.kind === "smart" && view.view === "wontDo";
+  const flatView = isTrash || isCompletedView || isWontDo;
 
   const groupChoices: [GroupMode, string][] =
     view.kind !== "project"
@@ -263,6 +265,16 @@ export function TaskListView({ view }: { view: ViewSelection }) {
                     </DropdownMenu.Item>
                   ))}
                   <DropdownMenu.Separator className="my-1 h-px bg-border" />
+                  {(["compact", "default", "detailed"] as const).map((d) => (
+                    <DropdownMenu.Item
+                      key={d}
+                      className={menuItem}
+                      onSelect={() => setOptions({ density: d })}
+                    >
+                      <span className="capitalize">{d}</span> density {options.density === d && "✓"}
+                    </DropdownMenu.Item>
+                  ))}
+                  <DropdownMenu.Separator className="my-1 h-px bg-border" />
                   <DropdownMenu.Item
                     className={menuItem}
                     onSelect={() => setOptions({ showCompleted: !options.showCompleted })}
@@ -278,11 +290,23 @@ export function TaskListView({ view }: { view: ViewSelection }) {
 
       {!flatView && <TaskAddBar />}
 
-      <DndContext sensors={sensors} onDragEnd={onDragEnd}>
-        <SortableContext items={activeIds} strategy={verticalListSortingStrategy}>
-          {list}
-        </SortableContext>
-      </DndContext>
+      <div
+        data-testid="task-list"
+        data-density={options.density}
+        className={
+          options.density === "compact"
+            ? "[&_[data-testid=task-row]]:py-0.5"
+            : options.density === "detailed"
+              ? "[&_[data-testid=task-row]]:py-2.5"
+              : ""
+        }
+      >
+        <DndContext sensors={sensors} onDragEnd={onDragEnd}>
+          <SortableContext items={activeIds} strategy={verticalListSortingStrategy}>
+            {list}
+          </SortableContext>
+        </DndContext>
+      </div>
 
       <BatchToolbar />
     </div>

@@ -7,6 +7,7 @@ pub mod backup;
 pub mod cal_subscriptions;
 pub mod calendar;
 pub mod check_items;
+pub mod comments;
 pub mod countdowns;
 pub mod db;
 pub mod exporters;

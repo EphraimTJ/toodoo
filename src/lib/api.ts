@@ -16,7 +16,22 @@ export type JsonValue = string | number | boolean | null | JsonValue[] | { [k: s
 
 export type TaskStatus = "ACTIVE" | "COMPLETED" | "WONT_DO" | "TRASHED";
 export type Priority = 0 | 1 | 3 | 5;
-export type SmartView = "today" | "tomorrow" | "next7Days" | "all" | "completed" | "trash";
+export type SmartView =
+  | "today"
+  | "tomorrow"
+  | "next7Days"
+  | "all"
+  | "completed"
+  | "wontDo"
+  | "trash";
+
+export interface Comment {
+  id: string;
+  taskId: string;
+  body: string;
+  createdAt: string;
+  updatedAt: string;
+}
 
 export interface Project {
   id: string;
@@ -532,6 +547,14 @@ export interface Api {
   updateTask(id: string, patch: TaskPatch): Promise<Task>;
   completeTask(id: string): Promise<string[]>;
   reopenTask(id: string): Promise<void>;
+  setWontDo(id: string): Promise<string[]>;
+  duplicateTask(id: string): Promise<Task>;
+  checkItemToSubtask(itemId: string): Promise<Task>;
+  subtaskToCheckItem(taskId: string): Promise<CheckItem>;
+  saveTaskAsTemplate(taskId: string, name: string): Promise<TaskTemplate>;
+  listComments(taskId: string): Promise<Comment[]>;
+  addComment(taskId: string, body: string): Promise<Comment>;
+  deleteComment(id: string): Promise<void>;
   trashTask(id: string): Promise<string[]>;
   restoreTask(id: string): Promise<Task>;
   deleteTaskForever(id: string): Promise<void>;
@@ -558,6 +581,8 @@ export interface Api {
   createTag(name: string, color?: string): Promise<Tag>;
   updateTag(id: string, patch: { name?: string; color?: string | null }): Promise<void>;
   deleteTag(id: string): Promise<void>;
+  mergeTags(src: string, dst: string): Promise<void>;
+  setTagParent(id: string, parentId: string | null): Promise<void>;
   assignTag(taskId: string, tagId: string): Promise<void>;
   unassignTag(taskId: string, tagId: string): Promise<void>;
 
@@ -748,6 +773,14 @@ const tauriApi: Api = {
   updateTask: (id, patch) => invoke("update_task", { id, patch }),
   completeTask: (id) => invoke("complete_task", { id, tzOffsetMin: localDateParams().tzOffsetMin }),
   reopenTask: (id) => invoke("reopen_task", { id }),
+  setWontDo: (id) => invoke("set_wont_do", { id, tzOffsetMin: localDateParams().tzOffsetMin }),
+  duplicateTask: (id) => invoke("duplicate_task", { id }),
+  checkItemToSubtask: (itemId) => invoke("check_item_to_subtask", { itemId }),
+  subtaskToCheckItem: (taskId) => invoke("subtask_to_check_item", { taskId }),
+  saveTaskAsTemplate: (taskId, name) => invoke("save_task_as_template", { taskId, name }),
+  listComments: (taskId) => invoke("list_comments", { taskId }),
+  addComment: (taskId, body) => invoke("add_comment", { taskId, body }),
+  deleteComment: (id) => invoke("delete_comment", { id }),
   trashTask: (id) => invoke("trash_task", { id }),
   restoreTask: (id) => invoke("restore_task", { id }),
   deleteTaskForever: (id) => invoke("delete_task_forever", { id }),
@@ -775,6 +808,8 @@ const tauriApi: Api = {
   createTag: (name, color) => invoke("create_tag", { name, color }),
   updateTag: (id, patch) => invoke("update_tag", { id, ...patch }),
   deleteTag: (id) => invoke("delete_tag", { id }),
+  mergeTags: (src, dst) => invoke("merge_tags", { src, dst }),
+  setTagParent: (id, parentId) => invoke("set_tag_parent", { id, parentId }),
   assignTag: (taskId, tagId) => invoke("assign_tag", { taskId, tagId }),
   unassignTag: (taskId, tagId) => invoke("unassign_tag", { taskId, tagId }),
 
@@ -978,6 +1013,7 @@ function browserStubApi(): Api {
   const tags: Tag[] = [];
   const reminders: Reminder[] = [];
   const activity: ActivityEntry[] = [];
+  const comments: Comment[] = [];
   const templates: TaskTemplate[] = [];
   const sections: Section[] = [];
   const filters: Filter[] = [];
@@ -1315,6 +1351,112 @@ function browserStubApi(): Api {
       t.status = "ACTIVE";
       t.completedAt = null;
     },
+    setWontDo: async (id) => {
+      const top = findTask(id);
+      const anchor = top.dueAt ?? top.startAt;
+      // Recurring: advance in place (a skipped occurrence), like completion.
+      if (top.status === "ACTIVE" && top.rrule && top.rrule.trim() && anchor) {
+        const next = advanceIso(anchor, top.rrule);
+        if (next) {
+          const newAnchor = top.isAllDay ? next.slice(0, 10) + "T00:00:00.000Z" : next;
+          const gap =
+            top.startAt && top.dueAt
+              ? new Date(top.dueAt).getTime() - new Date(top.startAt).getTime()
+              : 0;
+          if (top.dueAt) {
+            top.dueAt = newAnchor;
+            if (top.startAt)
+              top.startAt = new Date(new Date(newAnchor).getTime() - gap).toISOString();
+          } else if (top.startAt) {
+            top.startAt = newAnchor;
+          }
+          top.updatedAt = nowIso();
+          logActivity(top.id, "recurrence_advanced");
+          return [];
+        }
+      }
+      top.status = "WONT_DO";
+      top.updatedAt = nowIso();
+      logActivity(top.id, "wont_do");
+      return [top.id];
+    },
+    duplicateTask: async (id) => {
+      const subtree = [findTask(id), ...descendants(id)];
+      const idMap = new Map<string, string>();
+      const rootParent = findTask(id).parentId;
+      subtree.forEach((t, i) => {
+        const newId = uid();
+        idMap.set(t.id, newId);
+        const parentId = i === 0 ? rootParent : (t.parentId ? (idMap.get(t.parentId) ?? null) : null);
+        tasks.push({
+          ...clone(t),
+          id: newId,
+          parentId: parentId ?? null,
+          title: i === 0 ? `${t.title} (copy)` : t.title,
+          status: "ACTIVE",
+          completedAt: null,
+          pinned: false,
+          sortOrder: (t.sortOrder ?? 0) + 1,
+          createdAt: nowIso(),
+          updatedAt: nowIso(),
+          tagIds: [...(t.tagIds ?? [])],
+        });
+        for (const ci of checkItems.filter((c) => c.taskId === t.id))
+          checkItems.push({ ...clone(ci), id: uid(), taskId: newId });
+        for (const r of reminders.filter((x) => x.taskId === t.id))
+          reminders.push({ ...clone(r), id: uid(), taskId: newId });
+      });
+      logActivity(idMap.get(id)!, "created");
+      return clone(findTask(idMap.get(id)!));
+    },
+    checkItemToSubtask: async (itemId) => {
+      const idx = checkItems.findIndex((c) => c.id === itemId);
+      if (idx < 0) throw new Error(`not found: check item ${itemId}`);
+      const ci = checkItems[idx];
+      const sub = await self.createTask({ projectId: findTask(ci.taskId).projectId, parentId: ci.taskId, title: ci.title });
+      if (ci.done) findTask(sub.id).status = "COMPLETED";
+      checkItems.splice(idx, 1);
+      return clone(findTask(sub.id));
+    },
+    subtaskToCheckItem: async (taskId) => {
+      const t = findTask(taskId);
+      if (!t.parentId) throw new Error("only a subtask can become a check item");
+      const item = await self.addCheckItem(t.parentId, t.title);
+      const created = checkItems.find((c) => c.id === item.id)!;
+      if (t.status === "COMPLETED") created.done = true;
+      for (const x of [t, ...descendants(taskId)]) x.status = "TRASHED";
+      return clone(created);
+    },
+    saveTaskAsTemplate: async (taskId, name) => {
+      const t = findTask(taskId);
+      const items = checkItems.filter((c) => c.taskId === taskId).map((c) => c.title);
+      return self.createTemplate(name, {
+        title: t.title,
+        contentRich: t.contentRich ?? undefined,
+        contentPlain: t.contentPlain ?? undefined,
+        priority: t.priority as Priority,
+        isAllDay: t.isAllDay,
+        durationMin: t.durationMin ?? undefined,
+        timeZone: t.timeZone ?? undefined,
+        rrule: t.rrule ?? undefined,
+        repeatFrom: (t.repeatFrom ?? undefined) as RepeatFrom | undefined,
+        checkItems: items,
+        reminders: [],
+      });
+    },
+    listComments: async (taskId) =>
+      clone(comments.filter((c) => c.taskId === taskId).sort((a, b) => a.createdAt.localeCompare(b.createdAt))),
+    addComment: async (taskId, body) => {
+      const b = body.trim();
+      if (!b) throw new Error("comment cannot be empty");
+      const c: Comment = { id: uid(), taskId, body: b, createdAt: nowIso(), updatedAt: nowIso() };
+      comments.push(c);
+      return clone(c);
+    },
+    deleteComment: async (id) => {
+      const i = comments.findIndex((c) => c.id === id);
+      if (i >= 0) comments.splice(i, 1);
+    },
     trashTask: async (id) => {
       const targets = [findTask(id), ...descendants(id)].filter(liveTask);
       for (const t of targets) t.status = "TRASHED";
@@ -1374,6 +1516,8 @@ function browserStubApi(): Api {
               .filter((t) => t.status === "COMPLETED")
               .sort((a, b) => (b.completedAt ?? "").localeCompare(a.completedAt ?? "")),
           );
+        case "wontDo":
+          return clone(notNote.filter((t) => t.status === "WONT_DO"));
         case "trash":
           return clone(notNote.filter((t) => t.status === "TRASHED"));
       }
@@ -1496,6 +1640,29 @@ function browserStubApi(): Api {
       if (i < 0) throw new Error(`not found: tag ${id}`);
       tags.splice(i, 1);
       for (const t of tasks) t.tagIds = t.tagIds.filter((x) => x !== id);
+      // Re-parent children to root.
+      for (const tag of tags) if (tag.parentId === id) tag.parentId = null;
+    },
+    mergeTags: async (src, dst) => {
+      for (const t of tasks) {
+        if (t.tagIds.includes(src)) t.tagIds = Array.from(new Set(t.tagIds.map((x) => (x === src ? dst : x))));
+      }
+      for (const tag of tags) if (tag.parentId === src) tag.parentId = dst;
+      const i = tags.findIndex((t) => t.id === src);
+      if (i >= 0) tags.splice(i, 1);
+    },
+    setTagParent: async (id, parentId) => {
+      if (parentId) {
+        if (parentId === id) throw new Error("a tag cannot be its own parent");
+        let cur: string | null | undefined = parentId;
+        while (cur) {
+          if (cur === id) throw new Error("that move would create a tag cycle");
+          cur = tags.find((t) => t.id === cur)?.parentId ?? null;
+        }
+      }
+      const tag = tags.find((t) => t.id === id);
+      if (!tag) throw new Error(`not found: tag ${id}`);
+      tag.parentId = parentId;
     },
     assignTag: async (taskId, tagId) => {
       const t = findTask(taskId);

@@ -5,6 +5,49 @@ ambiguity we resolved by judgment call), with the reasoning. Newest entries at
 the top. Never rewrite history — if a decision is reversed, add a new entry
 that supersedes the old one.
 
+## 2026-07-16 — Task & Organization completeness (Phase 12B, user-approved)
+
+Closes the §3.1/§3.2/§3.3 long tail — almost entirely UI over the existing
+migration-0001 schema (`is_all_day`, `duration_min`, `status='WONT_DO'`, the
+`comments`/`attachments` tables, `tags.parent_id`, `templates`). **No migration.**
+
+**Attachments deferred** to a dedicated slice (native fs/thumbnails/open-with-OS,
+not CI-testable). Consequently the 2026-07-16 "**backups = DB file only**"
+decision **remains in force** — it is superseded only when attachments ship, not
+here. No `manual-test-checklist.md` this slice (nothing native shipped).
+
+**Task ↔ check-item conversion is lossy downward.** check-item → subtask always
+(carries title + done). subtask → check-item drops the subtask's children (its
+subtree is trashed), tags, priority, dates, and notes — a check item holds only
+title + done. The UI shows a confirm dialog when there is anything to lose.
+
+**Won't-Do on a recurring occurrence advances in place** (records a `WONT_DO`
+`task_completions` row and rolls to the next occurrence, no points awarded),
+mirroring the completion decision (2026-07-15). Non-recurring Won't-Do sets
+`status='WONT_DO'` on the single task (no cascade) + a ledger row; `reopen_task`
+already returns WONT_DO → ACTIVE. Won't-Do tasks render in a flat status view
+(like Completed/Trash), not the active list.
+
+**Duplication** deep-copies structure + check items + tag assignments + reminders;
+it does **not** copy activity, completions, or pin, and the root title gains
+" (copy)".
+
+**Tag merge** re-points `task_tags` from source→target (dropping duplicates),
+re-parents the source's children under the target, then soft-deletes the source.
+**Delete** re-parents children to the root (mirrors the task-deletion decision).
+`set_tag_parent` rejects self-parenting and cycles.
+
+**Templates** are captured from a task via `save_task_as_template` (core fields +
+check-item titles; reminders not snapshotted in v1); repo CRUD already existed.
+
+**Custom RRULEs**: the picker now exposes **monthly-by-weekday** (`BYDAY=-1FR`
+etc.), yearly, and interval — the engine already accepted them; the round-trip is
+covered by the `rrule.ts` table test.
+
+**Settings-backed, no schema:** smart-list **visibility/order**
+(`smartlists.config`) and per-view **detail density** (`viewopts:<view>.density`)
+live in `settings`. A **Won't Do** smart list was added.
+
 ## 2026-07-16 — Search (Phase 12A, user-approved)
 
 **Dedicated Search view**, not a two-mode ⌘K palette. The palette stays the

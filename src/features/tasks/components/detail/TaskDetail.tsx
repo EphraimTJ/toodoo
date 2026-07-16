@@ -7,6 +7,7 @@ import { useTags, useTagMutations } from "../../../tags/hooks/useTags";
 import { useTaskMutations } from "../../hooks/useTasks";
 import { TaskFocusInfo } from "../../../focus/components/TaskFocusInfo";
 import { ActivityLog } from "./ActivityLog";
+import { Comments } from "./Comments";
 import { DatePicker } from "./DatePicker";
 import { DescriptionEditor } from "./DescriptionEditor";
 import { Reminders } from "./Reminders";
@@ -20,11 +21,17 @@ const PRIORITIES: [Priority, string, string][] = [
 ];
 
 function CheckItems({ task }: { task: Task }) {
+  const queryClient = useQueryClient();
   const { data: items } = useQuery({
     queryKey: ["checkItems", task.id],
     queryFn: () => api.listCheckItems(task.id),
   });
   const [draft, setDraft] = useState("");
+  const promote = async (itemId: string) => {
+    await api.checkItemToSubtask(itemId);
+    void queryClient.invalidateQueries({ queryKey: ["checkItems", task.id] });
+    void queryClient.invalidateQueries({ queryKey: ["tasks"] });
+  };
   const add = async () => {
     const title = draft.trim();
     if (!title) return;
@@ -48,8 +55,17 @@ function CheckItems({ task }: { task: Task }) {
             <span className={item.done ? "text-text-muted line-through" : ""}>{item.title}</span>
             <button
               type="button"
+              aria-label={`Convert ${item.title} to subtask`}
+              title="Promote to subtask"
+              className="ml-auto text-xs text-text-muted opacity-0 hover:text-accent group-hover:opacity-100"
+              onClick={() => void promote(item.id)}
+            >
+              ↥
+            </button>
+            <button
+              type="button"
               aria-label={`Delete ${item.title}`}
-              className="ml-auto text-xs text-text-muted opacity-0 hover:text-red-500 group-hover:opacity-100"
+              className="text-xs text-text-muted opacity-0 hover:text-red-500 group-hover:opacity-100"
               onClick={() => void api.deleteCheckItem(item.id)}
             >
               ✕
@@ -288,6 +304,36 @@ export function TaskDetail() {
           value={task.dueAt}
           onChange={(dueAt) => updateTask.mutate({ id: task.id, patch: { dueAt } })}
         />
+        <label className="flex items-center gap-1 text-xs text-text-muted" title="All-day vs. timed">
+          <input
+            type="checkbox"
+            aria-label="All day"
+            checked={task.isAllDay}
+            onChange={(e) => updateTask.mutate({ id: task.id, patch: { isAllDay: e.target.checked } })}
+            className="h-3.5 w-3.5 accent-(--color-accent)"
+          />
+          All day
+        </label>
+        {!task.isAllDay && (
+          <label className="flex items-center gap-1 text-xs text-text-muted" title="Duration in minutes">
+            <input
+              type="number"
+              min={0}
+              step={5}
+              aria-label="Duration minutes"
+              value={task.durationMin ?? ""}
+              placeholder="dur"
+              onChange={(e) =>
+                updateTask.mutate({
+                  id: task.id,
+                  patch: { durationMin: e.target.value === "" ? null : Math.max(0, Number(e.target.value)) },
+                })
+              }
+              className="w-14 rounded border border-border bg-bg px-1 py-0.5 outline-none focus:border-accent"
+            />
+            min
+          </label>
+        )}
         <RepeatPicker task={task} />
         <button
           type="button"
@@ -349,6 +395,7 @@ export function TaskDetail() {
       <CheckItems task={task} />
       <Subtasks task={task} />
       <TaskFocusInfo task={task} />
+      <Comments task={task} />
       <ActivityLog task={task} />
 
       <div className="mt-auto flex items-center gap-2 pt-4">
@@ -378,7 +425,68 @@ export function TaskDetail() {
         >
           🔗 Copy link
         </button>
+        <button
+          type="button"
+          className="rounded-md border border-border px-2 py-1 text-xs text-text-muted hover:text-accent"
+          onClick={() =>
+            void api.duplicateTask(task.id).then(() => {
+              void queryClient.invalidateQueries({ queryKey: ["tasks"] });
+            })
+          }
+        >
+          ⧉ Duplicate
+        </button>
+        <button
+          type="button"
+          className="rounded-md border border-border px-2 py-1 text-xs text-text-muted hover:text-accent"
+          onClick={() => {
+            const name = window.prompt("Template name", task.title);
+            if (name?.trim())
+              void api.saveTaskAsTemplate(task.id, name.trim()).then(() => {
+                void queryClient.invalidateQueries({ queryKey: ["templates"] });
+              });
+          }}
+        >
+          ⧉ Save as template
+        </button>
+        {task.parentId && (
+          <button
+            type="button"
+            className="rounded-md border border-border px-2 py-1 text-xs text-text-muted hover:text-accent"
+            onClick={() => {
+              const lossy =
+                (task.tagIds?.length ?? 0) > 0 ||
+                task.priority !== 0 ||
+                task.dueAt !== null ||
+                task.startAt !== null;
+              if (lossy && !window.confirm("Converting to a check item drops its tags, priority, dates, and any subtasks. Continue?"))
+                return;
+              void api.subtaskToCheckItem(task.id).then(() => {
+                selectTask(null);
+                void queryClient.invalidateQueries({ queryKey: ["tasks"] });
+                void queryClient.invalidateQueries({ queryKey: ["checkItems"] });
+              });
+            }}
+          >
+            ✓ To check item
+          </button>
+        )}
         <div className="ml-auto flex gap-2">
+          {!done && !trashed && (
+            <button
+              type="button"
+              aria-label="Mark won't do"
+              className="rounded-md border border-border px-2 py-1 text-xs text-text-muted hover:text-text"
+              onClick={() =>
+                void api.setWontDo(task.id).then(() => {
+                  void queryClient.invalidateQueries({ queryKey: ["tasks"] });
+                  void queryClient.invalidateQueries({ queryKey: ["smartCounts"] });
+                })
+              }
+            >
+              Won't do
+            </button>
+          )}
           {trashed ? (
             <button
               type="button"

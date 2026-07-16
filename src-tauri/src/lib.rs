@@ -143,6 +143,52 @@ async fn reopen_task(state: State<'_, AppState>, id: String) -> CmdResult<()> {
 }
 
 #[tauri::command]
+async fn set_wont_do(state: State<'_, AppState>, id: String, tz_offset_min: i32) -> CmdResult<Vec<String>> {
+    repo::tasks::set_wont_do(&state.pool, &state.bus, &id, tz_offset_min).await.map_err(err)
+}
+
+#[tauri::command]
+async fn duplicate_task(state: State<'_, AppState>, id: String) -> CmdResult<Task> {
+    repo::tasks::duplicate_task(&state.pool, &state.bus, &id).await.map_err(err)
+}
+
+#[tauri::command]
+async fn check_item_to_subtask(state: State<'_, AppState>, item_id: String) -> CmdResult<Task> {
+    repo::tasks::check_item_to_subtask(&state.pool, &state.bus, &item_id).await.map_err(err)
+}
+
+#[tauri::command]
+async fn subtask_to_check_item(state: State<'_, AppState>, task_id: String) -> CmdResult<CheckItem> {
+    repo::tasks::subtask_to_check_item(&state.pool, &state.bus, &task_id).await.map_err(err)
+}
+
+#[tauri::command]
+async fn save_task_as_template(
+    state: State<'_, AppState>,
+    task_id: String,
+    name: String,
+) -> CmdResult<TaskTemplate> {
+    repo::templates::save_task_as_template(&state.pool, &state.bus, &task_id, &name).await.map_err(err)
+}
+
+// ---- comments ------------------------------------------------------------------
+
+#[tauri::command]
+async fn list_comments(state: State<'_, AppState>, task_id: String) -> CmdResult<Vec<repo::comments::Comment>> {
+    repo::comments::list_comments(&state.pool, &task_id).await.map_err(err)
+}
+
+#[tauri::command]
+async fn add_comment(state: State<'_, AppState>, task_id: String, body: String) -> CmdResult<repo::comments::Comment> {
+    repo::comments::add_comment(&state.pool, &state.bus, &task_id, &body).await.map_err(err)
+}
+
+#[tauri::command]
+async fn delete_comment(state: State<'_, AppState>, id: String) -> CmdResult<()> {
+    repo::comments::delete_comment(&state.pool, &state.bus, &id).await.map_err(err)
+}
+
+#[tauri::command]
 async fn trash_task(state: State<'_, AppState>, id: String) -> CmdResult<Vec<String>> {
     repo::tasks::trash_task(&state.pool, &state.bus, &id).await.map_err(err)
 }
@@ -316,6 +362,16 @@ async fn update_tag(
 #[tauri::command]
 async fn delete_tag(state: State<'_, AppState>, id: String) -> CmdResult<()> {
     repo::tags::delete_tag(&state.pool, &state.bus, &id).await.map_err(err)
+}
+
+#[tauri::command]
+async fn merge_tags(state: State<'_, AppState>, src: String, dst: String) -> CmdResult<()> {
+    repo::tags::merge_tags(&state.pool, &state.bus, &src, &dst).await.map_err(err)
+}
+
+#[tauri::command]
+async fn set_tag_parent(state: State<'_, AppState>, id: String, parent_id: Option<String>) -> CmdResult<()> {
+    repo::tags::set_tag_parent(&state.pool, &state.bus, &id, parent_id.as_deref()).await.map_err(err)
 }
 
 #[tauri::command]
@@ -1361,6 +1417,14 @@ pub fn run() {
             update_task,
             complete_task,
             reopen_task,
+            set_wont_do,
+            duplicate_task,
+            check_item_to_subtask,
+            subtask_to_check_item,
+            save_task_as_template,
+            list_comments,
+            add_comment,
+            delete_comment,
             trash_task,
             restore_task,
             delete_task_forever,
@@ -1385,6 +1449,8 @@ pub fn run() {
             create_tag,
             update_tag,
             delete_tag,
+            merge_tags,
+            set_tag_parent,
             assign_tag,
             unassign_tag,
             get_setting,

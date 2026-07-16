@@ -30,6 +30,19 @@ export function useTagMutations() {
     mutationFn: (id: string) => api.deleteTag(id),
     onSuccess: invalidate,
   });
+  const renameTag = useMutation({
+    mutationFn: ({ id, name }: { id: string; name: string }) => api.updateTag(id, { name }),
+    onSuccess: invalidate,
+  });
+  const mergeTags = useMutation({
+    mutationFn: ({ src, dst }: { src: string; dst: string }) => api.mergeTags(src, dst),
+    onSuccess: invalidate,
+  });
+  const setTagParent = useMutation({
+    mutationFn: ({ id, parentId }: { id: string; parentId: string | null }) =>
+      api.setTagParent(id, parentId),
+    onSuccess: invalidate,
+  });
 
-  return { createTag, assignTag, unassignTag, deleteTag };
+  return { createTag, assignTag, unassignTag, deleteTag, renameTag, mergeTags, setTagParent };
 }

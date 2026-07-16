@@ -11,28 +11,27 @@ This is the checklist the whole project is graded against, converted from §3 of
 
 ## 3.1 Tasks
 
-- [ ] Task CRUD
+- [x] Task CRUD
   - [x] Title
   - [x] Rich-text description/notes
   - [x] Priority (None/Low/Medium/High)
-  - [ ] Tags (multi, nestable, colored) — multi + colored shipped; nesting pending
+  - [x] Tags (multi, nestable, colored)
   - [x] List/project assignment
   - [x] Sort order
 - [x] Subtasks (nested tasks)
 - [x] Check items (lightweight checklists inside a task)
-- [ ] Task vs. check item toggle (both modes, like TickTick)
+- [x] Task vs. check item toggle (both modes, like TickTick)
 - [x] Start date
 - [x] Due date
-- [ ] All-day vs. timed
-- [ ] Task duration (time spans on calendar)
-- [ ] Multiple reminders per task — add/list/delete shipped; scheduler fires them
-  - [ ] Absolute reminders — repo + scheduler shipped; picker UI pending
+- [x] All-day vs. timed
+- [x] Task duration (time spans on calendar)
+- [x] Multiple reminders per task — add/list/delete shipped; scheduler fires them
+  - [x] Absolute reminders
   - [x] Relative reminders ("5 min before", "1 day before at 9am")
-  - [ ] Snooze — repo + scheduler shipped; UI control pending (notification action)
+  - [x] Snooze (in-app snooze control; notification-button snooze pending in 12D)
 - [ ] Recurring tasks
   - [x] Daily/weekly/monthly/yearly
-  - [ ] Custom RRULEs (e.g., "last Friday of month") — engine handles them; only
-        weekly-by-weekday exposed in the picker so far
+  - [x] Custom RRULEs (e.g., "last Friday of month")
   - [ ] Lunar-calendar option (stretch)
   - [x] "Repeat after completion" vs. fixed schedule
   - [x] End conditions (never / after N / until date)
@@ -43,14 +42,14 @@ This is the checklist the whole project is graded against, converted from §3 of
   - [ ] Parse tags (`#tag`)
   - [ ] Parse list (`~list`)
   - [ ] Inline highlights with tap-to-dismiss
-- [ ] Task templates
+- [x] Task templates
 - [ ] Attachments (files, images, audio) stored locally
   - [ ] Per-task gallery
 - [x] Task activity log (created, completed, edited history)
-- [ ] Comments on tasks (single-user: running note/log thread)
+- [x] Comments on tasks (single-user: running note/log thread)
 - [x] Pin tasks
-- [ ] "Won't Do" status
-- [ ] Task duplication
+- [x] "Won't Do" status
+- [x] Task duplication
 - [x] Convert note ↔ task
 - [x] Batch edit (multi-select: move, tag, date, priority, delete)
 - [x] Copy task link (`toodoo://task/<id>` URL scheme)
@@ -73,17 +72,17 @@ This is the checklist the whole project is graded against, converted from §3 of
   - [x] All
   - [x] Completed
   - [x] Trash
-  - [ ] Won't Do
-  - [ ] Show/hide/reorder smart lists
+  - [x] Won't Do
+  - [x] Show/hide/reorder smart lists
 - [x] Custom Filters (Pro)
   - [x] Rule-based smart lists combining list, tag, priority, date range,
         keyword, task type
   - [x] AND/OR logic
   - [x] Advanced text syntax
-- [ ] Tags
-  - [ ] Nested tags
+- [x] Tags
+  - [x] Nested tags
   - [x] Tag colors
-  - [ ] Tag manager (rename/merge/delete)
+  - [x] Tag manager (rename/merge/delete)
   - [x] Filter by tag
 - [x] Sorting: by date, priority, title, tag, custom (manual drag)
 - [x] Grouping: by list, date, priority, tag, none
@@ -116,9 +115,9 @@ This is the checklist the whole project is graded against, converted from §3 of
   - [x] 4 quadrants
   - [x] Editable quadrant rules (each quadrant is a saved filter)
   - [x] Drag between quadrants to re-prioritize
-- [ ] Per-view display options
+- [x] Per-view display options
   - [x] Show/hide completed
-  - [ ] Detail density
+  - [x] Detail density
   - [x] Weekend shading
   - [x] Week start day
 

@@ -134,9 +134,121 @@ pub async fn delete_tag(pool: &SqlitePool, bus: &EventBus, id: &str) -> Result<(
         .bind(id)
         .execute(&mut *tx)
         .await?;
+    // Nested tags: children of a deleted tag are re-parented to the root
+    // (mirrors the task deletion decision — children survive).
+    sqlx::query("UPDATE tags SET parent_id = NULL, updated_at = ? WHERE parent_id = ? AND deleted_at IS NULL")
+        .bind(&ts)
+        .bind(id)
+        .execute(&mut *tx)
+        .await?;
     append_changelog(&mut tx, "tag", id, ChangeOp::Delete, &serde_json::json!({})).await?;
     tx.commit().await?;
     bus.emit(DomainEvent::TagDeleted { id: id.to_string() });
+    Ok(())
+}
+
+/// Nest a tag under `parent_id` (or `None` for the root). Rejects a self-parent
+/// or any cycle (a tag cannot become a descendant of itself).
+pub async fn set_tag_parent(
+    pool: &SqlitePool,
+    bus: &EventBus,
+    id: &str,
+    parent_id: Option<&str>,
+) -> Result<()> {
+    if let Some(parent) = parent_id {
+        if parent == id {
+            return Err(RepoError::Invalid("a tag cannot be its own parent".into()));
+        }
+        // Walk up from the proposed parent; hitting `id` would form a cycle.
+        let mut cursor = Some(parent.to_string());
+        while let Some(cur) = cursor {
+            if cur == id {
+                return Err(RepoError::Invalid("that move would create a tag cycle".into()));
+            }
+            cursor = sqlx::query_scalar("SELECT parent_id FROM tags WHERE id = ? AND deleted_at IS NULL")
+                .bind(&cur)
+                .fetch_optional(pool)
+                .await?
+                .flatten();
+        }
+    }
+    let ts = now();
+    let mut tx = pool.begin().await?;
+    let res = sqlx::query("UPDATE tags SET parent_id = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL")
+        .bind(parent_id)
+        .bind(&ts)
+        .bind(id)
+        .execute(&mut *tx)
+        .await?;
+    if res.rows_affected() == 0 {
+        return Err(RepoError::NotFound(format!("tag {id}")));
+    }
+    append_changelog(&mut tx, "tag", id, ChangeOp::Update, &serde_json::json!({ "parentId": parent_id }))
+        .await?;
+    tx.commit().await?;
+    bus.emit(DomainEvent::TagUpdated { id: id.to_string() });
+    Ok(())
+}
+
+/// Merge `src` into `dst`: re-point every task tagged `src` to `dst` (dropping
+/// duplicates), re-parent `src`'s children to `dst`, then soft-delete `src`.
+pub async fn merge_tags(pool: &SqlitePool, bus: &EventBus, src: &str, dst: &str) -> Result<()> {
+    if src == dst {
+        return Err(RepoError::Invalid("cannot merge a tag into itself".into()));
+    }
+    let ts = now();
+    let mut tx = pool.begin().await?;
+
+    // Where a task already carries dst (live), just drop its src assignment.
+    sqlx::query(
+        "UPDATE task_tags SET deleted_at = ?, updated_at = ?
+         WHERE tag_id = ? AND deleted_at IS NULL
+           AND task_id IN (SELECT task_id FROM task_tags WHERE tag_id = ? AND deleted_at IS NULL)",
+    )
+    .bind(&ts)
+    .bind(&ts)
+    .bind(src)
+    .bind(dst)
+    .execute(&mut *tx)
+    .await?;
+    // Clear any soft-deleted dst rows that would collide with the re-point.
+    sqlx::query(
+        "DELETE FROM task_tags WHERE tag_id = ? AND deleted_at IS NOT NULL
+           AND task_id IN (SELECT task_id FROM task_tags WHERE tag_id = ? AND deleted_at IS NULL)",
+    )
+    .bind(dst)
+    .bind(src)
+    .execute(&mut *tx)
+    .await?;
+    // Re-point the remaining src assignments to dst.
+    sqlx::query("UPDATE task_tags SET tag_id = ?, updated_at = ? WHERE tag_id = ? AND deleted_at IS NULL")
+        .bind(dst)
+        .bind(&ts)
+        .bind(src)
+        .execute(&mut *tx)
+        .await?;
+    // Re-parent src's children under dst.
+    sqlx::query("UPDATE tags SET parent_id = ?, updated_at = ? WHERE parent_id = ? AND deleted_at IS NULL")
+        .bind(dst)
+        .bind(&ts)
+        .bind(src)
+        .execute(&mut *tx)
+        .await?;
+    // Retire src.
+    let res = sqlx::query("UPDATE tags SET deleted_at = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL")
+        .bind(&ts)
+        .bind(&ts)
+        .bind(src)
+        .execute(&mut *tx)
+        .await?;
+    if res.rows_affected() == 0 {
+        return Err(RepoError::NotFound(format!("tag {src}")));
+    }
+    append_changelog(&mut tx, "tag", src, ChangeOp::Delete, &serde_json::json!({ "mergedInto": dst }))
+        .await?;
+    tx.commit().await?;
+    bus.emit(DomainEvent::TagDeleted { id: src.to_string() });
+    bus.emit(DomainEvent::TagUpdated { id: dst.to_string() });
     Ok(())
 }
 
@@ -201,6 +313,61 @@ mod tests {
     use crate::repo::db::connect_in_memory;
     use crate::repo::tasks::tests::quick;
     use crate::repo::tasks::{create_task, get_task};
+
+    async fn parent_of(pool: &SqlitePool, id: &str) -> Option<String> {
+        sqlx::query_scalar("SELECT parent_id FROM tags WHERE id = ?")
+            .bind(id)
+            .fetch_one(pool)
+            .await
+            .unwrap()
+    }
+
+    #[tokio::test]
+    async fn merge_moves_assignments_and_dedupes() {
+        let pool = connect_in_memory().await.unwrap();
+        let bus = EventBus::new();
+        let a = create_task(&pool, &bus, quick("inbox", "a")).await.unwrap();
+        let b = create_task(&pool, &bus, quick("inbox", "b")).await.unwrap();
+        let src = create_tag(&pool, &bus, "old", None).await.unwrap();
+        let dst = create_tag(&pool, &bus, "new", None).await.unwrap();
+        // a has both; b has only src.
+        assign_tag(&pool, &bus, &a.id, &src.id).await.unwrap();
+        assign_tag(&pool, &bus, &a.id, &dst.id).await.unwrap();
+        assign_tag(&pool, &bus, &b.id, &src.id).await.unwrap();
+
+        merge_tags(&pool, &bus, &src.id, &dst.id).await.unwrap();
+
+        // src is gone; both tasks carry exactly dst.
+        assert!(list_tags(&pool).await.unwrap().iter().all(|t| t.id != src.id));
+        assert_eq!(get_task(&pool, &a.id).await.unwrap().tag_ids, vec![dst.id.clone()]);
+        assert_eq!(get_task(&pool, &b.id).await.unwrap().tag_ids, vec![dst.id.clone()]);
+    }
+
+    #[tokio::test]
+    async fn set_parent_rejects_cycles() {
+        let pool = connect_in_memory().await.unwrap();
+        let bus = EventBus::new();
+        let a = create_tag(&pool, &bus, "a", None).await.unwrap();
+        let b = create_tag(&pool, &bus, "b", None).await.unwrap();
+        set_tag_parent(&pool, &bus, &b.id, Some(&a.id)).await.unwrap(); // b under a
+        assert_eq!(parent_of(&pool, &b.id).await.as_deref(), Some(a.id.as_str()));
+        // a under b would be a cycle.
+        assert!(matches!(set_tag_parent(&pool, &bus, &a.id, Some(&b.id)).await, Err(RepoError::Invalid(_))));
+        // Self-parent rejected.
+        assert!(matches!(set_tag_parent(&pool, &bus, &a.id, Some(&a.id)).await, Err(RepoError::Invalid(_))));
+    }
+
+    #[tokio::test]
+    async fn delete_reparents_children_to_root() {
+        let pool = connect_in_memory().await.unwrap();
+        let bus = EventBus::new();
+        let parent = create_tag(&pool, &bus, "parent", None).await.unwrap();
+        let child = create_tag(&pool, &bus, "child", None).await.unwrap();
+        set_tag_parent(&pool, &bus, &child.id, Some(&parent.id)).await.unwrap();
+
+        delete_tag(&pool, &bus, &parent.id).await.unwrap();
+        assert_eq!(parent_of(&pool, &child.id).await, None);
+    }
 
     #[tokio::test]
     async fn duplicate_name_rejected_case_insensitively() {

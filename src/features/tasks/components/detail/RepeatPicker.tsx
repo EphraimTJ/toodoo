@@ -6,6 +6,7 @@ import {
   composeRrule,
   DEFAULT_PARTS,
   describeRrule,
+  MONTH_ORDINALS,
   parseRrule,
   WEEKDAYS,
   weekdayLabel,
@@ -89,6 +90,61 @@ export function RepeatPicker({ task }: { task: Task }) {
             />
             {{ DAILY: "day(s)", WEEKLY: "week(s)", MONTHLY: "month(s)", YEARLY: "year(s)" }[parts.freq]}
           </label>
+
+          {parts.freq === "MONTHLY" && (
+            <div className="mt-2 space-y-1 text-xs" aria-label="Monthly pattern">
+              <label className="flex items-center gap-2">
+                <input
+                  type="radio"
+                  name="monthly-mode"
+                  checked={parts.monthly === null}
+                  onChange={() => apply({ ...parts, monthly: null })}
+                  className="accent-(--color-accent)"
+                />
+                On day of month
+              </label>
+              <label className="flex items-center gap-2">
+                <input
+                  type="radio"
+                  name="monthly-mode"
+                  checked={parts.monthly !== null}
+                  onChange={() => apply({ ...parts, monthly: { nth: -1, weekday: "FR" } })}
+                  className="accent-(--color-accent)"
+                />
+                On the
+                <select
+                  aria-label="Week ordinal"
+                  disabled={parts.monthly === null}
+                  value={parts.monthly?.nth ?? -1}
+                  onChange={(e) =>
+                    apply({ ...parts, monthly: { nth: Number(e.target.value), weekday: parts.monthly?.weekday ?? "FR" } })
+                  }
+                  className="rounded border border-border bg-bg px-1 py-0.5 disabled:opacity-40"
+                >
+                  {MONTH_ORDINALS.map((o) => (
+                    <option key={o.value} value={o.value}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+                <select
+                  aria-label="Week ordinal weekday"
+                  disabled={parts.monthly === null}
+                  value={parts.monthly?.weekday ?? "FR"}
+                  onChange={(e) =>
+                    apply({ ...parts, monthly: { nth: parts.monthly?.nth ?? -1, weekday: e.target.value as Weekday } })
+                  }
+                  className="rounded border border-border bg-bg px-1 py-0.5 disabled:opacity-40"
+                >
+                  {WEEKDAYS.map((d) => (
+                    <option key={d} value={d}>
+                      {weekdayLabel(d)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+          )}
 
           {parts.freq === "WEEKLY" && (
             <div className="mt-2 flex flex-wrap gap-1" aria-label="Repeat weekdays">

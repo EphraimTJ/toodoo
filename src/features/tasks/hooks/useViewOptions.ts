@@ -4,12 +4,14 @@ import { viewKey, type ViewSelection } from "../../../lib/uiStore";
 
 export type SortMode = "custom" | "date" | "priority" | "title" | "tag";
 export type GroupMode = "none" | "date" | "priority" | "tag" | "list";
+export type Density = "compact" | "default" | "detailed";
 
 export interface ViewOptions {
   sort: SortMode;
   group: GroupMode;
   showCompleted: boolean;
   completedCollapsed: boolean;
+  density: Density;
 }
 
 /** Completed shows as a collapsed section at the bottom by default
@@ -19,6 +21,7 @@ export const DEFAULT_VIEW_OPTIONS: ViewOptions = {
   group: "none",
   showCompleted: true,
   completedCollapsed: true,
+  density: "default",
 };
 
 function asViewOptions(v: JsonValue | null): Partial<ViewOptions> | null {

@@ -22,10 +22,18 @@ function describeReminder(r: Reminder): string {
   return min % 1440 === 0 ? `${min / 1440} day(s) before` : `${min} minutes before`;
 }
 
+/** Local datetime-input value (YYYY-MM-DDThh:mm) → RFC3339 UTC. */
+function localInputToIso(v: string): string {
+  return new Date(v).toISOString();
+}
+
 export function Reminders({ task }: { task: Task }) {
-  const { query, addReminder, deleteReminder } = useReminders(task.id);
+  const { query, addReminder, snoozeReminder, deleteReminder } = useReminders(task.id);
   const reminders = query.data ?? [];
   const hasAnchor = task.dueAt !== null || task.startAt !== null;
+
+  const snooze = (id: string, minutes: number) =>
+    snoozeReminder.mutate({ id, until: new Date(Date.now() + minutes * 60_000).toISOString() });
 
   return (
     <section className="mt-4">
@@ -42,8 +50,16 @@ export function Reminders({ task }: { task: Task }) {
             )}
             <button
               type="button"
+              aria-label={`Snooze reminder ${describeReminder(r)} 10 minutes`}
+              className="ml-auto text-xs text-text-muted opacity-0 hover:text-accent group-hover:opacity-100"
+              onClick={() => snooze(r.id, 10)}
+            >
+              Snooze 10m
+            </button>
+            <button
+              type="button"
               aria-label={`Delete reminder ${describeReminder(r)}`}
-              className="ml-auto text-xs text-text-muted opacity-0 hover:text-red-500 group-hover:opacity-100"
+              className="text-xs text-text-muted opacity-0 hover:text-red-500 group-hover:opacity-100"
               onClick={() => deleteReminder.mutate(r.id)}
             >
               ✕
@@ -81,6 +97,21 @@ export function Reminders({ task }: { task: Task }) {
                 {label}
               </DropdownMenu.Item>
             ))}
+            <div className="my-1 border-t border-border" />
+            <label className="block px-2 py-1 text-xs text-text-muted">
+              At a specific time
+              <input
+                type="datetime-local"
+                aria-label="Absolute reminder time"
+                className="mt-1 w-full rounded border border-border bg-bg px-1 py-0.5 text-text outline-none focus:border-accent"
+                onChange={(e) => {
+                  if (e.target.value)
+                    addReminder.mutate({ triggerKind: "ABS", at: localInputToIso(e.target.value) });
+                }}
+                // Keep the menu open while picking a time.
+                onClick={(e) => e.stopPropagation()}
+              />
+            </label>
           </DropdownMenu.Content>
         </DropdownMenu.Portal>
       </DropdownMenu.Root>

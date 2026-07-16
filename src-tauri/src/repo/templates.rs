@@ -180,6 +180,32 @@ pub async fn delete_template(pool: &SqlitePool, bus: &EventBus, id: &str) -> Res
     Ok(())
 }
 
+/// Snapshot an existing task (its core fields + check-item titles) into a new
+/// named template. Reminders are not captured in the snapshot (v1).
+pub async fn save_task_as_template(
+    pool: &SqlitePool,
+    bus: &EventBus,
+    task_id: &str,
+    name: &str,
+) -> Result<TaskTemplate> {
+    let task = super::tasks::get_task(pool, task_id).await?;
+    let items = check_items::list_check_items(pool, task_id).await?;
+    let payload = TemplatePayload {
+        title: task.title,
+        content_rich: task.content_rich,
+        content_plain: task.content_plain,
+        priority: Some(task.priority),
+        is_all_day: Some(task.is_all_day),
+        duration_min: task.duration_min,
+        time_zone: task.time_zone,
+        rrule: task.rrule,
+        repeat_from: task.repeat_from,
+        check_items: items.into_iter().map(|c| c.title).collect(),
+        reminders: Vec::new(),
+    };
+    create_template(pool, bus, name, &payload).await
+}
+
 /// Materialize a template into `project_id`: create the task, then attach its
 /// content, check items, and reminders. Returns the fully-hydrated task.
 pub async fn instantiate_template(

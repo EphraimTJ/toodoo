@@ -40,10 +40,25 @@ export type RecurrenceEnd =
   | { kind: "count"; count: number }
   | { kind: "until"; date: string }; // date is YYYY-MM-DD
 
+/** MONTHLY "on the Nth weekday" (e.g. the last Friday). `nth` is 1..4 or -1 (last). */
+export interface MonthlyByWeekday {
+  nth: number;
+  weekday: Weekday;
+}
+
+export const MONTH_ORDINALS: { value: number; label: string }[] = [
+  { value: 1, label: "first" },
+  { value: 2, label: "second" },
+  { value: 3, label: "third" },
+  { value: 4, label: "fourth" },
+  { value: -1, label: "last" },
+];
+
 export interface RecurrenceParts {
   freq: Freq;
   interval: number; // >= 1
   byDay: Weekday[]; // WEEKLY only
+  monthly: MonthlyByWeekday | null; // MONTHLY "on the Nth weekday", else by day-of-month
   end: RecurrenceEnd;
 }
 
@@ -51,6 +66,7 @@ export const DEFAULT_PARTS: RecurrenceParts = {
   freq: "WEEKLY",
   interval: 1,
   byDay: [],
+  monthly: null,
   end: { kind: "never" },
 };
 
@@ -62,6 +78,9 @@ export function composeRrule(parts: RecurrenceParts): string {
     // Preserve canonical weekday order regardless of click order.
     const ordered = WEEKDAYS.filter((d) => parts.byDay.includes(d));
     bits.push(`BYDAY=${ordered.join(",")}`);
+  }
+  if (parts.freq === "MONTHLY" && parts.monthly) {
+    bits.push(`BYDAY=${parts.monthly.nth}${parts.monthly.weekday}`);
   }
   if (parts.end.kind === "count") bits.push(`COUNT=${Math.max(1, parts.end.count)}`);
   if (parts.end.kind === "until") bits.push(`UNTIL=${parts.end.date.replace(/-/g, "")}T235959Z`);
@@ -90,11 +109,17 @@ export function parseRrule(rrule: string | null | undefined): RecurrenceParts | 
   if (!freq || !(freq in FREQ_NOUN)) return null;
 
   const interval = Math.max(1, Number(f.get("INTERVAL") ?? "1") || 1);
-  const present = new Set(
-    (f.get("BYDAY") ?? "").split(",").map((d) => d.trim().toUpperCase()),
-  );
+  const rawByDay = (f.get("BYDAY") ?? "").split(",").map((d) => d.trim().toUpperCase());
+
+  // MONTHLY with an ordinal weekday (e.g. "-1FR", "2WE") → "on the Nth weekday".
+  let monthly: MonthlyByWeekday | null = null;
+  if (freq === "MONTHLY") {
+    const m = rawByDay[0]?.match(/^(-?\d+)(MO|TU|WE|TH|FR|SA|SU)$/);
+    if (m) monthly = { nth: Number(m[1]), weekday: m[2] as Weekday };
+  }
+  const present = new Set(rawByDay);
   // Canonicalize to calendar order so the value is stable across round-trips.
-  const byDay = WEEKDAYS.filter((d) => present.has(d));
+  const byDay = monthly ? [] : WEEKDAYS.filter((d) => present.has(d));
 
   let end: RecurrenceEnd = { kind: "never" };
   const count = f.get("COUNT");
@@ -110,7 +135,7 @@ export function parseRrule(rrule: string | null | undefined): RecurrenceParts | 
       };
     }
   }
-  return { freq, interval, byDay, end };
+  return { freq, interval, byDay, monthly, end };
 }
 
 /** Human summary for a row/label, e.g. "Every 2 weeks on Mon, Wed". */
@@ -127,6 +152,10 @@ export function describeRrule(rrule: string | null | undefined): string | null {
   if (parts.freq === "WEEKLY" && parts.byDay.length > 0) {
     const ordered = WEEKDAYS.filter((d) => parts.byDay.includes(d)).map((d) => WEEKDAY_LABEL[d]);
     base += ` on ${ordered.join(", ")}`;
+  }
+  if (parts.freq === "MONTHLY" && parts.monthly) {
+    const ord = MONTH_ORDINALS.find((o) => o.value === parts.monthly!.nth)?.label ?? "";
+    base += ` on the ${ord} ${WEEKDAY_LABEL[parts.monthly.weekday]}`;
   }
   if (parts.end.kind === "count") base += ` · ${parts.end.count}×`;
   if (parts.end.kind === "until") base += ` · until ${parts.end.date}`;

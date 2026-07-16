@@ -6,20 +6,22 @@ import { SidebarProjects } from "../../features/projects/components/SidebarProje
 import { SidebarTags } from "../../features/tags/components/SidebarTags";
 import { SidebarFilters } from "../../features/filters/components/SidebarFilters";
 import { useSmartCounts } from "../../features/tasks/hooks/useTasks";
+import { useSmartLists } from "../../features/tasks/hooks/useSmartLists";
 
-const SMART_LISTS: { view: SmartView; label: string; countKey?: "today" | "tomorrow" | "next7" }[] =
-  [
-    { view: "today", label: "Today", countKey: "today" },
-    { view: "tomorrow", label: "Tomorrow", countKey: "tomorrow" },
-    { view: "next7Days", label: "Next 7 Days", countKey: "next7" },
-    { view: "all", label: "All" },
-    { view: "completed", label: "Completed" },
-    { view: "trash", label: "Trash" },
-  ];
+const SMART_META: Record<SmartView, { label: string; countKey?: "today" | "tomorrow" | "next7" }> = {
+  today: { label: "Today", countKey: "today" },
+  tomorrow: { label: "Tomorrow", countKey: "tomorrow" },
+  next7Days: { label: "Next 7 Days", countKey: "next7" },
+  all: { label: "All" },
+  completed: { label: "Completed" },
+  wontDo: { label: "Won't Do" },
+  trash: { label: "Trash" },
+};
 
 export function Sidebar() {
   const { view, setView } = useUiStore();
   const { data: counts } = useSmartCounts();
+  const { items: smartLists } = useSmartLists();
 
   return (
     <aside
@@ -63,26 +65,29 @@ export function Sidebar() {
               )}
             </button>
           </li>
-          {SMART_LISTS.map((smart) => {
-            const active = view.kind === "smart" && view.view === smart.view;
-            const count = smart.countKey ? counts?.[smart.countKey] : undefined;
-            return (
-              <li key={smart.view}>
-                <button
-                  type="button"
-                  onClick={() => setView({ kind: "smart", view: smart.view })}
-                  className={`flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left text-sm hover:bg-bg ${
-                    active ? "bg-bg font-medium text-accent" : ""
-                  }`}
-                >
-                  {smart.label}
-                  {count !== undefined && count > 0 && (
-                    <span className="text-xs text-text-muted">{count}</span>
-                  )}
-                </button>
-              </li>
-            );
-          })}
+          {smartLists
+            .filter((s) => s.visible)
+            .map((smart) => {
+              const meta = SMART_META[smart.view];
+              const active = view.kind === "smart" && view.view === smart.view;
+              const count = meta.countKey ? counts?.[meta.countKey] : undefined;
+              return (
+                <li key={smart.view}>
+                  <button
+                    type="button"
+                    onClick={() => setView({ kind: "smart", view: smart.view })}
+                    className={`flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left text-sm hover:bg-bg ${
+                      active ? "bg-bg font-medium text-accent" : ""
+                    }`}
+                  >
+                    {meta.label}
+                    {count !== undefined && count > 0 && (
+                      <span className="text-xs text-text-muted">{count}</span>
+                    )}
+                  </button>
+                </li>
+              );
+            })}
           <li>
             <button
               type="button"
