@@ -5,6 +5,36 @@ ambiguity we resolved by judgment call), with the reasoning. Newest entries at
 the top. Never rewrite history — if a decision is reversed, add a new entry
 that supersedes the old one.
 
+## 2026-07-15 — Habits: skip-neutral/period streaks, reminders fire, focus link (user-approved)
+
+**Streaks (the main testable logic):** a Skip is **neutral** — it preserves a
+streak without extending it. Daily/weekday habits streak on consecutive
+*scheduled* days marked DONE, with a still-incomplete **today** treated as grace
+(it neither counts nor breaks). "X per week/month" habits streak on consecutive
+**periods** (ISO weeks / calendar months) whose DONE count met the target; the
+in-progress period counts only once it is met (else grace). The pure logic lives
+in `repo::habits` and is mirrored in `src/features/habits/lib/streak.ts`, pinned
+to identical unit tests so the two can't drift.
+
+**Frequency model** (`freq_json`): `{kind:"daily"}`, `{kind:"weekdays",
+days:[1..7]}` (ISO Mon=1), `{kind:"weekly"|"monthly", times:n}`. Weekly/monthly
+habits appear every day until the period target is met (progress shown "2/3").
+
+**Amount habits**: a day is DONE once cumulative `value ≥ goal_amount`, else
+PARTIAL. **Reminders** fire via the existing scheduler when their local time has
+passed and the habit isn't checked in yet that day; dedup is in-memory per
+habit+day (a restart may re-fire once). **Presets** are a static bundled list
+that prefills the create dialog (no schema).
+
+**Focus link:** with habits now real, a focus session can attach to a habit
+(`focus_sessions.habit_id`), closing the Phase-5 "attach to a task **or habit**"
+item. **No migration** was needed — `habits`, `habit_checkins`, and
+`focus_sessions.habit_id` all exist in 0001.
+
+**Why:** skip-neutral + period-based streaks match TickTick's observed behavior;
+keeping the streak math pure makes the tricky edge cases (grace, skip, periods)
+exhaustively testable on both sides of the IPC boundary.
+
 ## 2026-07-15 — Focus/Pomodoro: frontend timer, Recharts, bundled ambient (user-approved)
 
 **Decision (deps & scope):** the focus statistics dashboard uses **Recharts**

@@ -11,6 +11,7 @@ pub mod filter_rule;
 pub mod filters;
 pub mod focus;
 pub mod folders;
+pub mod habits;
 pub mod ics;
 pub mod matrix;
 pub mod projects;

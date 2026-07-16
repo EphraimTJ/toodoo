@@ -6,8 +6,12 @@ export function useFocusMutations() {
   const invalidate = () => void queryClient.invalidateQueries({ queryKey: ["focus"] });
 
   const startFocus = useMutation({
-    mutationFn: (v: { taskId: string | null; kind: FocusKind; plannedMin?: number }) =>
-      api.startFocus(v.taskId, v.kind, v.plannedMin),
+    mutationFn: (v: {
+      taskId?: string | null;
+      habitId?: string | null;
+      kind: FocusKind;
+      plannedMin?: number;
+    }) => api.startFocus({ taskId: v.taskId, habitId: v.habitId }, v.kind, v.plannedMin),
     onSuccess: invalidate,
   });
   const completeFocus = useMutation({

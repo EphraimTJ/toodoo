@@ -93,6 +93,17 @@ export function Sidebar() {
           <li>
             <button
               type="button"
+              onClick={() => setView({ kind: "habits" })}
+              className={`flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left text-sm hover:bg-bg ${
+                view.kind === "habits" ? "bg-bg font-medium text-accent" : ""
+              }`}
+            >
+              Habits
+            </button>
+          </li>
+          <li>
+            <button
+              type="button"
               onClick={() => setView({ kind: "matrix" })}
               className={`flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left text-sm hover:bg-bg ${
                 view.kind === "matrix" ? "bg-bg font-medium text-accent" : ""

@@ -19,6 +19,7 @@ export function usePomodoro(config: PomoConfig, initialTaskId: string | null = n
   const [elapsed, setElapsed] = useState(0);
   const [running, setRunning] = useState(false);
   const [taskId, setTaskId] = useState<string | null>(initialTaskId);
+  const [habitId, setHabitId] = useState<string | null>(null);
   const [note, setNote] = useState("");
   const [sessionOpen, setSessionOpen] = useState(false);
 
@@ -45,11 +46,11 @@ export function usePomodoro(config: PomoConfig, initialTaskId: string | null = n
     async (kind: FocusKind, plannedMin?: number) => {
       pauseMsRef.current = 0;
       pausedAtRef.current = null;
-      const session = await startFocus.mutateAsync({ taskId, kind, plannedMin });
+      const session = await startFocus.mutateAsync({ taskId, habitId, kind, plannedMin });
       sessionId.current = session.id;
       setSessionOpen(true);
     },
-    [startFocus, taskId],
+    [startFocus, taskId, habitId],
   );
 
   const closeSession = useCallback(
@@ -129,7 +130,7 @@ export function usePomodoro(config: PomoConfig, initialTaskId: string | null = n
   return {
     mode, setMode,
     phase, remaining, elapsed, running, active,
-    taskId, setTaskId, note, setNote,
+    taskId, setTaskId, habitId, setHabitId, note, setNote,
     start, pause, resume, stop,
   };
 }

@@ -59,6 +59,9 @@ export function useDomainEvents(): void {
           case "focus":
             void queryClient.invalidateQueries({ queryKey: ["focus"] });
             break;
+          case "habit":
+            void queryClient.invalidateQueries({ queryKey: ["habits"] });
+            break;
           case "project":
           case "folder":
             void queryClient.invalidateQueries({ queryKey: ["projects"] });

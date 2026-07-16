@@ -65,6 +65,7 @@ pub async fn start_session(
     pool: &SqlitePool,
     bus: &EventBus,
     task_id: Option<&str>,
+    habit_id: Option<&str>,
     kind: &str,
     planned_min: Option<i64>,
 ) -> Result<FocusSession> {
@@ -73,12 +74,13 @@ pub async fn start_session(
     let ts = now();
     let mut tx = pool.begin().await?;
     sqlx::query(
-        "INSERT INTO focus_sessions (id, task_id, kind, started_at, pause_ms, status, planned_min,
-                                     created_at, updated_at)
-         VALUES (?, ?, ?, ?, 0, 'RUNNING', ?, ?, ?)",
+        "INSERT INTO focus_sessions (id, task_id, habit_id, kind, started_at, pause_ms, status,
+                                     planned_min, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, 0, 'RUNNING', ?, ?, ?)",
     )
     .bind(&id)
     .bind(task_id)
+    .bind(habit_id)
     .bind(kind)
     .bind(&ts)
     .bind(planned_min)
@@ -462,7 +464,7 @@ mod tests {
         let (pool, bus) = setup().await;
         let task = create_task(&pool, &bus, quick("inbox", "write report")).await.unwrap();
 
-        let session = start_session(&pool, &bus, Some(&task.id), "POMO", Some(25)).await.unwrap();
+        let session = start_session(&pool, &bus, Some(&task.id), None, "POMO", Some(25)).await.unwrap();
         assert_eq!(session.status, "RUNNING");
         assert!(active_session(&pool).await.unwrap().is_some());
 

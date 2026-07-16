@@ -22,8 +22,10 @@ export function FocusTimer({ config }: { config: PomoConfig }) {
   const pomosToday = stats.data?.pomoCount ?? 0;
   const { data: tasks } = useQuery({ queryKey: ["tasks", "smart:all"], queryFn: () => api.listSmart("all") });
 
+  const { data: habits } = useQuery({ queryKey: ["habits", "active"], queryFn: () => api.listHabits(false) });
   const clock = p.mode === "pomo" ? formatClock(p.remaining) : formatClock(p.elapsed);
   const paused = p.active && !p.running;
+  const targetValue = p.habitId ? `habit:${p.habitId}` : p.taskId ? `task:${p.taskId}` : "";
 
   return (
     <div className="flex flex-col items-center gap-4 py-6" data-testid="focus-timer">
@@ -50,18 +52,31 @@ export function FocusTimer({ config }: { config: PomoConfig }) {
       </div>
 
       <select
-        aria-label="Focus task"
-        value={p.taskId ?? ""}
+        aria-label="Focus target"
+        value={targetValue}
         disabled={p.active}
-        onChange={(e) => p.setTaskId(e.target.value || null)}
+        onChange={(e) => {
+          const [kind, id] = e.target.value.split(":");
+          p.setTaskId(kind === "task" ? id : null);
+          p.setHabitId(kind === "habit" ? id : null);
+        }}
         className="w-64 rounded border border-border bg-bg px-2 py-1 text-sm outline-none focus:border-accent disabled:opacity-60"
       >
         <option value="">No task</option>
-        {(tasks ?? []).map((t) => (
-          <option key={t.id} value={t.id}>
-            {t.title}
-          </option>
-        ))}
+        <optgroup label="Tasks">
+          {(tasks ?? []).map((t) => (
+            <option key={t.id} value={`task:${t.id}`}>
+              {t.title}
+            </option>
+          ))}
+        </optgroup>
+        <optgroup label="Habits">
+          {(habits ?? []).map((h) => (
+            <option key={h.id} value={`habit:${h.id}`}>
+              {h.name}
+            </option>
+          ))}
+        </optgroup>
       </select>
 
       <input

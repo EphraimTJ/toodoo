@@ -1,5 +1,13 @@
 import { invoke } from "@tauri-apps/api/core";
 import { evaluateRule, parseQuery, resolveQuery } from "../features/filters/lib/rule";
+import {
+  completionRate as habitCompletionRate,
+  isScheduled as habitIsScheduled,
+  streak as habitStreak,
+  type Freq as HabitFreq,
+} from "../features/habits/lib/streak";
+
+export type { HabitFreq };
 
 export type JsonValue = string | number | boolean | null | JsonValue[] | { [k: string]: JsonValue };
 
@@ -252,6 +260,65 @@ export interface TaskActuals {
   actualPomos: number;
 }
 
+// ---- Habits -----------------------------------------------------------------
+
+export type GoalKind = "CHECK" | "AMOUNT";
+export type CheckinStatus = "DONE" | "PARTIAL" | "SKIP";
+
+export interface Habit {
+  id: string;
+  name: string;
+  icon: string | null;
+  color: string | null;
+  quote: string | null;
+  goalKind: GoalKind;
+  goalAmount: number | null;
+  unit: string | null;
+  freqJson: string;
+  section: string | null;
+  remindersJson: string | null;
+  startDate: string | null;
+  archived: boolean;
+  sortOrder: number;
+}
+
+export interface HabitInput {
+  name: string;
+  icon?: string | null;
+  color?: string | null;
+  quote?: string | null;
+  goalKind: GoalKind;
+  goalAmount?: number | null;
+  unit?: string | null;
+  freq: HabitFreq;
+  section?: string | null;
+  reminders?: string[];
+  startDate?: string | null;
+}
+
+export interface HabitCheckin {
+  id: string;
+  habitId: string;
+  date: string;
+  value: number | null;
+  status: CheckinStatus;
+  note: string | null;
+}
+
+export interface HabitStats {
+  currentStreak: number;
+  bestStreak: number;
+  totalCheckins: number;
+  completionRate: number;
+}
+
+export interface HabitToday {
+  habit: Habit;
+  status: CheckinStatus | null;
+  value: number | null;
+  streak: number;
+}
+
 export interface CheckItem {
   id: string;
   taskId: string;
@@ -451,7 +518,11 @@ export interface Api {
   importIcs(text: string): Promise<number>;
   exportIcs(projectId?: string | null): Promise<string>;
 
-  startFocus(taskId: string | null, kind: FocusKind, plannedMin?: number): Promise<FocusSession>;
+  startFocus(
+    target: { taskId?: string | null; habitId?: string | null },
+    kind: FocusKind,
+    plannedMin?: number,
+  ): Promise<FocusSession>;
   completeFocus(id: string, pauseMs: number, note: string | null, status: string): Promise<FocusSession>;
   setFocusPaused(id: string, paused: boolean): Promise<void>;
   activeFocus(): Promise<FocusSession | null>;
@@ -471,6 +542,25 @@ export interface Api {
   listTaskFocus(taskId: string): Promise<FocusSession[]>;
   focusStats(from: string, to: string): Promise<FocusStats>;
   taskFocusActuals(taskId: string): Promise<TaskActuals>;
+
+  listHabits(includeArchived: boolean): Promise<Habit[]>;
+  getHabit(id: string): Promise<Habit>;
+  createHabit(input: HabitInput): Promise<Habit>;
+  updateHabit(id: string, input: HabitInput): Promise<Habit>;
+  setHabitArchived(id: string, archived: boolean): Promise<void>;
+  deleteHabit(id: string): Promise<void>;
+  reorderHabit(id: string, afterId: string | null): Promise<void>;
+  recordCheckin(
+    habitId: string,
+    date: string,
+    status: CheckinStatus,
+    value?: number | null,
+    note?: string | null,
+  ): Promise<HabitCheckin>;
+  deleteCheckin(habitId: string, date: string): Promise<void>;
+  listCheckins(habitId: string, from: string, to: string): Promise<HabitCheckin[]>;
+  habitStats(habitId: string): Promise<HabitStats>;
+  listTodayHabits(): Promise<HabitToday[]>;
 
   getSetting(key: string): Promise<JsonValue | null>;
   setSetting(key: string, value: JsonValue): Promise<void>;
@@ -603,8 +693,13 @@ const tauriApi: Api = {
   importIcs: (text) => invoke("import_ics", { text }),
   exportIcs: (projectId) => invoke("export_ics", { projectId: projectId ?? null }),
 
-  startFocus: (taskId, kind, plannedMin) =>
-    invoke("start_focus", { taskId, kind, plannedMin: plannedMin ?? null }),
+  startFocus: (target, kind, plannedMin) =>
+    invoke("start_focus", {
+      taskId: target.taskId ?? null,
+      habitId: target.habitId ?? null,
+      kind,
+      plannedMin: plannedMin ?? null,
+    }),
   completeFocus: (id, pauseMs, note, status) =>
     invoke("complete_focus", { id, pauseMs, note, status }),
   setFocusPaused: (id, paused) => invoke("set_focus_paused", { id, paused }),
@@ -623,6 +718,20 @@ const tauriApi: Api = {
   listTaskFocus: (taskId) => invoke("list_task_focus", { taskId }),
   focusStats: (from, to) => invoke("focus_stats", { from, to, tzOffsetMin: localDateParams().tzOffsetMin }),
   taskFocusActuals: (taskId) => invoke("task_focus_actuals", { taskId }),
+
+  listHabits: (includeArchived) => invoke("list_habits", { includeArchived }),
+  getHabit: (id) => invoke("get_habit", { id }),
+  createHabit: (input) => invoke("create_habit", { input }),
+  updateHabit: (id, input) => invoke("update_habit", { id, input }),
+  setHabitArchived: (id, archived) => invoke("set_habit_archived", { id, archived }),
+  deleteHabit: (id) => invoke("delete_habit", { id }),
+  reorderHabit: (id, afterId) => invoke("reorder_habit", { id, afterId }),
+  recordCheckin: (habitId, date, status, value, note) =>
+    invoke("record_checkin", { habitId, date, status, value: value ?? null, note: note ?? null }),
+  deleteCheckin: (habitId, date) => invoke("delete_checkin", { habitId, date }),
+  listCheckins: (habitId, from, to) => invoke("list_checkins", { habitId, from, to }),
+  habitStats: (habitId) => invoke("habit_stats", { habitId, today: localDateParams().today }),
+  listTodayHabits: () => invoke("list_today_habits", { today: localDateParams().today }),
 
   getSetting: (key) => invoke("get_setting", { key }),
   setSetting: (key, value) => invoke("set_setting", { key, value }),
@@ -651,6 +760,10 @@ function browserStubApi(): Api {
   const calEvents: CalEvent[] = [];
   const subscriptions: CalSubscription[] = [];
   const focusSessions: FocusSession[] = [];
+  const habits: Habit[] = [];
+  const habitCheckins: HabitCheckin[] = [];
+  const habitMarks = (habitId: string): [string, string][] =>
+    habitCheckins.filter((c) => c.habitId === habitId).map((c) => [c.date, c.status]);
   const nowIso = () => new Date().toISOString();
   const uid = () => crypto.randomUUID();
 
@@ -1422,11 +1535,11 @@ function browserStubApi(): Api {
     importIcs: async () => 0,
     exportIcs: async () => "",
 
-    startFocus: async (taskId, kind, plannedMin) => {
+    startFocus: async (target, kind, plannedMin) => {
       const s: FocusSession = {
         id: uid(),
-        taskId,
-        habitId: null,
+        taskId: target.taskId ?? null,
+        habitId: target.habitId ?? null,
         kind,
         startedAt: nowIso(),
         endedAt: null,
@@ -1552,6 +1665,136 @@ function browserStubApi(): Api {
         actualMs: rows.reduce((sum, s) => sum + focusEffMs(s), 0),
         actualPomos: rows.filter((s) => s.kind === "POMO").length,
       };
+    },
+
+    listHabits: async (includeArchived) =>
+      clone(
+        habits
+          .filter((h) => includeArchived || !h.archived)
+          .sort((a, b) => a.sortOrder - b.sortOrder),
+      ),
+    getHabit: async (id) => {
+      const h = habits.find((x) => x.id === id);
+      if (!h) throw new Error(`not found: habit ${id}`);
+      return clone(h);
+    },
+    createHabit: async (input) => {
+      const h: Habit = {
+        id: uid(),
+        name: input.name,
+        icon: input.icon ?? null,
+        color: input.color ?? null,
+        quote: input.quote ?? null,
+        goalKind: input.goalKind,
+        goalAmount: input.goalAmount ?? null,
+        unit: input.unit ?? null,
+        freqJson: JSON.stringify(input.freq),
+        section: input.section ?? null,
+        remindersJson: JSON.stringify(input.reminders ?? []),
+        startDate: input.startDate ?? null,
+        archived: false,
+        sortOrder: habits.length,
+      };
+      habits.push(h);
+      return clone(h);
+    },
+    updateHabit: async (id, input) => {
+      const h = habits.find((x) => x.id === id);
+      if (!h) throw new Error(`not found: habit ${id}`);
+      Object.assign(h, {
+        name: input.name,
+        icon: input.icon ?? null,
+        color: input.color ?? null,
+        quote: input.quote ?? null,
+        goalKind: input.goalKind,
+        goalAmount: input.goalAmount ?? null,
+        unit: input.unit ?? null,
+        freqJson: JSON.stringify(input.freq),
+        section: input.section ?? null,
+        remindersJson: JSON.stringify(input.reminders ?? []),
+        startDate: input.startDate ?? null,
+      });
+      return clone(h);
+    },
+    setHabitArchived: async (id, archived) => {
+      const h = habits.find((x) => x.id === id);
+      if (!h) throw new Error(`not found: habit ${id}`);
+      h.archived = archived;
+    },
+    deleteHabit: async (id) => {
+      const i = habits.findIndex((x) => x.id === id);
+      if (i >= 0) habits.splice(i, 1);
+    },
+    reorderHabit: async (id, afterId) => {
+      const h = habits.find((x) => x.id === id);
+      if (!h) throw new Error(`not found: habit ${id}`);
+      const rest = habits.filter((x) => x.id !== id).sort((a, b) => a.sortOrder - b.sortOrder);
+      const at = afterId === null ? 0 : rest.findIndex((x) => x.id === afterId) + 1;
+      rest.splice(at, 0, h);
+      rest.forEach((x, idx) => (x.sortOrder = idx));
+    },
+    recordCheckin: async (habitId, date, status, value, note) => {
+      const existing = habitCheckins.find((c) => c.habitId === habitId && c.date === date);
+      if (existing) {
+        existing.status = status;
+        existing.value = value ?? null;
+        existing.note = note ?? null;
+        return clone(existing);
+      }
+      const c: HabitCheckin = {
+        id: uid(),
+        habitId,
+        date,
+        value: value ?? null,
+        status,
+        note: note ?? null,
+      };
+      habitCheckins.push(c);
+      return clone(c);
+    },
+    deleteCheckin: async (habitId, date) => {
+      const i = habitCheckins.findIndex((c) => c.habitId === habitId && c.date === date);
+      if (i >= 0) habitCheckins.splice(i, 1);
+    },
+    listCheckins: async (habitId, from, to) =>
+      clone(
+        habitCheckins
+          .filter((c) => c.habitId === habitId && c.date >= from && c.date <= to)
+          .sort((a, b) => b.date.localeCompare(a.date)),
+      ),
+    habitStats: async (habitId) => {
+      const h = habits.find((x) => x.id === habitId);
+      if (!h) throw new Error(`not found: habit ${habitId}`);
+      const freq: HabitFreq = JSON.parse(h.freqJson);
+      const today = localDateParams().today;
+      const marks = habitMarks(habitId);
+      const s = habitStreak(freq, marks, today);
+      const from = new Date(Date.parse(`${today}T00:00:00Z`) - 29 * 86_400_000)
+        .toISOString()
+        .slice(0, 10);
+      return {
+        currentStreak: s.current,
+        bestStreak: s.best,
+        totalCheckins: marks.filter(([, st]) => st === "DONE").length,
+        completionRate: habitCompletionRate(freq, marks, from, today),
+      };
+    },
+    listTodayHabits: async () => {
+      const today = localDateParams().today;
+      const out: HabitToday[] = [];
+      for (const h of habits.filter((x) => !x.archived).sort((a, b) => a.sortOrder - b.sortOrder)) {
+        const freq: HabitFreq = JSON.parse(h.freqJson);
+        if (!habitIsScheduled(freq, today)) continue;
+        if (h.startDate && h.startDate > today) continue;
+        const c = habitCheckins.find((x) => x.habitId === h.id && x.date === today);
+        out.push({
+          habit: clone(h),
+          status: c?.status ?? null,
+          value: c?.value ?? null,
+          streak: habitStreak(freq, habitMarks(h.id), today).current,
+        });
+      }
+      return out;
     },
 
     getSetting: async (key) => clone(settings.get(key) ?? null),

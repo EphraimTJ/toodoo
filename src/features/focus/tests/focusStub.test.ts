@@ -4,7 +4,7 @@ import { api, INBOX_ID } from "../../../lib/api";
 describe("focus API (browser stub)", () => {
   it("start → complete records a session and updates actuals", async () => {
     const task = await api.createTask({ projectId: INBOX_ID, title: `Focus ${Date.now()}` });
-    const session = await api.startFocus(task.id, "POMO", 25);
+    const session = await api.startFocus({ taskId: task.id }, "POMO", 25);
     expect((await api.activeFocus())?.id).toBe(session.id);
 
     await api.completeFocus(session.id, 0, "deep work", "DONE");

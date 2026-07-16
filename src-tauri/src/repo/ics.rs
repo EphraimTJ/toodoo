@@ -330,7 +330,7 @@ mod tests {
         };
         let text = generate(&[ev]);
         for line in text.split("\r\n") {
-            assert!(line.as_bytes().len() <= 75, "line too long: {}", line.len());
+            assert!(line.len() <= 75, "line too long: {}", line.len());
         }
     }
 }

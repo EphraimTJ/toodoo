@@ -15,6 +15,7 @@ use repo::check_items::CheckItem;
 use repo::filter_rule::Rule;
 use repo::filters::Filter;
 use repo::focus::{FocusSession, FocusStats, TaskActuals};
+use repo::habits::{Habit, HabitCheckin, HabitInput, HabitStats, HabitToday};
 use repo::folders::{Folder, FolderPatch};
 use repo::matrix::{Quadrant, QuadrantTasks};
 use repo::projects::{NewProject, Project, ProjectPatch};
@@ -668,12 +669,20 @@ async fn export_ics(state: State<'_, AppState>, project_id: Option<String>) -> C
 async fn start_focus(
     state: State<'_, AppState>,
     task_id: Option<String>,
+    habit_id: Option<String>,
     kind: String,
     planned_min: Option<i64>,
 ) -> CmdResult<FocusSession> {
-    repo::focus::start_session(&state.pool, &state.bus, task_id.as_deref(), &kind, planned_min)
-        .await
-        .map_err(err)
+    repo::focus::start_session(
+        &state.pool,
+        &state.bus,
+        task_id.as_deref(),
+        habit_id.as_deref(),
+        &kind,
+        planned_min,
+    )
+    .await
+    .map_err(err)
 }
 
 #[tauri::command]
@@ -775,6 +784,86 @@ async fn task_focus_actuals(state: State<'_, AppState>, task_id: String) -> CmdR
     repo::focus::task_actuals(&state.pool, &task_id).await.map_err(err)
 }
 
+// ---- habits --------------------------------------------------------------------
+
+#[tauri::command]
+async fn list_habits(state: State<'_, AppState>, include_archived: bool) -> CmdResult<Vec<Habit>> {
+    repo::habits::list_habits(&state.pool, include_archived).await.map_err(err)
+}
+
+#[tauri::command]
+async fn get_habit(state: State<'_, AppState>, id: String) -> CmdResult<Habit> {
+    repo::habits::get_habit(&state.pool, &id).await.map_err(err)
+}
+
+#[tauri::command]
+async fn create_habit(state: State<'_, AppState>, input: HabitInput) -> CmdResult<Habit> {
+    repo::habits::create_habit(&state.pool, &state.bus, input).await.map_err(err)
+}
+
+#[tauri::command]
+async fn update_habit(state: State<'_, AppState>, id: String, input: HabitInput) -> CmdResult<Habit> {
+    repo::habits::update_habit(&state.pool, &state.bus, &id, input).await.map_err(err)
+}
+
+#[tauri::command]
+async fn set_habit_archived(state: State<'_, AppState>, id: String, archived: bool) -> CmdResult<()> {
+    repo::habits::set_archived(&state.pool, &state.bus, &id, archived).await.map_err(err)
+}
+
+#[tauri::command]
+async fn delete_habit(state: State<'_, AppState>, id: String) -> CmdResult<()> {
+    repo::habits::delete_habit(&state.pool, &state.bus, &id).await.map_err(err)
+}
+
+#[tauri::command]
+async fn reorder_habit(
+    state: State<'_, AppState>,
+    id: String,
+    after_id: Option<String>,
+) -> CmdResult<()> {
+    repo::habits::reorder_habit(&state.pool, &state.bus, &id, after_id.as_deref()).await.map_err(err)
+}
+
+#[tauri::command]
+async fn record_checkin(
+    state: State<'_, AppState>,
+    habit_id: String,
+    date: String,
+    status: String,
+    value: Option<f64>,
+    note: Option<String>,
+) -> CmdResult<HabitCheckin> {
+    repo::habits::record_checkin(&state.pool, &state.bus, &habit_id, &date, &status, value, note.as_deref())
+        .await
+        .map_err(err)
+}
+
+#[tauri::command]
+async fn delete_checkin(state: State<'_, AppState>, habit_id: String, date: String) -> CmdResult<()> {
+    repo::habits::delete_checkin(&state.pool, &state.bus, &habit_id, &date).await.map_err(err)
+}
+
+#[tauri::command]
+async fn list_checkins(
+    state: State<'_, AppState>,
+    habit_id: String,
+    from: String,
+    to: String,
+) -> CmdResult<Vec<HabitCheckin>> {
+    repo::habits::list_checkins(&state.pool, &habit_id, &from, &to).await.map_err(err)
+}
+
+#[tauri::command]
+async fn habit_stats(state: State<'_, AppState>, habit_id: String, today: String) -> CmdResult<HabitStats> {
+    repo::habits::habit_stats(&state.pool, &habit_id, &today).await.map_err(err)
+}
+
+#[tauri::command]
+async fn list_today_habits(state: State<'_, AppState>, today: String) -> CmdResult<Vec<HabitToday>> {
+    repo::habits::list_today(&state.pool, &today).await.map_err(err)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -805,6 +894,9 @@ pub fn run() {
             let sched_bus = bus.clone();
             let sched_handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
+                // Habit reminders fire at most once per (habit, day, time); dedup
+                // is kept in memory (a restart may re-fire a reminder once).
+                let mut habit_fired: std::collections::HashSet<String> = std::collections::HashSet::new();
                 let mut tick = tokio::time::interval(std::time::Duration::from_secs(30));
                 loop {
                     tick.tick().await;
@@ -834,6 +926,29 @@ pub fn run() {
                             task_id: r.task_id,
                             reminder_id: r.reminder_id,
                         });
+                    }
+
+                    // Habit reminders (local time). `today` in the key lets a new
+                    // day re-arm the same reminder.
+                    let tz_off = chrono::Local::now().offset().local_minus_utc() / 60;
+                    let today = (chrono::Utc::now() + chrono::Duration::minutes(tz_off as i64))
+                        .format("%Y-%m-%d")
+                        .to_string();
+                    if let Ok(habit_due) =
+                        repo::habits::due_habit_reminders(&sched_pool, chrono::Utc::now(), tz_off).await
+                    {
+                        for h in habit_due {
+                            let key = format!("{}|{}|{}", h.habit_id, today, h.time);
+                            if !habit_fired.insert(key) {
+                                continue;
+                            }
+                            let _ = sched_handle
+                                .notification()
+                                .builder()
+                                .title("Toodoo habit")
+                                .body(&h.name)
+                                .show();
+                        }
                     }
                 }
             });
@@ -945,7 +1060,19 @@ pub fn run() {
             list_focus_sessions,
             list_task_focus,
             focus_stats,
-            task_focus_actuals
+            task_focus_actuals,
+            list_habits,
+            get_habit,
+            create_habit,
+            update_habit,
+            set_habit_archived,
+            delete_habit,
+            reorder_habit,
+            record_checkin,
+            delete_checkin,
+            list_checkins,
+            habit_stats,
+            list_today_habits
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

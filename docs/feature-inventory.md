@@ -139,8 +139,7 @@ This is the checklist the whole project is graded against, converted from §3 of
   - [x] Auto-start options
   - [x] Daily pomo goal
 - [x] Stopwatch mode (count-up focus)
-- [x] Attach a focus session to a task or habit — task attach shipped; habit
-      attach lands with Phase 6 (habits)
+- [x] Attach a focus session to a task or habit
 - [x] Focus notes per session
 - [x] White noise / ambient sounds during focus
 - [ ] Mini floating focus window — deferred to Phase 12 (desktop pass)
@@ -155,27 +154,27 @@ This is the checklist the whole project is graded against, converted from §3 of
 
 ## 3.6 Habits (Pro)
 
-- [ ] Habit CRUD
-  - [ ] Name, icon, color, quote/motivation
-  - [ ] Goal type: simple check-in
-  - [ ] Goal type: target amount with units (e.g., "8 glasses")
-  - [ ] Frequency: daily, specific weekdays, X days per week/month
-  - [ ] Reminders
-  - [ ] Habit sections (Morning/Afternoon/Night/custom)
-  - [ ] Start date
-- [ ] Check-in flows
-  - [ ] Check
-  - [ ] Partial progress
-  - [ ] Skip
-  - [ ] Log with note
-  - [ ] Retroactive check-ins
-- [ ] Streaks
-- [ ] Monthly grid
-- [ ] Habit calendar heatmap
-- [ ] Per-habit statistics (total check-ins, streak best/current, completion rate)
-- [ ] Habit log/journal
-- [ ] Archive/restore habits
-- [ ] Habit library of presets
+- [x] Habit CRUD
+  - [x] Name, icon, color, quote/motivation
+  - [x] Goal type: simple check-in
+  - [x] Goal type: target amount with units (e.g., "8 glasses")
+  - [x] Frequency: daily, specific weekdays, X days per week/month
+  - [x] Reminders
+  - [x] Habit sections (Morning/Afternoon/Night/custom)
+  - [x] Start date
+- [x] Check-in flows
+  - [x] Check
+  - [x] Partial progress
+  - [x] Skip
+  - [x] Log with note
+  - [x] Retroactive check-ins
+- [x] Streaks
+- [x] Monthly grid
+- [x] Habit calendar heatmap
+- [x] Per-habit statistics (total check-ins, streak best/current, completion rate)
+- [x] Habit log/journal
+- [x] Archive/restore habits
+- [x] Habit library of presets
 
 ## 3.7 Countdown (Pro)
 

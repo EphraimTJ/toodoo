@@ -8,7 +8,8 @@ export type ViewSelection =
   | { kind: "filter"; filterId: string }
   | { kind: "matrix" }
   | { kind: "calendar" }
-  | { kind: "focus" };
+  | { kind: "focus" }
+  | { kind: "habits" };
 
 export function viewKey(view: ViewSelection): string {
   switch (view.kind) {
@@ -26,6 +27,8 @@ export function viewKey(view: ViewSelection): string {
       return "calendar";
     case "focus":
       return "focus";
+    case "habits":
+      return "habits";
   }
 }
 
