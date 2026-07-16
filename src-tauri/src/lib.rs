@@ -22,6 +22,7 @@ use repo::matrix::{Quadrant, QuadrantTasks};
 use repo::projects::{NewProject, Project, ProjectPatch};
 use repo::reminders::Reminder;
 use repo::sections::Section;
+use repo::stats::{AchievementInfo, ScorePoint, Summary};
 use repo::sticky_notes::StickyView;
 use repo::tags::Tag;
 use repo::tasks::{NewTask, SmartCounts, SmartView, Task, TaskPatch};
@@ -117,8 +118,8 @@ async fn update_task(state: State<'_, AppState>, id: String, patch: TaskPatch) -
 }
 
 #[tauri::command]
-async fn complete_task(state: State<'_, AppState>, id: String) -> CmdResult<Vec<String>> {
-    repo::tasks::complete_task(&state.pool, &state.bus, &id).await.map_err(err)
+async fn complete_task(state: State<'_, AppState>, id: String, tz_offset_min: i32) -> CmdResult<Vec<String>> {
+    repo::tasks::complete_task(&state.pool, &state.bus, &id, tz_offset_min).await.map_err(err)
 }
 
 #[tauri::command]
@@ -786,6 +787,28 @@ async fn task_focus_actuals(state: State<'_, AppState>, task_id: String) -> CmdR
     repo::focus::task_actuals(&state.pool, &task_id).await.map_err(err)
 }
 
+// ---- stats & achievements ------------------------------------------------------
+
+#[tauri::command]
+async fn achievement_info(state: State<'_, AppState>) -> CmdResult<AchievementInfo> {
+    repo::stats::achievement_info(&state.pool).await.map_err(err)
+}
+
+#[tauri::command]
+async fn score_history(state: State<'_, AppState>, from: String, to: String) -> CmdResult<Vec<ScorePoint>> {
+    repo::stats::score_history(&state.pool, &from, &to).await.map_err(err)
+}
+
+#[tauri::command]
+async fn stats_summary(
+    state: State<'_, AppState>,
+    from: String,
+    to: String,
+    tz_offset_min: i32,
+) -> CmdResult<Summary> {
+    repo::stats::summary(&state.pool, &from, &to, tz_offset_min).await.map_err(err)
+}
+
 // ---- habits --------------------------------------------------------------------
 
 #[tauri::command]
@@ -1075,6 +1098,21 @@ pub fn run() {
                 }
             });
 
+            // Overdue-penalty pass: hourly, dock points for tasks still open past
+            // their due date (capped and day-deduped inside the pass, so running
+            // it every hour is idempotent).
+            let pen_pool = pool.clone();
+            tauri::async_runtime::spawn(async move {
+                let mut tick = tokio::time::interval(std::time::Duration::from_secs(3600));
+                loop {
+                    tick.tick().await;
+                    let today = chrono::Local::now().format("%Y-%m-%d").to_string();
+                    if let Err(e) = repo::stats::overdue_penalty_pass(&pen_pool, &today).await {
+                        eprintln!("overdue penalty pass failed: {e}");
+                    }
+                }
+            });
+
             app.manage(AppState { pool, bus });
             Ok(())
         })
@@ -1169,6 +1207,9 @@ pub fn run() {
             list_task_focus,
             focus_stats,
             task_focus_actuals,
+            achievement_info,
+            score_history,
+            stats_summary,
             list_habits,
             get_habit,
             create_habit,

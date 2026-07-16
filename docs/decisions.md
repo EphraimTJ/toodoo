@@ -5,6 +5,44 @@ ambiguity we resolved by judgment call), with the reasoning. Newest entries at
 the top. Never rewrite history — if a decision is reversed, add a new entry
 that supersedes the old one.
 
+## 2026-07-16 — Stats, Achievement & Summary (user-approved)
+
+**Scoring:** completing a task earns **+2** when done on or before its due day,
+**+1** when late or when it has no due date (day-granular). Each open task past
+its due date loses **−1 per day**, capped at **−3/day** overall. Level tiers
+(cumulative score): **Novice 0 / Rising 100 / Focused 500 / Pro 2000 /
+Master 10000**. (User-chosen thresholds; TickTick's exact curve is unpublished.)
+
+**Award path — deliberate deviation:** points are awarded **inline inside
+`tasks::complete_task`'s transaction** (via `stats::award_completion`), not from
+an event-bus consumer. Rationale: the award commits atomically with the
+completion (no double-count on replay, deterministic in tests). Overdue penalties
+come from an **hourly scheduler pass** (`stats::overdue_penalty_pass`) that is
+**idempotent per day** — dedup key is an `achievements.reason` of
+`overdue:<taskId>`, so re-running the hour (or day) never double-penalizes.
+
+**Universal completion ledger:** `complete_task` now records a `task_completions`
+row for **every** completion (previously only the recurring path did). This ledger
+— plus `focus_sessions` — is the sole source for the summary. The recurring path
+awards once **per occurrence**.
+
+**Completion rate = due-in-period basis:** rate = tasks completed ÷ tasks whose
+**due date** falls in the period (not ÷ all completions), matching how TickTick
+frames "on-time" performance. NOTE-kind items are excluded from all counts.
+
+**Local-time dating:** the `achievements.date` ledger key and all summary
+day/weekday/hour bucketing use the **user's local timezone** (tz offset passed
+into `complete_task` and `stats_summary`; the scheduler uses server local time),
+so a completion lands on the local day the user experienced.
+
+**No migration:** `achievements` (0001) and `task_completions` (0003) already
+exist; the phase adds `repo/stats.rs` + three commands + one scheduler pass only.
+
+**Browser stub parity:** the stub mirrors scoring and the summary from in-memory
+`achievements`/`taskCompletions`, but has **no scheduler**, so overdue penalties
+are **Tauri-only**. `score.ts` is pinned to the same unit tests as the Rust
+scoring so the two can't drift.
+
 ## 2026-07-15 — Timeline (Gantt) view (user-approved)
 
 **Placement:** the Timeline is a **per-project view mode** (List / Kanban /

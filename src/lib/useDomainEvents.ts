@@ -26,6 +26,7 @@ export function useDomainEvents(): void {
             void queryClient.invalidateQueries({ queryKey: ["checkItems"] });
             void queryClient.invalidateQueries({ queryKey: ["activity"] });
             void queryClient.invalidateQueries({ queryKey: ["smartCounts"] });
+            void queryClient.invalidateQueries({ queryKey: ["stats"] });
             if (entity === "seed") {
               void queryClient.invalidateQueries({ queryKey: ["projects"] });
             }

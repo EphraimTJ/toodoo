@@ -322,7 +322,7 @@ mod tests {
         let task = timed_task(&pool, &bus, "2026-03-10T17:00:00.000Z").await;
         add_reminder(&pool, &bus, &task, "ABS", Some("2026-03-10T08:00:00.000Z"), None).await.unwrap();
 
-        complete_task(&pool, &bus, &task).await.unwrap();
+        complete_task(&pool, &bus, &task, 0).await.unwrap();
         assert!(due_reminders(&pool, t("2026-03-10T08:00:00Z")).await.unwrap().is_empty());
 
         // A separate trashed task with a reminder is also silent.

@@ -11,6 +11,7 @@ import { CountdownView } from "../../features/countdown/components/CountdownView
 import { NoteListView } from "../../features/notes/components/NoteListView";
 import { StickyBoard } from "../../features/sticky/components/StickyBoard";
 import { TimelineView } from "../../features/timeline/components/TimelineView";
+import { StatsView } from "../../features/stats/components/StatsView";
 
 export function ListPane() {
   const view = useUiStore((s) => s.view);
@@ -31,6 +32,8 @@ export function ListPane() {
     content = <FilterResultsView filterId={view.filterId} />;
   } else if (view.kind === "sticky") {
     content = <StickyBoard />;
+  } else if (view.kind === "stats") {
+    content = <StatsView />;
   } else if (view.kind === "project") {
     const project = (projects ?? []).find((p) => p.id === view.projectId);
     content =

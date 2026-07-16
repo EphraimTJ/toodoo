@@ -40,6 +40,8 @@ export function useTaskMutations() {
   const invalidate = () => {
     void queryClient.invalidateQueries({ queryKey: ["tasks"] });
     void queryClient.invalidateQueries({ queryKey: ["smartCounts"] });
+    // Completing/reopening a task moves the achievement score and summary.
+    void queryClient.invalidateQueries({ queryKey: ["stats"] });
   };
 
   const createTask = useMutation({
@@ -105,6 +107,7 @@ export function useBatchMutations() {
   const invalidate = () => {
     void queryClient.invalidateQueries({ queryKey: ["tasks"] });
     void queryClient.invalidateQueries({ queryKey: ["smartCounts"] });
+    void queryClient.invalidateQueries({ queryKey: ["stats"] });
   };
 
   return useMutation({

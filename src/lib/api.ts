@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { evaluateRule, parseQuery, resolveQuery } from "../features/filters/lib/rule";
+import { completionPoints, levelFor } from "../features/stats/lib/score";
 import {
   completionRate as habitCompletionRate,
   isScheduled as habitIsScheduled,
@@ -258,6 +259,35 @@ export interface FocusStats {
 export interface TaskActuals {
   actualMs: number;
   actualPomos: number;
+}
+
+// ---- Stats & achievements ---------------------------------------------------
+
+export interface AchievementInfo {
+  score: number;
+  level: number;
+  title: string;
+  base: number;
+  next: number | null;
+}
+export interface ScorePoint {
+  date: string;
+  delta: number;
+  cumulative: number;
+}
+export interface StatsDayCount {
+  date: string;
+  count: number;
+}
+export interface StatsSummary {
+  completedCount: number;
+  completionRate: number;
+  focusMs: number;
+  perDay: StatsDayCount[];
+  weekday: number[]; // 0=Mon .. 6=Sun
+  hour: number[]; // 0..23
+  lateCount: number;
+  overdueCount: number;
 }
 
 // ---- Habits -----------------------------------------------------------------
@@ -573,6 +603,10 @@ export interface Api {
   focusStats(from: string, to: string): Promise<FocusStats>;
   taskFocusActuals(taskId: string): Promise<TaskActuals>;
 
+  achievementInfo(): Promise<AchievementInfo>;
+  scoreHistory(from: string, to: string): Promise<ScorePoint[]>;
+  statsSummary(from: string, to: string): Promise<StatsSummary>;
+
   listHabits(includeArchived: boolean): Promise<Habit[]>;
   getHabit(id: string): Promise<Habit>;
   createHabit(input: HabitInput): Promise<Habit>;
@@ -639,7 +673,7 @@ const tauriApi: Api = {
   createTask: (input) => invoke("create_task", { input }),
   getTask: (id) => invoke("get_task", { id }),
   updateTask: (id, patch) => invoke("update_task", { id, patch }),
-  completeTask: (id) => invoke("complete_task", { id }),
+  completeTask: (id) => invoke("complete_task", { id, tzOffsetMin: localDateParams().tzOffsetMin }),
   reopenTask: (id) => invoke("reopen_task", { id }),
   trashTask: (id) => invoke("trash_task", { id }),
   restoreTask: (id) => invoke("restore_task", { id }),
@@ -776,6 +810,11 @@ const tauriApi: Api = {
   focusStats: (from, to) => invoke("focus_stats", { from, to, tzOffsetMin: localDateParams().tzOffsetMin }),
   taskFocusActuals: (taskId) => invoke("task_focus_actuals", { taskId }),
 
+  achievementInfo: () => invoke("achievement_info"),
+  scoreHistory: (from, to) => invoke("score_history", { from, to }),
+  statsSummary: (from, to) =>
+    invoke("stats_summary", { from, to, tzOffsetMin: localDateParams().tzOffsetMin }),
+
   listHabits: (includeArchived) => invoke("list_habits", { includeArchived }),
   getHabit: (id) => invoke("get_habit", { id }),
   createHabit: (input) => invoke("create_habit", { input }),
@@ -865,8 +904,24 @@ function browserStubApi(): Api {
     open: boolean;
   }
   const stickies: StickyRow[] = [];
+  // Stats ledgers, mirroring the achievements + task_completions tables. The stub
+  // has no scheduler, so overdue penalties are Tauri-only (docs/decisions.md).
+  const achievements: { date: string; delta: number; reason: string }[] = [];
+  const taskCompletions: { taskId: string; occurrenceAt: string | null; completedAt: string }[] = [];
   const nowIso = () => new Date().toISOString();
   const uid = () => crypto.randomUUID();
+
+  /** Record one completion in the ledger and award its points. The achievement
+   * row is dated in local time, matching the local ranges the stats views query. */
+  const recordCompletion = (taskId: string, dueAt: string | null, occurrenceAt: string | null) => {
+    const completedAt = nowIso();
+    taskCompletions.push({ taskId, occurrenceAt, completedAt });
+    achievements.push({
+      date: focusLocalDay(completedAt),
+      delta: completionPoints(dueAt, completedAt),
+      reason: "completed",
+    });
+  };
 
   const focusEffMs = (s: FocusSession) =>
     s.endedAt ? Math.max(0, new Date(s.endedAt).getTime() - new Date(s.startedAt).getTime() - s.pauseMs) : 0;
@@ -1134,6 +1189,7 @@ function browserStubApi(): Api {
           } else if (top.startAt) {
             top.startAt = newAnchor;
           }
+          recordCompletion(top.id, anchor, anchor);
           top.updatedAt = nowIso();
           logActivity(top.id, "recurrence_advanced");
           return [];
@@ -1145,6 +1201,9 @@ function browserStubApi(): Api {
         t.status = "COMPLETED";
         t.completedAt = nowIso();
         logActivity(t.id, "completed");
+      }
+      if (targets.some((t) => t.id === id)) {
+        recordCompletion(top.id, top.dueAt ?? null, top.dueAt ?? top.startAt ?? null);
       }
       return targets.map((t) => t.id);
     },
@@ -1767,6 +1826,81 @@ function browserStubApi(): Api {
       return {
         actualMs: rows.reduce((sum, s) => sum + focusEffMs(s), 0),
         actualPomos: rows.filter((s) => s.kind === "POMO").length,
+      };
+    },
+
+    achievementInfo: async () => {
+      const score = achievements.reduce((sum, a) => sum + a.delta, 0);
+      const lv = levelFor(score);
+      return { score, level: lv.level, title: lv.title, base: lv.base, next: lv.next };
+    },
+    scoreHistory: async (from, to) => {
+      const before = achievements
+        .filter((a) => a.date < from)
+        .reduce((sum, a) => sum + a.delta, 0);
+      const byDate = new Map<string, number>();
+      for (const a of achievements) {
+        if (a.date >= from && a.date <= to) byDate.set(a.date, (byDate.get(a.date) ?? 0) + a.delta);
+      }
+      let cum = before;
+      return [...byDate.entries()]
+        .sort((a, b) => a[0].localeCompare(b[0]))
+        .map(([date, delta]) => {
+          cum += delta;
+          return { date, delta, cumulative: cum };
+        });
+    },
+    statsSummary: async (from, to) => {
+      // Bucket by the *local* completion day (matching the Rust path), so `from`/
+      // `to` (local YYYY-MM-DD) line up with completedAt stored in UTC.
+      const rows = taskCompletions.filter((c) => {
+        const day = focusLocalDay(c.completedAt);
+        return day >= from && day <= to;
+      });
+      const perDay = new Map<string, number>();
+      const weekday = new Array(7).fill(0);
+      const hour = new Array(24).fill(0);
+      let lateCount = 0;
+      for (const c of rows) {
+        const d = new Date(c.completedAt);
+        const dayKey = focusLocalDay(c.completedAt);
+        perDay.set(dayKey, (perDay.get(dayKey) ?? 0) + 1);
+        weekday[(d.getDay() + 6) % 7] += 1; // 0=Mon..6=Sun
+        hour[d.getHours()] += 1;
+        if (c.occurrenceAt && c.completedAt.slice(0, 10) > c.occurrenceAt.slice(0, 10)) lateCount += 1;
+      }
+      const dueInPeriod = tasks.filter(
+        (t) =>
+          t.kind !== "NOTE" &&
+          t.dueAt &&
+          t.dueAt.slice(0, 10) >= from &&
+          t.dueAt.slice(0, 10) <= to,
+      );
+      const completedDue = dueInPeriod.filter((t) => t.status === "COMPLETED").length;
+      const completionRate = dueInPeriod.length > 0 ? completedDue / dueInPeriod.length : 0;
+      const overdueCount = tasks.filter(
+        (t) => t.status === "ACTIVE" && t.kind !== "NOTE" && t.dueAt && t.dueAt.slice(0, 10) < to,
+      ).length;
+      const focusMs = focusSessions
+        .filter(
+          (s) =>
+            s.status === "DONE" &&
+            s.endedAt &&
+            s.startedAt >= `${from}T00:00:00.000Z` &&
+            s.startedAt <= `${to}T23:59:59.999Z`,
+        )
+        .reduce((sum, s) => sum + focusEffMs(s), 0);
+      return {
+        completedCount: rows.length,
+        completionRate,
+        focusMs,
+        perDay: [...perDay.entries()]
+          .sort((a, b) => a[0].localeCompare(b[0]))
+          .map(([date, count]) => ({ date, count })),
+        weekday,
+        hour,
+        lateCount,
+        overdueCount,
       };
     },
 

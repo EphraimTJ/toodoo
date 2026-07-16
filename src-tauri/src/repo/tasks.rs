@@ -350,13 +350,18 @@ async fn record_completion(
 /// it ACTIVE — until an end condition (`COUNT=`/`UNTIL=`) is reached, at which
 /// point it completes for real. Recurrence acts on the task itself, not its
 /// subtree (docs/decisions.md).
-pub async fn complete_task(pool: &SqlitePool, bus: &EventBus, id: &str) -> Result<Vec<String>> {
+pub async fn complete_task(
+    pool: &SqlitePool,
+    bus: &EventBus,
+    id: &str,
+    tz_off_min: i32,
+) -> Result<Vec<String>> {
     let top = get_task(pool, id).await?;
     let is_recurring = top.rrule.as_deref().is_some_and(|r| !r.trim().is_empty())
         && (top.due_at.is_some() || top.start_at.is_some())
         && top.status == "ACTIVE";
     if is_recurring {
-        return advance_recurrence(pool, bus, &top).await;
+        return advance_recurrence(pool, bus, &top, tz_off_min).await;
     }
 
     let ids = subtree_ids(pool, id).await?;
@@ -389,6 +394,13 @@ pub async fn complete_task(pool: &SqlitePool, bus: &EventBus, id: &str) -> Resul
             completed.push(task_id.clone());
         }
     }
+    // Record the completion of the task the user closed and award points — this
+    // makes task_completions the universal stats ledger (docs/decisions.md).
+    if completed.iter().any(|c| c == id) {
+        let occurrence = top.due_at.as_deref().or(top.start_at.as_deref());
+        record_completion(&mut tx, id, occurrence, &ts, "COMPLETED").await?;
+        super::stats::award_completion(&mut tx, top.due_at.as_deref(), &ts, tz_off_min).await?;
+    }
     tx.commit().await?;
 
     if !completed.is_empty() {
@@ -400,12 +412,19 @@ pub async fn complete_task(pool: &SqlitePool, bus: &EventBus, id: &str) -> Resul
 /// Close the current occurrence of a recurring task and roll it forward. Returns
 /// the ids that ended up COMPLETED — empty while the series continues, `[id]`
 /// once it ends.
-async fn advance_recurrence(pool: &SqlitePool, bus: &EventBus, top: &Task) -> Result<Vec<String>> {
+async fn advance_recurrence(
+    pool: &SqlitePool,
+    bus: &EventBus,
+    top: &Task,
+    tz_off_min: i32,
+) -> Result<Vec<String>> {
     let ts = now();
     let occurrence = top.due_at.as_deref().or(top.start_at.as_deref());
     let mut tx = pool.begin().await?;
 
     record_completion(&mut tx, &top.id, occurrence, &ts, "COMPLETED").await?;
+    // Each closed occurrence earns points, scored against that occurrence's due.
+    super::stats::award_completion(&mut tx, top.due_at.as_deref(), &ts, tz_off_min).await?;
 
     // Occurrences closed so far (including the one just recorded) bound `COUNT=`.
     let completed_so_far: i64 = sqlx::query_scalar(
@@ -1053,7 +1072,7 @@ pub(crate) mod tests {
         let mid = child_of(&pool, &bus, &root.id, "mid").await;
         let leaf = child_of(&pool, &bus, &mid.id, "leaf").await;
 
-        let completed = complete_task(&pool, &bus, &root.id).await.unwrap();
+        let completed = complete_task(&pool, &bus, &root.id, 0).await.unwrap();
         assert_eq!(completed.len(), 3);
         for id in [&root.id, &mid.id, &leaf.id] {
             let t = get_task(&pool, id).await.unwrap();
@@ -1079,7 +1098,7 @@ pub(crate) mod tests {
         let mid = child_of(&pool, &bus, &root.id, "mid").await;
         let leaf = child_of(&pool, &bus, &mid.id, "leaf").await;
 
-        complete_task(&pool, &bus, &mid.id).await.unwrap();
+        complete_task(&pool, &bus, &mid.id, 0).await.unwrap();
         assert_eq!(get_task(&pool, &root.id).await.unwrap().status, "ACTIVE");
         assert_eq!(get_task(&pool, &mid.id).await.unwrap().status, "COMPLETED");
         assert_eq!(get_task(&pool, &leaf.id).await.unwrap().status, "COMPLETED");
@@ -1090,7 +1109,7 @@ pub(crate) mod tests {
         let (pool, bus) = setup().await;
         let root = create_task(&pool, &bus, quick("inbox", "root")).await.unwrap();
         let kid = child_of(&pool, &bus, &root.id, "kid").await;
-        complete_task(&pool, &bus, &root.id).await.unwrap();
+        complete_task(&pool, &bus, &root.id, 0).await.unwrap();
 
         reopen_task(&pool, &bus, &root.id).await.unwrap();
         let root = get_task(&pool, &root.id).await.unwrap();
@@ -1104,9 +1123,9 @@ pub(crate) mod tests {
         let (pool, bus) = setup().await;
         let root = create_task(&pool, &bus, quick("inbox", "root")).await.unwrap();
         let kid = child_of(&pool, &bus, &root.id, "kid").await;
-        complete_task(&pool, &bus, &kid.id).await.unwrap();
+        complete_task(&pool, &bus, &kid.id, 0).await.unwrap();
 
-        let completed = complete_task(&pool, &bus, &root.id).await.unwrap();
+        let completed = complete_task(&pool, &bus, &root.id, 0).await.unwrap();
         assert_eq!(completed, vec![root.id.clone()]);
     }
 
@@ -1198,7 +1217,7 @@ pub(crate) mod tests {
         let t = create_task(&pool, &bus, dated("inbox", "done soon", "2026-07-14T00:00:00.000Z", true))
             .await
             .unwrap();
-        complete_task(&pool, &bus, &t.id).await.unwrap();
+        complete_task(&pool, &bus, &t.id, 0).await.unwrap();
 
         assert!(list_smart(&pool, SmartView::Today, TODAY, 0).await.unwrap().is_empty());
         let completed = list_smart(&pool, SmartView::Completed, TODAY, 0).await.unwrap();
@@ -1339,7 +1358,7 @@ pub(crate) mod tests {
         .unwrap();
 
         // Completing an occurrence rolls the date forward; nothing is "completed".
-        let completed = complete_task(&pool, &bus, &t.id).await.unwrap();
+        let completed = complete_task(&pool, &bus, &t.id, 0).await.unwrap();
         assert!(completed.is_empty());
 
         let rolled = get_task(&pool, &t.id).await.unwrap();
@@ -1360,11 +1379,11 @@ pub(crate) mod tests {
         .unwrap();
 
         // First close advances to occurrence 2 and stays active.
-        assert!(complete_task(&pool, &bus, &t.id).await.unwrap().is_empty());
+        assert!(complete_task(&pool, &bus, &t.id, 0).await.unwrap().is_empty());
         assert_eq!(get_task(&pool, &t.id).await.unwrap().due_at.as_deref(), Some("2026-03-11T00:00:00.000Z"));
 
         // Second close hits COUNT=2 → the series ends and the task completes.
-        let completed = complete_task(&pool, &bus, &t.id).await.unwrap();
+        let completed = complete_task(&pool, &bus, &t.id, 0).await.unwrap();
         assert_eq!(completed, vec![t.id.clone()]);
         assert_eq!(get_task(&pool, &t.id).await.unwrap().status, "COMPLETED");
         assert_eq!(completion_count(&pool, &t.id).await, 2);
@@ -1377,7 +1396,7 @@ pub(crate) mod tests {
         update_task(&pool, &bus, &t.id, TaskPatch { title: Some("logged".into()), ..Default::default() })
             .await
             .unwrap();
-        complete_task(&pool, &bus, &t.id).await.unwrap();
+        complete_task(&pool, &bus, &t.id, 0).await.unwrap();
 
         let actions: Vec<String> = crate::repo::activity::list_activity(&pool, "task", &t.id)
             .await

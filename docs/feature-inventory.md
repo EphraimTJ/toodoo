@@ -204,15 +204,15 @@ This is the checklist the whole project is graded against, converted from §3 of
 
 ## 3.10 Statistics & Gamification
 
-- [ ] Achievement score with level tiers
-- [ ] Score history (earn for completing on time, lose for overdue)
-- [ ] Weekly/monthly summary reports
-  - [ ] Completion rate
-  - [ ] Tasks completed
-  - [ ] Focus time
-  - [ ] Best day/hour heatmaps
-- [ ] Daily/weekly completion charts
-- [ ] Procrastination stats
+- [x] Achievement score with level tiers
+- [x] Score history (earn for completing on time, lose for overdue)
+- [x] Weekly/monthly summary reports
+  - [x] Completion rate
+  - [x] Tasks completed
+  - [x] Focus time
+  - [x] Best day/hour heatmaps
+- [x] Daily/weekly completion charts
+- [x] Procrastination stats
 
 ## 3.11 Desktop UX
 

@@ -11,7 +11,8 @@ export type ViewSelection =
   | { kind: "focus" }
   | { kind: "habits" }
   | { kind: "countdown" }
-  | { kind: "sticky" };
+  | { kind: "sticky" }
+  | { kind: "stats" };
 
 export function viewKey(view: ViewSelection): string {
   switch (view.kind) {
@@ -35,6 +36,8 @@ export function viewKey(view: ViewSelection): string {
       return "countdown";
     case "sticky":
       return "sticky";
+    case "stats":
+      return "stats";
   }
 }
 

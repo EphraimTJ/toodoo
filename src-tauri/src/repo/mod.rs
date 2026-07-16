@@ -22,6 +22,7 @@ pub mod reminders;
 pub mod search;
 pub mod sections;
 pub mod seed;
+pub mod stats;
 pub mod sticky_notes;
 pub mod settings;
 pub mod tags;
