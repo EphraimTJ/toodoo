@@ -9,7 +9,9 @@ export type ViewSelection =
   | { kind: "matrix" }
   | { kind: "calendar" }
   | { kind: "focus" }
-  | { kind: "habits" };
+  | { kind: "habits" }
+  | { kind: "countdown" }
+  | { kind: "sticky" };
 
 export function viewKey(view: ViewSelection): string {
   switch (view.kind) {
@@ -29,6 +31,10 @@ export function viewKey(view: ViewSelection): string {
       return "focus";
     case "habits":
       return "habits";
+    case "countdown":
+      return "countdown";
+    case "sticky":
+      return "sticky";
   }
 }
 

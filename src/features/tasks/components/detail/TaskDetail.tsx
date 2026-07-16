@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { DropdownMenu, Popover } from "radix-ui";
 import { api, type Priority, type Task } from "../../../../lib/api";
 import { useUiStore } from "../../../../lib/uiStore";
@@ -232,6 +232,7 @@ function TagPicker({ task }: { task: Task }) {
 
 export function TaskDetail() {
   const { selectedTaskId, selectTask } = useUiStore();
+  const queryClient = useQueryClient();
   const { updateTask, trashTask, restoreTask, completeTask, reopenTask, setPinned } =
     useTaskMutations();
 
@@ -339,28 +340,48 @@ export function TaskDetail() {
       <TaskFocusInfo task={task} />
       <ActivityLog task={task} />
 
-      <div className="mt-auto flex justify-end gap-2 pt-4">
-        {trashed ? (
-          <button
-            type="button"
-            className="rounded-md border border-border px-2 py-1 text-xs text-accent hover:bg-accent/10"
-            onClick={() => restoreTask.mutate(task.id)}
-          >
-            Restore
-          </button>
-        ) : (
-          <button
-            type="button"
-            aria-label="Move task to trash"
-            className="rounded-md border border-border px-2 py-1 text-xs text-text-muted hover:text-red-500"
-            onClick={() => {
-              trashTask.mutate(task.id);
-              selectTask(null);
-            }}
-          >
-            🗑 Trash
-          </button>
-        )}
+      <div className="mt-auto flex items-center gap-2 pt-4">
+        <button
+          type="button"
+          className="rounded-md border border-border px-2 py-1 text-xs text-text-muted hover:text-text"
+          onClick={() =>
+            void api.setTaskKind(task.id, task.kind === "NOTE" ? "TASK" : "NOTE").then(() => {
+              void queryClient.invalidateQueries({ queryKey: ["tasks"] });
+            })
+          }
+        >
+          {task.kind === "NOTE" ? "Convert to task" : "Convert to note"}
+        </button>
+        <button
+          type="button"
+          className="rounded-md border border-border px-2 py-1 text-xs text-text-muted hover:text-accent"
+          onClick={() => void api.stickyFromTask(task.id)}
+        >
+          📌 Pop out
+        </button>
+        <div className="ml-auto flex gap-2">
+          {trashed ? (
+            <button
+              type="button"
+              className="rounded-md border border-border px-2 py-1 text-xs text-accent hover:bg-accent/10"
+              onClick={() => restoreTask.mutate(task.id)}
+            >
+              Restore
+            </button>
+          ) : (
+            <button
+              type="button"
+              aria-label="Move task to trash"
+              className="rounded-md border border-border px-2 py-1 text-xs text-text-muted hover:text-red-500"
+              onClick={() => {
+                trashTask.mutate(task.id);
+                selectTask(null);
+              }}
+            >
+              🗑 Trash
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );

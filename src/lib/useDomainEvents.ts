@@ -62,6 +62,13 @@ export function useDomainEvents(): void {
           case "habit":
             void queryClient.invalidateQueries({ queryKey: ["habits"] });
             break;
+          case "countdown":
+            void queryClient.invalidateQueries({ queryKey: ["countdowns"] });
+            break;
+          case "sticky":
+            void queryClient.invalidateQueries({ queryKey: ["stickies"] });
+            void queryClient.invalidateQueries({ queryKey: ["tasks"] });
+            break;
           case "project":
           case "folder":
             void queryClient.invalidateQueries({ queryKey: ["projects"] });

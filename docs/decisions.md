@@ -5,6 +5,30 @@ ambiguity we resolved by judgment call), with the reasoning. Newest entries at
 the top. Never rewrite history — if a decision is reversed, add a new entry
 that supersedes the old one.
 
+## 2026-07-15 — Countdown / Notes / Sticky Notes (user-approved)
+
+**Sticky notes:** ship as an **in-app board** this phase (draggable colored
+cards, position/color persisted); the always-on-top **pop-out Tauri window** is
+**deferred to Phase 12** (with the Phase-5 mini focus window + tray). A standalone
+quick sticky is a **NOTE-kind task** (its text) in the Inbox plus a `sticky_notes`
+row; the note is hidden from task views by the NOTE-exclusion rule below.
+
+**Countdown mode:** auto-derived — a future target counts **down** ("in N days"),
+a past target counts **since** ("N days since"), and an annual-repeat target
+points at the **next anniversary** (Feb 29 clamps to Feb 28 off leap years). An
+explicit **count-up toggle** (stored in `style_json` alongside the cover color)
+forces the "since" view for fixed past-date milestones. The date math is pure
+(`countdowns::countdown_view`) and mirrored in `countdown.ts` to parity.
+
+**Notes:** NOTE-kind items are excluded from **smart lists** (and the Inbox
+count) and from **TASK-list views**; they appear only in note lists and, for a
+sticky's backing note, on the board. **Convert note↔task** flips `tasks.kind`
+(`set_task_kind`). A note list is a project with `kind = NOTE`, rendered by
+`NoteListView` (rich text in the shared detail pane, no checkbox/date).
+
+**No migration:** `countdowns`, `sticky_notes`, and the `kind` columns all exist
+in 0001; countdown color + count-up live in `style_json`.
+
 ## 2026-07-15 — Habits: skip-neutral/period streaks, reminders fire, focus link (user-approved)
 
 **Streaks (the main testable logic):** a Skip is **neutral** — it preserves a

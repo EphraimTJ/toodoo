@@ -51,7 +51,7 @@ This is the checklist the whole project is graded against, converted from §3 of
 - [x] Pin tasks
 - [ ] "Won't Do" status
 - [ ] Task duplication
-- [ ] Convert note ↔ task
+- [x] Convert note ↔ task
 - [x] Batch edit (multi-select: move, tag, date, priority, delete)
 - [ ] Copy task link (`toodoo://task/<id>` URL scheme)
 - [ ] Location reminders (adapted per §9: data model + manual "arrive/leave"
@@ -178,19 +178,21 @@ This is the checklist the whole project is graded against, converted from §3 of
 
 ## 3.7 Countdown (Pro)
 
-- [ ] Countdown items: event name, target date
-- [ ] Repeat (annual birthdays/anniversaries)
-- [ ] Cover styles/colors
-- [ ] Days-since (count-up) mode
-- [ ] Pin countdowns
-- [ ] Countdown detail cards
+- [x] Countdown items: event name, target date
+- [x] Repeat (annual birthdays/anniversaries)
+- [x] Cover styles/colors
+- [x] Days-since (count-up) mode
+- [x] Pin countdowns
+- [x] Countdown detail cards
 
 ## 3.8 Notes & Sticky Notes
 
-- [ ] Note-type items (a list can be a "note list"; notes have no due date
+- [x] Note-type items (a list can be a "note list"; notes have no due date
       semantics, support rich text)
 - [ ] Desktop Sticky Notes: pop any note/task out as an always-on-top mini window
-  - [ ] Color options
+      — in-app sticky board shipped; the always-on-top pop-out window is deferred
+      to Phase 12 (desktop pass)
+  - [x] Color options
 
 ## 3.9 Search
 

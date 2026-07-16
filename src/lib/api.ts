@@ -319,6 +319,35 @@ export interface HabitToday {
   streak: number;
 }
 
+// ---- Countdowns & Sticky Notes ----------------------------------------------
+
+export interface Countdown {
+  id: string;
+  title: string;
+  targetDate: string;
+  repeatAnnual: boolean;
+  styleJson: string | null;
+  pinned: boolean;
+}
+
+/** Shape stored in Countdown.styleJson. */
+export interface CountdownStyle {
+  color?: string;
+  countUp?: boolean;
+}
+
+export interface StickyView {
+  id: string;
+  noteId: string;
+  title: string;
+  contentPlain: string | null;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  color: string | null;
+}
+
 export interface CheckItem {
   id: string;
   taskId: string;
@@ -375,6 +404,7 @@ export interface NewTask {
   timeZone?: string;
   rrule?: string;
   repeatFrom?: RepeatFrom;
+  kind?: "TASK" | "CHECKLIST" | "NOTE";
 }
 
 export interface TaskPatch {
@@ -562,6 +592,33 @@ export interface Api {
   habitStats(habitId: string): Promise<HabitStats>;
   listTodayHabits(): Promise<HabitToday[]>;
 
+  setTaskKind(id: string, kind: "TASK" | "CHECKLIST" | "NOTE"): Promise<void>;
+
+  listCountdowns(): Promise<Countdown[]>;
+  createCountdown(
+    title: string,
+    targetDate: string,
+    repeatAnnual: boolean,
+    styleJson?: string | null,
+  ): Promise<Countdown>;
+  updateCountdown(
+    id: string,
+    patch: { title?: string; targetDate?: string; repeatAnnual?: boolean; styleJson?: string },
+  ): Promise<Countdown>;
+  setCountdownPinned(id: string, pinned: boolean): Promise<void>;
+  deleteCountdown(id: string): Promise<void>;
+
+  listStickies(): Promise<StickyView[]>;
+  newQuickSticky(text: string, color?: string | null): Promise<string>;
+  stickyFromNote(noteId: string, color?: string | null): Promise<string>;
+  stickyFromTask(taskId: string, color?: string | null): Promise<string>;
+  updateSticky(
+    id: string,
+    patch: { x?: number; y?: number; w?: number; h?: number; color?: string },
+  ): Promise<void>;
+  closeSticky(id: string): Promise<void>;
+  deleteSticky(id: string): Promise<void>;
+
   getSetting(key: string): Promise<JsonValue | null>;
   setSetting(key: string, value: JsonValue): Promise<void>;
   seedDemoData(tasks: number): Promise<void>;
@@ -733,6 +790,38 @@ const tauriApi: Api = {
   habitStats: (habitId) => invoke("habit_stats", { habitId, today: localDateParams().today }),
   listTodayHabits: () => invoke("list_today_habits", { today: localDateParams().today }),
 
+  setTaskKind: (id, kind) => invoke("set_task_kind", { id, kind }),
+
+  listCountdowns: () => invoke("list_countdowns"),
+  createCountdown: (title, targetDate, repeatAnnual, styleJson) =>
+    invoke("create_countdown", { title, targetDate, repeatAnnual, styleJson: styleJson ?? null }),
+  updateCountdown: (id, patch) =>
+    invoke("update_countdown", {
+      id,
+      title: patch.title ?? null,
+      targetDate: patch.targetDate ?? null,
+      repeatAnnual: patch.repeatAnnual ?? null,
+      styleJson: patch.styleJson ?? null,
+    }),
+  setCountdownPinned: (id, pinned) => invoke("set_countdown_pinned", { id, pinned }),
+  deleteCountdown: (id) => invoke("delete_countdown", { id }),
+
+  listStickies: () => invoke("list_stickies"),
+  newQuickSticky: (text, color) => invoke("new_quick_sticky", { text, color: color ?? null }),
+  stickyFromNote: (noteId, color) => invoke("sticky_from_note", { noteId, color: color ?? null }),
+  stickyFromTask: (taskId, color) => invoke("sticky_from_task", { taskId, color: color ?? null }),
+  updateSticky: (id, patch) =>
+    invoke("update_sticky", {
+      id,
+      x: patch.x ?? null,
+      y: patch.y ?? null,
+      w: patch.w ?? null,
+      h: patch.h ?? null,
+      color: patch.color ?? null,
+    }),
+  closeSticky: (id) => invoke("close_sticky", { id }),
+  deleteSticky: (id) => invoke("delete_sticky", { id }),
+
   getSetting: (key) => invoke("get_setting", { key }),
   setSetting: (key, value) => invoke("set_setting", { key, value }),
   seedDemoData: (tasks) => invoke("seed_demo_data", { tasks }),
@@ -764,6 +853,18 @@ function browserStubApi(): Api {
   const habitCheckins: HabitCheckin[] = [];
   const habitMarks = (habitId: string): [string, string][] =>
     habitCheckins.filter((c) => c.habitId === habitId).map((c) => [c.date, c.status]);
+  const countdowns: Countdown[] = [];
+  interface StickyRow {
+    id: string;
+    noteId: string;
+    x: number;
+    y: number;
+    w: number;
+    h: number;
+    color: string | null;
+    open: boolean;
+  }
+  const stickies: StickyRow[] = [];
   const nowIso = () => new Date().toISOString();
   const uid = () => crypto.randomUUID();
 
@@ -967,7 +1068,7 @@ function browserStubApi(): Api {
         title: input.title,
         contentRich: null,
         contentPlain: null,
-        kind: "TASK",
+        kind: input.kind ?? "TASK",
         status: "ACTIVE",
         priority: input.priority ?? 0,
         startAt: input.startAt ?? null,
@@ -1093,7 +1194,9 @@ function browserStubApi(): Api {
       clone(tasks.filter((t) => liveTask(t) && t.tagIds.includes(tagId))),
     listSmart: async (view) => {
       const { today } = localDateParams();
-      const active = tasks.filter((t) => t.status === "ACTIVE");
+      // Notes never appear in the date/smart lists.
+      const notNote = tasks.filter((t) => t.kind !== "NOTE");
+      const active = notNote.filter((t) => t.status === "ACTIVE");
       switch (view) {
         case "today":
           return clone(active.filter((t) => (effDate(t) ?? "9999") <= today));
@@ -1105,17 +1208,17 @@ function browserStubApi(): Api {
           return clone(active);
         case "completed":
           return clone(
-            tasks
+            notNote
               .filter((t) => t.status === "COMPLETED")
               .sort((a, b) => (b.completedAt ?? "").localeCompare(a.completedAt ?? "")),
           );
         case "trash":
-          return clone(tasks.filter((t) => t.status === "TRASHED"));
+          return clone(notNote.filter((t) => t.status === "TRASHED"));
       }
     },
     smartCounts: async () => {
       const { today } = localDateParams();
-      const active = tasks.filter((t) => t.status === "ACTIVE");
+      const active = tasks.filter((t) => t.status === "ACTIVE" && t.kind !== "NOTE");
       return {
         today: active.filter((t) => (effDate(t) ?? "9999") <= today).length,
         tomorrow: active.filter((t) => effDate(t) === shiftDay(today, 1)).length,
@@ -1795,6 +1898,94 @@ function browserStubApi(): Api {
         });
       }
       return out;
+    },
+
+    setTaskKind: async (id, kind) => {
+      const t = findTask(id);
+      t.kind = kind;
+      t.updatedAt = nowIso();
+    },
+
+    listCountdowns: async () =>
+      clone(countdowns.slice().sort((a, b) => Number(b.pinned) - Number(a.pinned))),
+    createCountdown: async (title, targetDate, repeatAnnual, styleJson) => {
+      const c: Countdown = { id: uid(), title, targetDate, repeatAnnual, styleJson: styleJson ?? null, pinned: false };
+      countdowns.push(c);
+      return clone(c);
+    },
+    updateCountdown: async (id, patch) => {
+      const c = countdowns.find((x) => x.id === id);
+      if (!c) throw new Error(`not found: countdown ${id}`);
+      if (patch.title !== undefined) c.title = patch.title;
+      if (patch.targetDate !== undefined) c.targetDate = patch.targetDate;
+      if (patch.repeatAnnual !== undefined) c.repeatAnnual = patch.repeatAnnual;
+      if (patch.styleJson !== undefined) c.styleJson = patch.styleJson;
+      return clone(c);
+    },
+    setCountdownPinned: async (id, pinned) => {
+      const c = countdowns.find((x) => x.id === id);
+      if (!c) throw new Error(`not found: countdown ${id}`);
+      c.pinned = pinned;
+    },
+    deleteCountdown: async (id) => {
+      const i = countdowns.findIndex((x) => x.id === id);
+      if (i >= 0) countdowns.splice(i, 1);
+    },
+
+    listStickies: async () =>
+      clone(
+        stickies
+          .filter((s) => s.open)
+          .map((s) => {
+            const t = tasks.find((x) => x.id === s.noteId);
+            return t
+              ? {
+                  id: s.id,
+                  noteId: s.noteId,
+                  title: t.title,
+                  contentPlain: t.contentPlain,
+                  x: s.x,
+                  y: s.y,
+                  w: s.w,
+                  h: s.h,
+                  color: s.color,
+                }
+              : null;
+          })
+          .filter((v): v is StickyView => v !== null),
+      ),
+    newQuickSticky: async (text, color) => {
+      const note = await self.createTask({ projectId: INBOX_ID, title: text, kind: "NOTE" });
+      const id = uid();
+      stickies.push({ id, noteId: note.id, x: 40, y: 40, w: 240, h: 220, color: color ?? "#ffd97d", open: true });
+      return id;
+    },
+    stickyFromNote: async (noteId, color) => {
+      const id = uid();
+      stickies.push({ id, noteId, x: 40, y: 40, w: 240, h: 220, color: color ?? "#ffd97d", open: true });
+      return id;
+    },
+    stickyFromTask: async (taskId, color) => {
+      const id = uid();
+      stickies.push({ id, noteId: taskId, x: 40, y: 40, w: 240, h: 220, color: color ?? "#ffd97d", open: true });
+      return id;
+    },
+    updateSticky: async (id, patch) => {
+      const s = stickies.find((x) => x.id === id);
+      if (!s) throw new Error(`not found: sticky ${id}`);
+      if (patch.x !== undefined) s.x = patch.x;
+      if (patch.y !== undefined) s.y = patch.y;
+      if (patch.w !== undefined) s.w = patch.w;
+      if (patch.h !== undefined) s.h = patch.h;
+      if (patch.color !== undefined) s.color = patch.color;
+    },
+    closeSticky: async (id) => {
+      const s = stickies.find((x) => x.id === id);
+      if (s) s.open = false;
+    },
+    deleteSticky: async (id) => {
+      const i = stickies.findIndex((x) => x.id === id);
+      if (i >= 0) stickies.splice(i, 1);
     },
 
     getSetting: async (key) => clone(settings.get(key) ?? null),

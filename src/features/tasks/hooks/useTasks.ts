@@ -16,6 +16,11 @@ export function useViewTasks(view: ViewSelection) {
         case "filter":
           return api.listFilterTasks(view.filterId);
         case "matrix":
+        case "calendar":
+        case "focus":
+        case "habits":
+        case "countdown":
+        case "sticky":
           return Promise.resolve([]);
       }
     },

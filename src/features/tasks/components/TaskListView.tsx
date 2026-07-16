@@ -101,8 +101,10 @@ export function TaskListView({ view }: { view: ViewSelection }) {
     } else if (flatView) {
       for (const row of flattenTree(all)) out.push({ kind: "task", row });
     } else {
-      const active = all.filter((t) => t.status === "ACTIVE");
-      const completed = all.filter((t) => t.status === "COMPLETED");
+      // Note-kind items live in note lists / the sticky board, not task views.
+      const shown = all.filter((t) => t.kind !== "NOTE");
+      const active = shown.filter((t) => t.status === "ACTIVE");
+      const completed = shown.filter((t) => t.status === "COMPLETED");
       const groups = organizeTasks(active, options.sort, options.group, tags ?? [], projects ?? []);
       for (const group of groups) {
         if (group.label) out.push({ kind: "group", label: group.label });

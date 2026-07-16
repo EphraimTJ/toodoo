@@ -187,6 +187,7 @@ export function SidebarProjects() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [newName, setNewName] = useState("");
   const [newColor, setNewColor] = useState<string | undefined>(undefined);
+  const [newKind, setNewKind] = useState<"TASK" | "NOTE">("TASK");
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
   const rootProjects = (projects ?? []).filter((p) => p.folderId === null && p.id !== INBOX_ID);
@@ -205,9 +206,10 @@ export function SidebarProjects() {
   const submitNew = () => {
     const name = newName.trim();
     if (!name) return;
-    createProject.mutate({ name, color: newColor });
+    createProject.mutate({ name, color: newColor, kind: newKind });
     setNewName("");
     setNewColor(undefined);
+    setNewKind("TASK");
     setDialogOpen(false);
   };
 
@@ -264,6 +266,19 @@ export function SidebarProjects() {
                       className={`h-5 w-5 rounded-full ${newColor === color ? "ring-2 ring-accent ring-offset-2 ring-offset-surface" : ""}`}
                       style={{ backgroundColor: color }}
                     />
+                  ))}
+                </div>
+                <div className="mt-3 flex gap-1 rounded-md border border-border p-0.5 text-xs" role="group" aria-label="List type">
+                  {(["TASK", "NOTE"] as const).map((k) => (
+                    <button
+                      key={k}
+                      type="button"
+                      aria-pressed={newKind === k}
+                      onClick={() => setNewKind(k)}
+                      className={`flex-1 rounded px-2 py-1 ${newKind === k ? "bg-accent text-accent-fg" : "text-text-muted"}`}
+                    >
+                      {k === "TASK" ? "Task list" : "Note list"}
+                    </button>
                   ))}
                 </div>
                 <div className="mt-4 flex justify-end gap-2">

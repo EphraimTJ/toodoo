@@ -12,6 +12,7 @@ use repo::activity::ActivityEntry;
 use repo::cal_subscriptions::Subscription;
 use repo::calendar::{CalEvent, CalItem, NewEvent};
 use repo::check_items::CheckItem;
+use repo::countdowns::Countdown;
 use repo::filter_rule::Rule;
 use repo::filters::Filter;
 use repo::focus::{FocusSession, FocusStats, TaskActuals};
@@ -21,6 +22,7 @@ use repo::matrix::{Quadrant, QuadrantTasks};
 use repo::projects::{NewProject, Project, ProjectPatch};
 use repo::reminders::Reminder;
 use repo::sections::Section;
+use repo::sticky_notes::StickyView;
 use repo::tags::Tag;
 use repo::tasks::{NewTask, SmartCounts, SmartView, Task, TaskPatch};
 use repo::templates::{TaskTemplate, TemplatePayload};
@@ -864,6 +866,112 @@ async fn list_today_habits(state: State<'_, AppState>, today: String) -> CmdResu
     repo::habits::list_today(&state.pool, &today).await.map_err(err)
 }
 
+// ---- notes (convert) -----------------------------------------------------------
+
+#[tauri::command]
+async fn set_task_kind(state: State<'_, AppState>, id: String, kind: String) -> CmdResult<()> {
+    repo::tasks::set_task_kind(&state.pool, &state.bus, &id, &kind).await.map_err(err)
+}
+
+// ---- countdowns ----------------------------------------------------------------
+
+#[tauri::command]
+async fn list_countdowns(state: State<'_, AppState>) -> CmdResult<Vec<Countdown>> {
+    repo::countdowns::list_countdowns(&state.pool).await.map_err(err)
+}
+
+#[tauri::command]
+async fn create_countdown(
+    state: State<'_, AppState>,
+    title: String,
+    target_date: String,
+    repeat_annual: bool,
+    style_json: Option<String>,
+) -> CmdResult<Countdown> {
+    repo::countdowns::create_countdown(&state.pool, &state.bus, &title, &target_date, repeat_annual, style_json.as_deref())
+        .await
+        .map_err(err)
+}
+
+#[tauri::command]
+async fn update_countdown(
+    state: State<'_, AppState>,
+    id: String,
+    title: Option<String>,
+    target_date: Option<String>,
+    repeat_annual: Option<bool>,
+    style_json: Option<String>,
+) -> CmdResult<Countdown> {
+    repo::countdowns::update_countdown(
+        &state.pool,
+        &state.bus,
+        &id,
+        title.as_deref(),
+        target_date.as_deref(),
+        repeat_annual,
+        style_json.as_deref(),
+    )
+    .await
+    .map_err(err)
+}
+
+#[tauri::command]
+async fn set_countdown_pinned(state: State<'_, AppState>, id: String, pinned: bool) -> CmdResult<()> {
+    repo::countdowns::set_pinned(&state.pool, &state.bus, &id, pinned).await.map_err(err)
+}
+
+#[tauri::command]
+async fn delete_countdown(state: State<'_, AppState>, id: String) -> CmdResult<()> {
+    repo::countdowns::delete_countdown(&state.pool, &state.bus, &id).await.map_err(err)
+}
+
+// ---- sticky notes --------------------------------------------------------------
+
+#[tauri::command]
+async fn list_stickies(state: State<'_, AppState>) -> CmdResult<Vec<StickyView>> {
+    repo::sticky_notes::list_open(&state.pool).await.map_err(err)
+}
+
+#[tauri::command]
+async fn new_quick_sticky(state: State<'_, AppState>, text: String, color: Option<String>) -> CmdResult<String> {
+    repo::sticky_notes::new_quick(&state.pool, &state.bus, &text, color.as_deref()).await.map_err(err)
+}
+
+#[tauri::command]
+async fn sticky_from_note(state: State<'_, AppState>, note_id: String, color: Option<String>) -> CmdResult<String> {
+    repo::sticky_notes::sticky_from_note(&state.pool, &state.bus, &note_id, color.as_deref()).await.map_err(err)
+}
+
+#[tauri::command]
+async fn sticky_from_task(state: State<'_, AppState>, task_id: String, color: Option<String>) -> CmdResult<String> {
+    repo::sticky_notes::sticky_from_task(&state.pool, &state.bus, &task_id, color.as_deref()).await.map_err(err)
+}
+
+#[tauri::command]
+async fn update_sticky(
+    state: State<'_, AppState>,
+    id: String,
+    x: Option<i64>,
+    y: Option<i64>,
+    w: Option<i64>,
+    h: Option<i64>,
+    color: Option<String>,
+) -> CmdResult<()> {
+    repo::sticky_notes::update_sticky(&state.pool, &state.bus, &id, x, y, w, h, color.as_deref())
+        .await
+        .map_err(err)
+}
+
+#[tauri::command]
+async fn close_sticky(state: State<'_, AppState>, id: String) -> CmdResult<()> {
+    repo::sticky_notes::close_sticky(&state.pool, &state.bus, &id).await.map_err(err)
+}
+
+#[tauri::command]
+async fn delete_sticky(state: State<'_, AppState>, id: String) -> CmdResult<()> {
+    repo::sticky_notes::delete_sticky(&state.pool, &state.bus, &id).await.map_err(err)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -1072,7 +1180,20 @@ pub fn run() {
             delete_checkin,
             list_checkins,
             habit_stats,
-            list_today_habits
+            list_today_habits,
+            set_task_kind,
+            list_countdowns,
+            create_countdown,
+            update_countdown,
+            set_countdown_pinned,
+            delete_countdown,
+            list_stickies,
+            new_quick_sticky,
+            sticky_from_note,
+            sticky_from_task,
+            update_sticky,
+            close_sticky,
+            delete_sticky
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

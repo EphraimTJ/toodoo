@@ -212,6 +212,7 @@ pub async fn instantiate_template(
             time_zone: payload.time_zone.clone(),
             rrule: payload.rrule.clone(),
             repeat_from: payload.repeat_from.clone(),
+            kind: None,
         },
     )
     .await?;

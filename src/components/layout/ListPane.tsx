@@ -7,13 +7,18 @@ import { MatrixView } from "../../features/matrix/components/MatrixView";
 import { CalendarView } from "../../features/calendar/components/CalendarView";
 import { FocusView } from "../../features/focus/components/FocusView";
 import { HabitsView } from "../../features/habits/components/HabitsView";
+import { CountdownView } from "../../features/countdown/components/CountdownView";
+import { NoteListView } from "../../features/notes/components/NoteListView";
+import { StickyBoard } from "../../features/sticky/components/StickyBoard";
 
 export function ListPane() {
   const view = useUiStore((s) => s.view);
   const { data: projects } = useProjects();
 
   let content;
-  if (view.kind === "habits") {
+  if (view.kind === "countdown") {
+    content = <CountdownView />;
+  } else if (view.kind === "habits") {
     content = <HabitsView />;
   } else if (view.kind === "focus") {
     content = <FocusView />;
@@ -23,10 +28,14 @@ export function ListPane() {
     content = <MatrixView />;
   } else if (view.kind === "filter") {
     content = <FilterResultsView filterId={view.filterId} />;
+  } else if (view.kind === "sticky") {
+    content = <StickyBoard />;
   } else if (view.kind === "project") {
     const project = (projects ?? []).find((p) => p.id === view.projectId);
     content =
-      project?.viewMode === "KANBAN" ? (
+      project?.kind === "NOTE" ? (
+        <NoteListView projectId={view.projectId} />
+      ) : project?.viewMode === "KANBAN" ? (
         <KanbanView projectId={view.projectId} />
       ) : (
         <TaskListView view={view} />

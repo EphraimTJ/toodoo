@@ -67,6 +67,10 @@ pub enum DomainEvent {
     HabitChanged,
     #[serde(rename = "habit.checkin_changed")]
     HabitCheckinChanged { habit_id: String },
+    #[serde(rename = "countdown.changed")]
+    CountdownChanged,
+    #[serde(rename = "sticky.changed")]
+    StickyChanged,
     #[serde(rename = "seed.completed")]
     SeedCompleted,
     #[serde(rename = "setting.changed")]

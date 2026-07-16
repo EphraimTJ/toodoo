@@ -71,6 +71,9 @@ pub struct NewTask {
     pub rrule: Option<String>,
     #[serde(default)]
     pub repeat_from: Option<String>,
+    /// TASK (default), CHECKLIST, or NOTE.
+    #[serde(default)]
+    pub kind: Option<String>,
 }
 
 /// Patch semantics: outer `None` = leave unchanged; `Some(None)` = clear.
@@ -171,17 +174,23 @@ pub async fn create_task(pool: &SqlitePool, bus: &EventBus, input: NewTask) -> R
     .fetch_one(&mut *tx)
     .await?;
 
+    let kind = match input.kind.as_deref() {
+        Some("NOTE") => "NOTE",
+        Some("CHECKLIST") => "CHECKLIST",
+        _ => "TASK",
+    };
     sqlx::query(
         "INSERT INTO tasks (id, project_id, parent_id, title, kind, status, priority,
                             start_at, due_at, is_all_day, duration_min, time_zone, rrule,
                             repeat_from, pinned, sort_orders_json, created_at, updated_at)
-         VALUES (?, ?, ?, ?, 'TASK', 'ACTIVE', ?, ?, ?, ?, ?, ?, ?, ?, 0,
+         VALUES (?, ?, ?, ?, ?, 'ACTIVE', ?, ?, ?, ?, ?, ?, ?, ?, 0,
                  json_object('project', ?), ?, ?)",
     )
     .bind(&id)
     .bind(&input.project_id)
     .bind(&input.parent_id)
     .bind(&input.title)
+    .bind(kind)
     .bind(input.priority.unwrap_or(0))
     .bind(&input.start_at)
     .bind(&input.due_at)
@@ -490,6 +499,28 @@ async fn advance_recurrence(pool: &SqlitePool, bus: &EventBus, top: &Task) -> Re
 
 pub async fn reopen_task(pool: &SqlitePool, bus: &EventBus, id: &str) -> Result<()> {
     set_single_status(pool, bus, id, "ACTIVE", &["COMPLETED", "WONT_DO"], true).await
+}
+
+/// Convert a task between TASK, CHECKLIST, and NOTE kinds (note↔task).
+pub async fn set_task_kind(pool: &SqlitePool, bus: &EventBus, id: &str, kind: &str) -> Result<()> {
+    if !["TASK", "CHECKLIST", "NOTE"].contains(&kind) {
+        return Err(RepoError::Invalid(format!("bad task kind {kind:?}")));
+    }
+    let ts = now();
+    let mut tx = pool.begin().await?;
+    let res = sqlx::query("UPDATE tasks SET kind = ?, updated_at = ? WHERE id = ? AND deleted_at IS NULL")
+        .bind(kind)
+        .bind(&ts)
+        .bind(id)
+        .execute(&mut *tx)
+        .await?;
+    if res.rows_affected() == 0 {
+        return Err(RepoError::NotFound(format!("task {id}")));
+    }
+    append_changelog(&mut tx, "task", id, ChangeOp::Update, &serde_json::json!({ "kind": kind })).await?;
+    tx.commit().await?;
+    bus.emit(DomainEvent::TaskUpdated { id: id.to_string() });
+    Ok(())
 }
 
 /// Pin / unpin a task. Pinned tasks float to the top of their views.
@@ -863,7 +894,7 @@ pub async fn list_smart(
     };
 
     let sql = format!(
-        "SELECT {COLUMNS} FROM tasks WHERE deleted_at IS NULL AND {where_clause} {order}"
+        "SELECT {COLUMNS} FROM tasks WHERE deleted_at IS NULL AND kind <> 'NOTE' AND {where_clause} {order}"
     );
     let mut tasks: Vec<Task> = sqlx::query_as(&sql)
         .bind(&modifier)
@@ -925,7 +956,7 @@ pub async fn smart_counts(pool: &SqlitePool, today: &str, tz_offset_min: i32) ->
     let next7_n = list_smart(pool, SmartView::Next7Days, today, tz_offset_min).await?.len() as i64;
     let inbox_n: i64 = sqlx::query_scalar(
         "SELECT COUNT(*) FROM tasks WHERE project_id = 'inbox' AND status = 'ACTIVE'
-         AND deleted_at IS NULL",
+         AND kind <> 'NOTE' AND deleted_at IS NULL",
     )
     .fetch_one(pool)
     .await?;
@@ -954,6 +985,7 @@ pub(crate) mod tests {
             time_zone: None,
             rrule: None,
             repeat_from: None,
+            kind: None,
         }
     }
 
@@ -1356,6 +1388,31 @@ pub(crate) mod tests {
         assert!(actions.contains(&"created".to_string()));
         assert!(actions.contains(&"edited".to_string()));
         assert!(actions.contains(&"completed".to_string()));
+    }
+
+    #[tokio::test]
+    async fn note_kind_creates_and_converts_and_hides_from_smart_lists() {
+        let (pool, bus) = setup().await;
+        // A note-kind item with a due date does not appear in Today or All.
+        let note = create_task(
+            &pool,
+            &bus,
+            NewTask {
+                kind: Some("NOTE".into()),
+                due_at: Some("2026-07-14T00:00:00.000Z".into()),
+                ..quick("inbox", "Meeting notes")
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(note.kind, "NOTE");
+        assert!(list_smart(&pool, SmartView::Today, "2026-07-14", 0).await.unwrap().is_empty());
+        assert!(list_smart(&pool, SmartView::All, "2026-07-14", 0).await.unwrap().is_empty());
+
+        // Converting to a task brings it into the views.
+        set_task_kind(&pool, &bus, &note.id, "TASK").await.unwrap();
+        assert_eq!(get_task(&pool, &note.id).await.unwrap().kind, "TASK");
+        assert_eq!(list_smart(&pool, SmartView::All, "2026-07-14", 0).await.unwrap().len(), 1);
     }
 
     #[tokio::test]

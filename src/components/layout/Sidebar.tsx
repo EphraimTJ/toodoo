@@ -104,6 +104,28 @@ export function Sidebar() {
           <li>
             <button
               type="button"
+              onClick={() => setView({ kind: "countdown" })}
+              className={`flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left text-sm hover:bg-bg ${
+                view.kind === "countdown" ? "bg-bg font-medium text-accent" : ""
+              }`}
+            >
+              Countdown
+            </button>
+          </li>
+          <li>
+            <button
+              type="button"
+              onClick={() => setView({ kind: "sticky" })}
+              className={`flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left text-sm hover:bg-bg ${
+                view.kind === "sticky" ? "bg-bg font-medium text-accent" : ""
+              }`}
+            >
+              Sticky Notes
+            </button>
+          </li>
+          <li>
+            <button
+              type="button"
               onClick={() => setView({ kind: "matrix" })}
               className={`flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left text-sm hover:bg-bg ${
                 view.kind === "matrix" ? "bg-bg font-medium text-accent" : ""
