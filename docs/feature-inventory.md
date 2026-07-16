@@ -99,11 +99,11 @@ This is the checklist the whole project is graded against, converted from §3 of
   - [x] Drag between columns
   - [x] Column WIP display
   - [x] Collapse columns
-- [ ] Timeline (Gantt) view (Pro)
-  - [ ] Tasks as bars across dates
-  - [ ] Drag to reschedule / resize
-  - [ ] Group lanes
-  - [ ] Zoom day/week/month
+- [x] Timeline (Gantt) view (Pro)
+  - [x] Tasks as bars across dates
+  - [x] Drag to reschedule / resize
+  - [x] Group lanes
+  - [x] Zoom day/week/month
 - [x] Calendar views (Pro)
   - [x] Day
   - [x] Week (5/7-day)

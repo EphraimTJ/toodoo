@@ -4,6 +4,7 @@ import { useProjectMutations } from "../../projects/hooks/useProjects";
 const MODES: [Project["viewMode"], string][] = [
   ["LIST", "List"],
   ["KANBAN", "Kanban"],
+  ["TIMELINE", "Timeline"],
 ];
 
 /** Switch a project between List and Kanban; the choice persists on the project

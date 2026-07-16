@@ -10,6 +10,7 @@ import { HabitsView } from "../../features/habits/components/HabitsView";
 import { CountdownView } from "../../features/countdown/components/CountdownView";
 import { NoteListView } from "../../features/notes/components/NoteListView";
 import { StickyBoard } from "../../features/sticky/components/StickyBoard";
+import { TimelineView } from "../../features/timeline/components/TimelineView";
 
 export function ListPane() {
   const view = useUiStore((s) => s.view);
@@ -37,6 +38,8 @@ export function ListPane() {
         <NoteListView projectId={view.projectId} />
       ) : project?.viewMode === "KANBAN" ? (
         <KanbanView projectId={view.projectId} />
+      ) : project?.viewMode === "TIMELINE" ? (
+        <TimelineView projectId={view.projectId} />
       ) : (
         <TaskListView view={view} />
       );

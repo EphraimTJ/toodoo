@@ -5,6 +5,30 @@ ambiguity we resolved by judgment call), with the reasoning. Newest entries at
 the top. Never rewrite history — if a decision is reversed, add a new entry
 that supersedes the old one.
 
+## 2026-07-15 — Timeline (Gantt) view (user-approved)
+
+**Placement:** the Timeline is a **per-project view mode** (List / Kanban /
+**Timeline**), reusing `projects.view_mode = TIMELINE` and the existing
+`ViewModeToggle` + `ListPane` routing (mirroring Kanban). Lanes are grouped by the
+project's **sections** (a "No section" lane for the rest). Undated and NOTE tasks
+are excluded from bars.
+
+**Bars & drag:** a task with a start and due renders a bar spanning start→due
+inclusively; a **single-date task** (only start or only due) renders a **one-day
+bar**. Body-drag moves both dates (keeping the span); the left/right edge handles
+set `start_at`/`due_at` independently — resizing an edge of a single-date task
+fills in the missing date. All snapping is **day-granular** (all-day); persistence
+is via `update_task`.
+
+**Unscheduled panel:** the project's dateless tasks are HTML5-draggable onto the
+grid; dropping schedules the task at the dropped day (`start_at = due_at`).
+
+**No backend work:** the timeline reuses `tasks::list_project_tasks` (read) and
+`tasks::update_task` (move/resize/schedule) — **no new repo functions, commands,
+or migration**. The tricky logic is the pure geometry in
+`src/features/timeline/lib/timeline.ts` (date↔pixel, zoom, bar span), unit-tested;
+rows are virtualized with `@tanstack/react-virtual`.
+
 ## 2026-07-15 — Countdown / Notes / Sticky Notes (user-approved)
 
 **Sticky notes:** ship as an **in-app board** this phase (draggable colored
