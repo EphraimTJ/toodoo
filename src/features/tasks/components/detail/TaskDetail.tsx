@@ -235,6 +235,17 @@ export function TaskDetail() {
   const queryClient = useQueryClient();
   const { updateTask, trashTask, restoreTask, completeTask, reopenTask, setPinned } =
     useTaskMutations();
+  const [copiedLink, setCopiedLink] = useState<string | null>(null);
+
+  const copyLink = async (id: string) => {
+    const link = await api.copyTaskLink(id);
+    setCopiedLink(link);
+    try {
+      await navigator.clipboard.writeText(link);
+    } catch {
+      /* clipboard unavailable — the link is still shown for manual copy */
+    }
+  };
 
   const { data: task } = useQuery({
     queryKey: ["tasks", "detail", selectedTaskId],
@@ -359,6 +370,14 @@ export function TaskDetail() {
         >
           📌 Pop out
         </button>
+        <button
+          type="button"
+          aria-label="Copy task link"
+          className="rounded-md border border-border px-2 py-1 text-xs text-text-muted hover:text-accent"
+          onClick={() => void copyLink(task.id)}
+        >
+          🔗 Copy link
+        </button>
         <div className="ml-auto flex gap-2">
           {trashed ? (
             <button
@@ -383,6 +402,12 @@ export function TaskDetail() {
           )}
         </div>
       </div>
+
+      {copiedLink && (
+        <p className="pt-2 text-xs text-text-muted" aria-live="polite" data-testid="task-link">
+          Copied <code>{copiedLink}</code>
+        </p>
+      )}
     </div>
   );
 }

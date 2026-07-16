@@ -5,9 +5,11 @@ import { DetailPane } from "./DetailPane";
 import { CommandPalette } from "../../features/search/components/CommandPalette";
 import { api } from "../../lib/api";
 import { useDomainEvents } from "../../lib/useDomainEvents";
+import { useDeepLinks } from "../../lib/useDeepLinks";
 
 export function AppShell() {
   useDomainEvents();
+  useDeepLinks();
 
   // Dev-only perf fixture (§8 budget): Ctrl+Shift+F9 seeds 10k tasks.
   // The backend command refuses to run in release builds.

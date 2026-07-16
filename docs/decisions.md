@@ -5,6 +5,45 @@ ambiguity we resolved by judgment call), with the reasoning. Newest entries at
 the top. Never rewrite history — if a decision is reversed, add a new entry
 that supersedes the old one.
 
+## 2026-07-16 — Local API, URL Scheme, MCP (user-approved)
+
+**MCP deferred.** The build plan marks MCP "optional"; it ships later as a thin
+wrapper over the REST API (no rework needed). This phase delivers the REST server
++ `toodoo://` scheme. The §3.12 MCP checkbox stays unchecked.
+
+**Server is off by default**, enabled from **Settings → API & Integrations**, and
+binds **127.0.0.1 only** (never `0.0.0.0`). Rationale: a localhost service should
+not open a port unless the user opts in. Default port **7420**.
+
+**Single bearer token in `settings`** (`api.token`, plaintext) — **no migration**.
+The DB is local and single-user, so a plaintext token in `settings` is adequate;
+a multi-token `api_tokens` table was considered and rejected as over-engineering.
+The token is a UUID with dashes stripped. **Regeneration is live** — the running
+server holds the token behind an `Arc<RwLock<String>>`, so a new token takes
+effect without a restart, and the old one is invalidated immediately.
+
+**Auth path:** the pure `bearer_ok` check is unit-tested; an Axum middleware
+guards everything under `/open/v1`. `/ping` and `/openapi.json` are public.
+
+**TickTick fidelity is an approximation** of Open API v1, not byte-compat:
+`priority` passes through unchanged (already stored as TickTick's 0/1/3/5, per the
+2026-07-14 entry); `status` maps ACTIVE↔0 / COMPLETED↔2; JSON is camelCase; dates
+pass through as stored RFC3339-millis. Exact parity with TickTick's cloud server
+is a non-goal (we have no way to verify it).
+
+**OpenAPI** is a **hand-authored static** `openapi.json` served by the API, chosen
+over a proc-macro generator (utoipa) to avoid a heavy build-time dependency.
+
+**Toodoo extensions** live under `/open/v1/toodoo/*` (habits, focus stats over the
+last 30 days, filters) — read-only, delegating to the existing repo functions.
+
+**Testing:** the REST layer can't run in the browser stub, so it's verified by a
+Rust integration test (spawn Axum on `127.0.0.1:0`, drive with `reqwest`: auth +
+create/complete/delete). The stub mirrors only the config + `copyTaskLink`;
+Playwright covers the Settings panel and the copy-link action. Deep-link OS
+registration is desktop-only and not exercised in CI — the **parser**
+(`parse_deep_link`) is unit-tested instead.
+
 ## 2026-07-16 — Stats, Achievement & Summary (user-approved)
 
 **Scoring:** completing a task earns **+2** when done on or before its due day,

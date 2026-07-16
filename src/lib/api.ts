@@ -290,6 +290,14 @@ export interface StatsSummary {
   overdueCount: number;
 }
 
+// ---- Local API / integrations -----------------------------------------------
+
+export interface ApiConfig {
+  enabled: boolean;
+  port: number;
+  token: string;
+}
+
 // ---- Habits -----------------------------------------------------------------
 
 export type GoalKind = "CHECK" | "AMOUNT";
@@ -607,6 +615,11 @@ export interface Api {
   scoreHistory(from: string, to: string): Promise<ScorePoint[]>;
   statsSummary(from: string, to: string): Promise<StatsSummary>;
 
+  apiConfig(): Promise<ApiConfig>;
+  apiSetEnabled(enabled: boolean): Promise<ApiConfig>;
+  apiRegenerateToken(): Promise<string>;
+  copyTaskLink(id: string): Promise<string>;
+
   listHabits(includeArchived: boolean): Promise<Habit[]>;
   getHabit(id: string): Promise<Habit>;
   createHabit(input: HabitInput): Promise<Habit>;
@@ -815,6 +828,11 @@ const tauriApi: Api = {
   statsSummary: (from, to) =>
     invoke("stats_summary", { from, to, tzOffsetMin: localDateParams().tzOffsetMin }),
 
+  apiConfig: () => invoke("api_config"),
+  apiSetEnabled: (enabled) => invoke("api_set_enabled", { enabled }),
+  apiRegenerateToken: () => invoke("api_regenerate_token"),
+  copyTaskLink: (id) => invoke("copy_task_link", { id }),
+
   listHabits: (includeArchived) => invoke("list_habits", { includeArchived }),
   getHabit: (id) => invoke("get_habit", { id }),
   createHabit: (input) => invoke("create_habit", { input }),
@@ -908,6 +926,7 @@ function browserStubApi(): Api {
   // has no scheduler, so overdue penalties are Tauri-only (docs/decisions.md).
   const achievements: { date: string; delta: number; reason: string }[] = [];
   const taskCompletions: { taskId: string; occurrenceAt: string | null; completedAt: string }[] = [];
+  const apiCfg: ApiConfig = { enabled: false, port: 7420, token: "stub-token-000000000000" };
   const nowIso = () => new Date().toISOString();
   const uid = () => crypto.randomUUID();
 
@@ -1903,6 +1922,19 @@ function browserStubApi(): Api {
         overdueCount,
       };
     },
+
+    // The REST server can't run in the browser; the stub just tracks the config
+    // in memory so the Settings UI works. copyTaskLink mirrors the Rust command.
+    apiConfig: async () => ({ ...apiCfg }),
+    apiSetEnabled: async (enabled) => {
+      apiCfg.enabled = enabled;
+      return { ...apiCfg };
+    },
+    apiRegenerateToken: async () => {
+      apiCfg.token = crypto.randomUUID().replace(/-/g, "");
+      return apiCfg.token;
+    },
+    copyTaskLink: async (id) => `toodoo://task/${id}`,
 
     listHabits: async (includeArchived) =>
       clone(

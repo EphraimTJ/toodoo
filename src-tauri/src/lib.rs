@@ -1,3 +1,5 @@
+mod api;
+mod deeplink;
 mod error;
 mod events;
 pub mod repo;
@@ -5,6 +7,7 @@ pub mod repo;
 use serde_json::Value;
 use sqlx::SqlitePool;
 use tauri::{Emitter, Manager, State};
+use tauri_plugin_deep_link::DeepLinkExt;
 use tauri_plugin_notification::NotificationExt;
 
 use events::EventBus;
@@ -31,6 +34,10 @@ use repo::templates::{TaskTemplate, TemplatePayload};
 pub struct AppState {
     pool: SqlitePool,
     bus: EventBus,
+    /// The API bearer token, shared with a running server so regeneration is live.
+    api_token: std::sync::Arc<std::sync::RwLock<String>>,
+    /// The running REST server, if enabled.
+    api_server: std::sync::Mutex<Option<api::ServerHandle>>,
 }
 
 type CmdResult<T> = Result<T, String>;
@@ -995,11 +1002,53 @@ async fn delete_sticky(state: State<'_, AppState>, id: String) -> CmdResult<()> 
     repo::sticky_notes::delete_sticky(&state.pool, &state.bus, &id).await.map_err(err)
 }
 
+// ---- local REST API & URL scheme -----------------------------------------------
+
+#[tauri::command]
+async fn api_config(state: State<'_, AppState>) -> CmdResult<api::ApiConfig> {
+    api::config(&state.pool, &state.bus).await.map_err(err)
+}
+
+#[tauri::command]
+async fn api_set_enabled(state: State<'_, AppState>, enabled: bool) -> CmdResult<api::ApiConfig> {
+    api::set_enabled_flag(&state.pool, &state.bus, enabled).await.map_err(err)?;
+    if enabled {
+        let running = state.api_server.lock().unwrap().is_some();
+        if !running {
+            let handle = api::serve(api::ApiState::new(
+                state.pool.clone(),
+                state.bus.clone(),
+                state.api_token.clone(),
+            ))
+            .await
+            .map_err(err)?;
+            *state.api_server.lock().unwrap() = Some(handle);
+        }
+    } else if let Some(handle) = state.api_server.lock().unwrap().take() {
+        handle.stop();
+    }
+    api::config(&state.pool, &state.bus).await.map_err(err)
+}
+
+#[tauri::command]
+async fn api_regenerate_token(state: State<'_, AppState>) -> CmdResult<String> {
+    let token = api::regenerate_token(&state.pool, &state.bus).await.map_err(err)?;
+    // Update the live token in place — the running server picks it up immediately.
+    *state.api_token.write().unwrap() = token.clone();
+    Ok(token)
+}
+
+#[tauri::command]
+fn copy_task_link(id: String) -> String {
+    format!("toodoo://task/{id}")
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_notification::init())
+        .plugin(tauri_plugin_deep_link::init())
         .setup(|app| {
             let data_dir = app.path().app_data_dir()?;
             std::fs::create_dir_all(&data_dir)?;
@@ -1014,6 +1063,17 @@ pub fn run() {
             tauri::async_runtime::spawn(async move {
                 while let Ok(event) = rx.recv().await {
                     let _ = handle.emit("domain-event", &event);
+                }
+            });
+
+            // `toodoo://` deep links: parse each opened URL and forward the action
+            // to the webview (open task/project, or prefill quick-add).
+            let dl_handle = app.handle().clone();
+            app.deep_link().on_open_url(move |event| {
+                for url in event.urls() {
+                    if let Some(action) = deeplink::parse_deep_link(url.as_str()) {
+                        let _ = dl_handle.emit("deep-link", &action);
+                    }
                 }
             });
 
@@ -1113,7 +1173,24 @@ pub fn run() {
                 }
             });
 
-            app.manage(AppState { pool, bus });
+            // Local REST API: load (or mint) the bearer token, and start the
+            // server now if the user previously enabled it. Binds 127.0.0.1 only.
+            let api_token = tauri::async_runtime::block_on(api::get_or_create_token(&pool, &bus))?;
+            let api_token = std::sync::Arc::new(std::sync::RwLock::new(api_token));
+            let api_server = std::sync::Mutex::new(None);
+            if tauri::async_runtime::block_on(api::is_enabled(&pool)).unwrap_or(false) {
+                let handle = tauri::async_runtime::block_on(api::serve(api::ApiState::new(
+                    pool.clone(),
+                    bus.clone(),
+                    api_token.clone(),
+                )));
+                match handle {
+                    Ok(h) => *api_server.lock().unwrap() = Some(h),
+                    Err(e) => eprintln!("API server failed to start: {e}"),
+                }
+            }
+
+            app.manage(AppState { pool, bus, api_token, api_server });
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
@@ -1234,7 +1311,11 @@ pub fn run() {
             sticky_from_task,
             update_sticky,
             close_sticky,
-            delete_sticky
+            delete_sticky,
+            api_config,
+            api_set_enabled,
+            api_regenerate_token,
+            copy_task_link
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

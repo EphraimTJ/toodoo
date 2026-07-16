@@ -53,7 +53,7 @@ This is the checklist the whole project is graded against, converted from §3 of
 - [ ] Task duplication
 - [x] Convert note ↔ task
 - [x] Batch edit (multi-select: move, tag, date, priority, delete)
-- [ ] Copy task link (`toodoo://task/<id>` URL scheme)
+- [x] Copy task link (`toodoo://task/<id>` URL scheme)
 - [ ] Location reminders (adapted per §9: data model + manual "arrive/leave"
       trigger; true desktop geofencing out of scope)
 
@@ -241,16 +241,16 @@ This is the checklist the whole project is graded against, converted from §3 of
 - [ ] Export: JSON
 - [ ] Export: ICS
 - [ ] Export: Markdown
-- [ ] Local REST API (TickTick Open API compatible)
-  - [ ] Local token auth (OAuth-less)
-  - [ ] `GET /open/v1/project`
-  - [ ] `GET /open/v1/project/{id}/data`
-  - [ ] `POST /open/v1/task`
-  - [ ] `POST /open/v1/task/{id}`
-  - [ ] `POST /open/v1/project/{pid}/task/{tid}/complete`
-  - [ ] `DELETE …` endpoints
-  - [ ] Toodoo extensions for habits, focus, filters
-- [ ] `toodoo://` URL scheme (open task/list, quick add)
+- [x] Local REST API (TickTick Open API compatible)
+  - [x] Local token auth (OAuth-less)
+  - [x] `GET /open/v1/project`
+  - [x] `GET /open/v1/project/{id}/data`
+  - [x] `POST /open/v1/task`
+  - [x] `POST /open/v1/task/{id}`
+  - [x] `POST /open/v1/project/{pid}/task/{tid}/complete`
+  - [x] `DELETE …` endpoints
+  - [x] Toodoo extensions for habits, focus, filters
+- [x] `toodoo://` URL scheme (open task/list, quick add)
 - [ ] Optional MCP server exposing Toodoo to Claude and other AI agents
 
 ## 3.13 Adapted / Deferred (see §9 of the build plan)

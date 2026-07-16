@@ -1,6 +1,7 @@
 import type { SmartView } from "../../lib/api";
 import { useUiStore } from "../../lib/uiStore";
 import { ThemeToggle } from "../../features/settings/components/ThemeToggle";
+import { SettingsDialog } from "../../features/settings/components/SettingsDialog";
 import { SidebarProjects } from "../../features/projects/components/SidebarProjects";
 import { SidebarTags } from "../../features/tags/components/SidebarTags";
 import { SidebarFilters } from "../../features/filters/components/SidebarFilters";
@@ -27,7 +28,10 @@ export function Sidebar() {
     >
       <div className="flex items-center justify-between px-4 py-3">
         <h1 className="text-lg font-semibold text-accent">Toodoo</h1>
-        <ThemeToggle />
+        <div className="flex items-center gap-1">
+          <SettingsDialog />
+          <ThemeToggle />
+        </div>
       </div>
 
       <nav className="flex-1 overflow-y-auto px-2 pb-4">
