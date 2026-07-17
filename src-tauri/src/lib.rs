@@ -1379,68 +1379,70 @@ pub fn run() {
                 }
             });
 
-            // Reminder scheduler: every 30s fire any reminder whose time has
-            // arrived (including ones missed while the app was closed — the
-            // first tick runs immediately), then record the fire so it doesn't
-            // repeat. `mark_fired` before emit keeps a crash from double-nagging.
+            // Reminder scheduler: every 30s dispatch any reminder whose time
+            // has arrived (including ones missed while the app was closed —
+            // the first tick runs immediately). Delivery is claim-before-
+            // attempt / ack-only-on-success with bounded retry
+            // (repo::reminders::dispatch_due, docs/decisions.md): a claim is
+            // persisted before show(), `mark_fired` acks only a successful
+            // (or given-up) delivery, and a crash between the two recovers
+            // via the stale-claim window — at worst one duplicate, never a
+            // permanently lost reminder.
+            struct TauriNotify(tauri::AppHandle);
+            impl repo::reminders::NotificationBackend for TauriNotify {
+                fn show(&self, title: &str, body: &str) -> std::result::Result<(), String> {
+                    self.0
+                        .notification()
+                        .builder()
+                        .title(title)
+                        .body(body)
+                        .show()
+                        .map_err(|e| e.to_string())
+                }
+            }
             let sched_pool = pool.clone();
             let sched_bus = bus.clone();
             let sched_handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
                 // Habit reminders fire at most once per (habit, day, time); dedup
                 // is kept in memory (a restart may re-fire a reminder once).
+                let backend = TauriNotify(sched_handle.clone());
                 let mut habit_fired: std::collections::HashSet<String> = std::collections::HashSet::new();
                 let mut tick = tokio::time::interval(std::time::Duration::from_secs(30));
                 loop {
                     tick.tick().await;
-                    let due = match repo::reminders::due_reminders(&sched_pool, chrono::Utc::now())
-                        .await
+                    let outcomes = match repo::reminders::dispatch_due(
+                        &sched_pool,
+                        &backend,
+                        chrono::Utc::now(),
+                    )
+                    .await
                     {
-                        Ok(due) => due,
+                        Ok(outcomes) => outcomes,
                         Err(e) => {
-                            eprintln!("[reminders] scan failed: {e}");
+                            eprintln!("[reminders] dispatch pass failed: {e}");
                             continue;
                         }
                     };
-                    eprintln!(
-                        "[reminders] poll @ {}: {} due",
-                        chrono::Utc::now().to_rfc3339(),
-                        due.len()
-                    );
-                    for r in due {
-                        eprintln!(
-                            "[reminders] dispatch notification: reminder={} task={} title={:?}",
-                            r.reminder_id, r.task_id, r.task_title
-                        );
-                        match sched_handle
-                            .notification()
-                            .builder()
-                            .title("Toodoo")
-                            .body(&r.task_title)
-                            .show()
-                        {
-                            Ok(()) => eprintln!("[reminders] notification.show() ok"),
-                            Err(e) => eprintln!("[reminders] notification.show() FAILED: {e}"),
-                        }
-                        if let Err(e) =
-                            repo::reminders::mark_fired(&sched_pool, &r.reminder_id, &r.fire_at).await
-                        {
-                            eprintln!("mark_fired failed: {e}");
+                    for o in outcomes {
+                        // In-app Complete/Snooze popover — the reliable action
+                        // path across OSes (native buttons are best-effort).
+                        // Emitted once per fire time, on the first attempt,
+                        // regardless of native delivery.
+                        if !o.first_attempt {
                             continue;
                         }
-                        // In-app Complete/Snooze popover — the reliable action path
-                        // across OSes (native notification buttons are best-effort).
                         let _ = sched_handle.emit(
                             "reminder-fired",
                             serde_json::json!({
-                                "taskId": r.task_id,
-                                "reminderId": r.reminder_id,
-                                "title": r.task_title,
+                                "taskId": o.reminder.task_id,
+                                "reminderId": o.reminder.reminder_id,
+                                "title": o.reminder.task_title,
                             }),
                         );
                         sched_bus.emit(events::DomainEvent::ReminderFired {
-                            task_id: r.task_id,
-                            reminder_id: r.reminder_id,
+                            task_id: o.reminder.task_id.clone(),
+                            reminder_id: o.reminder.reminder_id.clone(),
                         });
                     }
 

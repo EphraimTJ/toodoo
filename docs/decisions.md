@@ -5,6 +5,39 @@ ambiguity we resolved by judgment call), with the reasoning. Newest entries at
 the top. Never rewrite history — if a decision is reversed, add a new entry
 that supersedes the old one.
 
+## 2026-07-17 — Reminder dispatch: claim/ack with bounded retry (supersedes the 2026-07-15 scheduler entry's fire-then-stamp step)
+
+Response to adversarial-review finding 5: the scheduler acknowledged
+(`mark_fired`) every reminder unconditionally after `show()`, so a transient OS
+notification failure suppressed the reminder forever, while an ack failure
+after a successful show re-nagged every 30 s.
+
+New dispatch state machine (`repo::reminders::dispatch_due`, migration 0009
+adds `fire_attempts`/`fire_claimed_at`):
+
+- **Claim before attempt:** a persisted claim (`fire_claimed_at`, attempt
+  counter incremented) precedes every delivery attempt.
+- **Ack only on success:** `mark_fired` (which also clears the claim and resets
+  the attempt budget) runs only when `show()` succeeded — or on give-up.
+- **Bounded backoff:** failed attempts retry after **30 s, 60 s, 120 s, 300 s**
+  (tick-granular; the 30 s poll is unchanged). After **5 total attempts** the
+  reminder is acked anyway with a logged warning, so a permanently-broken
+  native path can't nag forever.
+- **Stale-claim recovery:** a claim whose holder crashed becomes reclaimable
+  after its backoff window — at worst one duplicate notification, never a
+  permanently lost reminder.
+- **In-app toast decoupled:** the `reminder-fired` event (in-app
+  Complete/Snooze popover, the reliable path) is emitted exactly once per fire
+  time, on the **first** attempt, regardless of native delivery. Snooze resets
+  the attempt budget for the new fire time.
+- The backend is injectable (`NotificationBackend` trait), so the state machine
+  is unit-tested with a scripted fake (success ack, backoff retry, bounded
+  give-up, crash recovery, snooze reset).
+
+The 30 s poll + launch catch-up from the 2026-07-15 decision stay; only the
+fire→stamp ordering is superseded. Diagnosis logging added for reminders with
+no computable fire time (e.g. a REL trigger on a task without due/start).
+
 ## 2026-07-17 — Completion idempotency contract (recurring advance + ledger)
 
 Response to adversarial-review finding 2: retrying `complete_task` on a
