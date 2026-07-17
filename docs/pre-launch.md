@@ -57,6 +57,17 @@ All four were marked ❌ in `docs/manual-test-checklist.md` (results in `019f608
 during a **`npm run tauri dev`** run. Code fixes are committed; **none are
 verified against the installed build yet.** Re-test on the installer FIRST.
 
+**Additional blocker (2026-07-17):** an adversarial Codex review of the
+`v-phase-12E`↔`master` diff found a critical restore-safety gap plus two
+high-severity idempotency/atomicity bugs — see
+`docs/adversarial-review-findings.md` for the full findings, triage against
+`docs/decisions.md`, proof-of-claim tests (3 new `#[ignore]`d Rust tests, all
+reproduce their claim), and a proposed (not yet executed) fix order: restore
+safety → recurring completion idempotency → notification claim/ack ordering
+(folds into blocker 2a below) → import atomicity → the import-tags scope
+question (deferred to the user). None of these are fixed yet; `v1.0.0` stays
+blocked on them in addition to the four below.
+
 ### (a) Notifications / launch-at-login — TEST ON INSTALLED BUILD FIRST
 - **Symptoms (dev mode):** no reminder toast ever fired; OS action buttons and
   launch-at-login couldn't be tested.

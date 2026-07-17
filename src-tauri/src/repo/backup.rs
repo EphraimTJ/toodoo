@@ -231,6 +231,34 @@ mod tests {
         fs::remove_dir_all(&data_dir).ok();
     }
 
+    /// docs/adversarial-review-findings.md — "Interrupted restore staging can
+    /// replace the live database with a corrupt partial file". Neither
+    /// `stage_restore` nor `apply_pending_restore` validates the staged file
+    /// before installing it — mere existence is treated as validity. This
+    /// asserts the desired safe behavior (a corrupt/truncated staged file must
+    /// not replace the live database), which the current implementation fails.
+    #[test]
+    #[ignore = "reproduces adversarial-review finding: apply_pending_restore has no integrity check"]
+    fn apply_pending_restore_rejects_a_truncated_corrupt_file() {
+        let data_dir = temp_dir();
+        let target = data_dir.join("toodoo.db");
+        fs::write(&target, b"GOOD-LIVE-DB").unwrap();
+
+        // A truncated/corrupt staged file, e.g. from an interrupted copy
+        // (disk full, process killed mid-write, antivirus lock) — not a valid
+        // SQLite database.
+        fs::write(data_dir.join(PENDING_RESTORE), b"TRUNC").unwrap();
+
+        let result = apply_pending_restore(&data_dir);
+        let live_intact = fs::read(&target).unwrap() == b"GOOD-LIVE-DB";
+        assert!(
+            result.is_err() || !result.unwrap() || live_intact,
+            "a corrupt staged restore replaced the live database without validation"
+        );
+
+        fs::remove_dir_all(&data_dir).ok();
+    }
+
     #[test]
     fn prune_keeps_the_newest() {
         let dir = temp_dir();

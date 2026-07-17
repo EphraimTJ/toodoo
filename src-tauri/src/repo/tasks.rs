@@ -1599,6 +1599,58 @@ pub(crate) mod tests {
         assert_eq!(completion_count(&pool, &t.id).await, 1);
     }
 
+    /// docs/adversarial-review-findings.md — "Retrying completion advances
+    /// recurring tasks multiple times". A recurring task stays ACTIVE under the
+    /// same id after completion, so a retried `complete_task` call (double
+    /// click, client timeout + retry, duplicate REST request) is indistinguishable
+    /// from completing the newly-advanced occurrence. This asserts the desired
+    /// idempotent behavior (a retry of the same occurrence is a no-op), which the
+    /// current implementation fails — the retry advances a second occurrence and
+    /// awards points a second time.
+    #[tokio::test]
+    #[ignore = "reproduces adversarial-review finding: recurring completion is not idempotent under retry"]
+    async fn complete_task_retried_on_recurring_task_double_advances_and_double_awards() {
+        // Baseline: a single completion call.
+        let (pool1, bus1) = setup().await;
+        let a = create_task(
+            &pool1,
+            &bus1,
+            recurring("inbox", "water plants", "FREQ=DAILY", "2026-03-10T00:00:00.000Z"),
+        )
+        .await
+        .unwrap();
+        complete_task(&pool1, &bus1, &a.id, 0).await.unwrap();
+        let single_completions = completion_count(&pool1, &a.id).await;
+        let single_due = get_task(&pool1, &a.id).await.unwrap().due_at;
+        let single_score: i64 = sqlx::query_scalar("SELECT COALESCE(SUM(score_delta), 0) FROM achievements")
+            .fetch_one(&pool1)
+            .await
+            .unwrap();
+
+        // Retry: the same completion request repeated (simulating a client
+        // retry against the same, unchanged occurrence).
+        let (pool2, bus2) = setup().await;
+        let b = create_task(
+            &pool2,
+            &bus2,
+            recurring("inbox", "water plants", "FREQ=DAILY", "2026-03-10T00:00:00.000Z"),
+        )
+        .await
+        .unwrap();
+        complete_task(&pool2, &bus2, &b.id, 0).await.unwrap();
+        complete_task(&pool2, &bus2, &b.id, 0).await.unwrap(); // the retry
+        let retried_completions = completion_count(&pool2, &b.id).await;
+        let retried_due = get_task(&pool2, &b.id).await.unwrap().due_at;
+        let retried_score: i64 = sqlx::query_scalar("SELECT COALESCE(SUM(score_delta), 0) FROM achievements")
+            .fetch_one(&pool2)
+            .await
+            .unwrap();
+
+        assert_eq!(retried_completions, single_completions, "retry recorded an extra completion");
+        assert_eq!(retried_due, single_due, "retry advanced the occurrence a second time");
+        assert_eq!(retried_score, single_score, "retry awarded points a second time");
+    }
+
     async fn wont_do_count(pool: &SqlitePool, id: &str) -> i64 {
         sqlx::query_scalar("SELECT COUNT(*) FROM task_completions WHERE task_id = ? AND status = 'WONT_DO'")
             .bind(id)

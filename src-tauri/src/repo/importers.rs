@@ -410,4 +410,50 @@ task,Low prio thing,,2,\n";
         .unwrap();
         assert_eq!(done, 1);
     }
+
+    /// docs/adversarial-review-findings.md — "CSV import is non-atomic and
+    /// retries duplicate already imported tasks". Each row is inserted
+    /// independently with no outer transaction, so a later row's failure
+    /// leaves earlier rows persisted even though `import_tasks` returns an
+    /// error. This asserts the desired all-or-nothing behavior, which the
+    /// current implementation fails.
+    #[tokio::test]
+    #[ignore = "reproduces adversarial-review finding: import is not transactional"]
+    async fn import_tasks_partial_failure_leaves_earlier_rows_persisted() {
+        let pool = connect_in_memory().await.unwrap();
+        let bus = EventBus::new();
+        let rows = vec![
+            ImportTask {
+                list: "Work".into(),
+                title: "Persisted before failure".into(),
+                content: None,
+                priority: None,
+                due_at: None,
+                start_at: None,
+                completed: false,
+                tags: vec![],
+            },
+            ImportTask {
+                list: "Work".into(),
+                title: "Bad row".into(),
+                content: None,
+                // 2 is not a valid Toodoo priority (0/1/3/5) — create_task
+                // rejects it, aborting the import partway through.
+                priority: Some(2),
+                due_at: None,
+                start_at: None,
+                completed: false,
+                tags: vec![],
+            },
+        ];
+
+        let result = import_tasks(&pool, &bus, rows).await;
+        assert!(result.is_err(), "the malformed row should fail create_task");
+
+        let n: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM tasks WHERE title = 'Persisted before failure'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(n, 0, "import left a partially-inserted row after failing");
+    }
 }
