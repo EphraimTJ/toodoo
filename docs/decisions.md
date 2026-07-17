@@ -5,6 +5,32 @@ ambiguity we resolved by judgment call), with the reasoning. Newest entries at
 the top. Never rewrite history — if a decision is reversed, add a new entry
 that supersedes the old one.
 
+## 2026-07-16 — v1.0 sanctioned deferrals (release audit)
+
+Consolidates every feature-inventory box left **unchecked** at v1.0, so each is
+backed by a decision (the release-audit requirement). All are intentional; none
+block v1.0.
+
+- **Lunar-calendar recurrence** (§3.1) — a stretch item; the Gregorian RRULE
+  engine ships. Revisit only if there's real demand.
+- **Location reminders** (§3.1) — even the adapted manual "arrive/leave" trigger
+  adds a location model with little desktop value (TickTick's is mobile-only).
+  Deferred; revisit if a mobile companion appears.
+- **Assigned to Me** smart list (§3.2) — meaningless without multi-user
+  assignees; deferred **with collaboration** (below). Its parent "Smart Lists"
+  box therefore also reads unchecked, purely because of this one child.
+- **"Recurring tasks"** parent box (§3.1) reads unchecked **only** because its
+  lunar child is; every other recurrence capability is shipped and checked.
+- **Attachments + per-task gallery** (§3.1) — deferred to a post-12E slice
+  (native fs/thumbnails); backup stays DB-file-only for v1.0 (see the 12B and
+  Data-Safety entries). This is why the release "backup incl. attachments" gate
+  is **DB-only** at v1.0 — there is no attachments dir yet.
+- **MCP server** (§3.12) — post-1.0 (separate entry).
+- **§3.13 Adapted/Deferred** — collaboration UI, cross-device sync, mobile/Siri/
+  Health, and AI features are all out of v1.0 scope per build-plan §9.
+- **Full i18n string extraction** — v1.0 ships react-i18next scaffolding + a
+  representative set; the rest migrate incrementally (12E entry).
+
 ## 2026-07-16 — MCP server deferred to post-v1.0 (user-approved)
 
 Slice **12F (MCP server) is skipped for v1.0** and becomes the **first post-1.0

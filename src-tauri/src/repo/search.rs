@@ -419,4 +419,31 @@ mod tests {
         assert_eq!(res.habits.iter().map(|h| h.name.as_str()).collect::<Vec<_>>(), ["Drink water"]);
         assert_eq!(res.tags.iter().map(|t| t.name.as_str()).collect::<Vec<_>>(), ["waterfall"]);
     }
+
+    /// v1.0 release gate: FTS search stays under 50 ms on the 10k-task fixture.
+    /// Ignored by default (seeding 10k is slow); run with
+    /// `cargo test --lib -- --ignored --nocapture search_under_50ms_on_10k`.
+    #[tokio::test]
+    #[ignore = "perf gate — run explicitly"]
+    async fn search_under_50ms_on_10k() {
+        let pool = connect_in_memory().await.unwrap();
+        let bus = EventBus::new();
+        crate::repo::seed::seed_demo_data(&pool, &bus, 20, 10_000).await.unwrap();
+
+        // Warm the query plan/cache, then measure.
+        let _ = search_tasks(&pool, "lorem", 50).await.unwrap();
+        let t0 = std::time::Instant::now();
+        let hits = search_tasks(&pool, "lorem", 50).await.unwrap();
+        let e_tasks = t0.elapsed();
+
+        let t1 = std::time::Instant::now();
+        let res = search_all(&pool, "dolor", &SearchFilters::default(), 50).await.unwrap();
+        let e_all = t1.elapsed();
+
+        println!("[perf] search_tasks over 10k: {e_tasks:?} ({} hits)", hits.len());
+        println!("[perf] search_all over 10k:   {e_all:?} ({} tasks)", res.tasks.len());
+        assert!(!hits.is_empty());
+        assert!(e_tasks.as_millis() < 50, "search_tasks took {e_tasks:?} (> 50 ms)");
+        assert!(e_all.as_millis() < 50, "search_all took {e_all:?} (> 50 ms)");
+    }
 }
