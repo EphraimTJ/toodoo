@@ -43,16 +43,6 @@ class WindowErrorBoundary extends Component<{ children: ReactNode }, { error: st
 }
 
 function QuickAddWindow() {
-  // Esc closes the window. A window-level listener is robust regardless of which
-  // element (the add input) currently has focus.
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") closeWindow();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, []);
-
   return (
     <div className="p-3" data-testid="win-quickadd">
       <h1 className="mb-1 px-1 text-xs font-semibold uppercase tracking-wide text-text-muted">Quick add</h1>
@@ -100,16 +90,24 @@ export function WindowRoot({ win, id }: { win: string; id: string | null }) {
     const onError = (e: ErrorEvent) => reportWindowError(e.message);
     const onRejection = (e: PromiseRejectionEvent) =>
       reportWindowError(`unhandled rejection: ${String(e.reason)}`);
+    // Esc closes every pop-out window (belt-and-braces beside the title-bar
+    // close button); a window-level listener works regardless of focus.
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") closeWindow();
+    };
+    window.addEventListener("keydown", onKey);
     window.addEventListener("error", onError);
     window.addEventListener("unhandledrejection", onRejection);
     // Boot beacon: proves the SPA loaded in this window — a white screen
-    // without this stderr line means the page itself never loaded.
-    if ("__TAURI_INTERNALS__" in window) {
+    // without this log line means the page itself never loaded. `win=nobeacon`
+    // suppresses it deliberately so the Rust watchdog path can be exercised.
+    if ("__TAURI_INTERNALS__" in window && win !== "nobeacon") {
       void import("@tauri-apps/api/core").then(({ invoke }) =>
         invoke("log_window_error", { message: "booted ok", win: location.search }).catch(() => {}),
       );
     }
     return () => {
+      window.removeEventListener("keydown", onKey);
       window.removeEventListener("error", onError);
       window.removeEventListener("unhandledrejection", onRejection);
     };

@@ -1267,12 +1267,20 @@ async fn set_autostart(
 
 /// Pop-out windows forward their boot beacon and any uncaught webview error
 /// here, so a packaged build's white screen becomes a diagnosable log line.
+/// The beacon also feeds the watchdog in `desktop::open_or_focus`.
 #[tauri::command]
-fn log_window_error(message: String, win: Option<String>) -> CmdResult<()> {
+fn log_window_error(
+    app: tauri::AppHandle,
+    window: tauri::WebviewWindow,
+    message: String,
+    win: Option<String>,
+) -> CmdResult<()> {
+    let label = window.label();
     if message == "booted ok" {
-        log::info!("[window] {}: {message}", win.as_deref().unwrap_or("?"));
+        log::info!("[window] {label} ({}): {message}", win.as_deref().unwrap_or("?"));
+        desktop::mark_window_booted(&app, label);
     } else {
-        log::error!("[window] {}: {message}", win.as_deref().unwrap_or("?"));
+        log::error!("[window] {label} ({}): {message}", win.as_deref().unwrap_or("?"));
     }
     Ok(())
 }
@@ -1360,6 +1368,9 @@ pub fn run() {
                 .build(),
         )
         .setup(|app| {
+            // Boot-beacon bookkeeping for the pop-out window watchdog.
+            app.manage(desktop::WindowWatch::default());
+
             let data_dir = app.path().app_data_dir()?;
             std::fs::create_dir_all(&data_dir)?;
             let db_path = data_dir.join("toodoo.db");
@@ -1392,13 +1403,19 @@ pub fn run() {
             // windows shortly after launch, so their load/boot can be observed
             // from stderr (with the WindowRoot boot beacon) without clicking
             // through the UI. Used to verify packaged-build window loading.
-            if std::env::var("TOODOO_DIAG_WINDOWS").is_ok() {
+            if let Ok(diag) = std::env::var("TOODOO_DIAG_WINDOWS") {
                 let h = app.handle().clone();
                 tauri::async_runtime::spawn(async move {
                     tokio::time::sleep(std::time::Duration::from_secs(3)).await;
                     log::info!("[diag] opening focus + sticky windows");
                     let _ = desktop::open_or_focus(&h, "focus", "win=focus", "Focus", 320.0, 220.0, true);
                     let _ = desktop::open_or_focus(&h, "sticky-diag", "win=sticky&id=diag", "Sticky", 260.0, 240.0, true);
+                    if diag == "watchdog" {
+                        // A window whose content deliberately never beacons —
+                        // the watchdog must destroy it and raise the toast.
+                        log::info!("[diag] opening nobeacon window to exercise the watchdog");
+                        let _ = desktop::open_or_focus(&h, "diag-nobeacon", "win=nobeacon", "Diag", 260.0, 160.0, true);
+                    }
                 });
             }
             let bus = EventBus::new();

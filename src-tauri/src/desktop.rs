@@ -5,7 +5,7 @@
 
 use serde::Serialize;
 use sqlx::SqlitePool;
-use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindowBuilder};
+use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
 
 /// Recompute the "Today" count and set the tray tooltip. No-op until the tray
 /// exists. Called at startup and on every task-affecting domain event.
@@ -85,10 +85,29 @@ pub async fn set_autostart_flag(pool: &SqlitePool, bus: &EventBus, on: bool) -> 
     set_setting(pool, bus, KEY_AUTOSTART, serde_json::json!(on)).await
 }
 
+/// Labels of pop-out windows whose web content has reported its boot beacon.
+/// The watchdog in `open_or_focus` destroys any window that never boots, so a
+/// content-load failure can't leave a stuck, unclosable white window.
+#[derive(Default)]
+pub struct WindowWatch(pub std::sync::Mutex<std::collections::HashSet<String>>);
+
+/// Record that `label`'s web content booted (called from the beacon command).
+pub fn mark_window_booted(app: &AppHandle, label: &str) {
+    if let Some(watch) = app.try_state::<WindowWatch>() {
+        watch.0.lock().unwrap().insert(label.to_string());
+    }
+}
+
+/// How long a pop-out's web content gets to report its boot beacon before the
+/// watchdog destroys the window and raises a main-window error toast.
+const BOOT_DEADLINE_SECS: u64 = 5;
+
 /// Open (or focus) an always-on-top mini window that loads the SPA with a
-/// `?win=<kind>` query the frontend entry branches on. `decorations` gives the
-/// window a title bar + OS resize handles (focus/sticky want it so they can be
-/// moved and resized; the transient quick-add window stays frameless).
+/// `?win=<kind>` query the frontend entry branches on. All pop-outs keep
+/// native decorations (title bar + close + resize handles) until the packaged
+/// content-load path is proven stable — a window must always be closable even
+/// if its content never renders. The `decorations` flag is kept for when
+/// frameless cosmetics return.
 pub fn open_or_focus(
     app: &AppHandle,
     label: &str,
@@ -103,13 +122,70 @@ pub fn open_or_focus(
         let _ = win.set_focus();
         return Ok(());
     }
-    WebviewWindowBuilder::new(app, label, WebviewUrl::App(format!("index.html?{query}").into()))
+    // Failsafe: force decorations for now (see doc comment).
+    let _ = decorations;
+
+    // A fresh window must boot freshly — drop any stale beacon for this label.
+    if let Some(watch) = app.try_state::<WindowWatch>() {
+        watch.0.lock().unwrap().remove(label);
+    }
+
+    let url = format!("index.html?{query}");
+    log::info!("[window] {label}: creating window url={url:?} title={title:?}");
+    let build_label = label.to_string();
+    let result = WebviewWindowBuilder::new(app, label, WebviewUrl::App(url.into()))
         .title(title)
         .inner_size(w, h)
+        // Without an explicit position the OS default can spawn the window
+        // partially off-screen (observed on the installed build: only the
+        // title bar peeking at the bottom edge — indistinguishable from a
+        // broken white window). Center it.
+        .center()
         .always_on_top(true)
-        .decorations(decorations)
+        .decorations(true)
         .resizable(true)
-        .build()?;
+        .on_page_load(move |_webview, payload| {
+            let event = match payload.event() {
+                tauri::webview::PageLoadEvent::Started => "load started",
+                tauri::webview::PageLoadEvent::Finished => "load finished",
+            };
+            log::info!("[window] {build_label}: page {event} url={}", payload.url());
+        })
+        .build();
+    if let Err(e) = &result {
+        log::error!("[window] {label}: window creation FAILED: {e}");
+    }
+    result?;
+
+    // Watchdog: if the beacon never arrives, destroy the window and tell the
+    // main window. A content failure must never require Task Manager.
+    let label_owned = label.to_string();
+    let watchdog_app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(std::time::Duration::from_secs(BOOT_DEADLINE_SECS)).await;
+        let booted = watchdog_app
+            .try_state::<WindowWatch>()
+            .map(|w| w.0.lock().unwrap().contains(&label_owned))
+            .unwrap_or(true);
+        if booted {
+            return;
+        }
+        log::error!(
+            "[window] {label_owned}: no boot beacon within {BOOT_DEADLINE_SECS}s — destroying the window (web content failed to load)"
+        );
+        if let Some(win) = watchdog_app.get_webview_window(&label_owned) {
+            let _ = win.destroy();
+        }
+        let _ = watchdog_app.emit_to(
+            "main",
+            "app-error",
+            serde_json::json!({
+                "message": format!(
+                    "The {label_owned} window failed to load and was closed. Details: Settings → Advanced → Open logs folder."
+                ),
+            }),
+        );
+    });
     Ok(())
 }
 
