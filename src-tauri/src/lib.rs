@@ -1354,17 +1354,30 @@ pub fn run() {
                     {
                         Ok(due) => due,
                         Err(e) => {
-                            eprintln!("reminder scan failed: {e}");
+                            eprintln!("[reminders] scan failed: {e}");
                             continue;
                         }
                     };
+                    eprintln!(
+                        "[reminders] poll @ {}: {} due",
+                        chrono::Utc::now().to_rfc3339(),
+                        due.len()
+                    );
                     for r in due {
-                        let _ = sched_handle
+                        eprintln!(
+                            "[reminders] dispatch notification: reminder={} task={} title={:?}",
+                            r.reminder_id, r.task_id, r.task_title
+                        );
+                        match sched_handle
                             .notification()
                             .builder()
                             .title("Toodoo")
                             .body(&r.task_title)
-                            .show();
+                            .show()
+                        {
+                            Ok(()) => eprintln!("[reminders] notification.show() ok"),
+                            Err(e) => eprintln!("[reminders] notification.show() FAILED: {e}"),
+                        }
                         if let Err(e) =
                             repo::reminders::mark_fired(&sched_pool, &r.reminder_id, &r.fire_at).await
                         {
