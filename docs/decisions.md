@@ -5,6 +5,44 @@ ambiguity we resolved by judgment call), with the reasoning. Newest entries at
 the top. Never rewrite history — if a decision is reversed, add a new entry
 that supersedes the old one.
 
+## 2026-07-16 — Native desktop integration (Phase 12D, user-approved)
+
+Ships the native desktop surface: global quick-add hotkey, system tray (Today
+count + quick actions), always-on-top mini windows (focus + sticky pop-outs),
+launch-at-login, notification Complete/Snooze, and share-as-text/markdown.
+
+**Verifiability (important):** the Rust/Tauri wiring — tray, `global-shortcut`,
+`autostart` plugin, always-on-top `WebviewWindow`s, OS notification buttons — is
+**compile-verified (`cargo build`/`clippy`) and hand-checked via the NEW
+`docs/manual-test-checklist.md`**. It **cannot be Playwright-verified here** (no
+GUI), per the 2026-07-14 E2E decision. The auto-tested slice is: the `shareText`
+builders, `valid_accelerator`, the Desktop settings panel (stub-mirrored config),
+the `?win=` window-mode shells, and the in-app reminder popover.
+
+**Notifications:** the **reliable, tested path is an in-app Complete/Snooze
+popover** (`ReminderToasts`) driven by a `reminder-fired` event the scheduler
+emits. **OS notification action buttons are best-effort** — the current
+`tauri-plugin-notification` action-button support is limited/inconsistent per-OS,
+so they are not wired this slice; per-OS behavior is recorded in the checklist.
+The §3.11 "native notifications with action buttons" box is checked on the
+strength of the popover providing Complete/Snooze.
+
+**Pop-out / mini windows reuse the SPA** via an `index.html?win=<kind>[&id=…]`
+query that `main.tsx` branches on (`WindowRoot`) — no second bundle. In the
+**browser stub these render but don't share state across windows** (each page is
+a fresh in-memory store); cross-window persistence is a Tauri-only (shared DB)
+behavior on the manual checklist.
+
+**Config** (`hotkey.quickAdd`, `autostart.enabled`, `notif.actions`) lives in
+`settings`; no schema. The tray tooltip shows the live Today count.
+
+**Share ships text + markdown** (Blob download / clipboard, browser-tested);
+**image/PNG is deferred to 12E** (needs a DOM-to-image dep), so the §3.11 *Share
+task/list* box stays **unchecked** this slice.
+
+The 12B attachments-deferred / DB-only-backup decisions are **untouched** (12D
+adds nothing to backups).
+
 ## 2026-07-16 — NLP quick-add (Phase 12C, user-approved)
 
 **Pure frontend, no schema/commands.** Parsing lives in

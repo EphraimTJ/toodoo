@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Dialog } from "radix-ui";
 import { ApiSettings } from "./ApiSettings";
 import { DataSettings } from "./DataSettings";
+import { DesktopSettings } from "./DesktopSettings";
 import { SmartListSettings } from "./SmartListSettings";
 
 /** Gear button in the sidebar header that opens the Settings modal. */
@@ -29,6 +30,12 @@ export function SettingsDialog() {
         >
           <Dialog.Title className="mb-4 text-base font-semibold">Settings</Dialog.Title>
           <div className="max-h-[70vh] space-y-6 overflow-y-auto pr-1">
+            <section>
+              <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-text-muted">
+                Desktop
+              </h3>
+              <DesktopSettings />
+            </section>
             <section>
               <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-text-muted">
                 Smart Lists

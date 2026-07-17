@@ -1,5 +1,6 @@
 mod api;
 mod deeplink;
+mod desktop;
 mod error;
 mod events;
 pub mod repo;
@@ -1210,12 +1211,94 @@ async fn set_backup_config(
     repo::backup::set_config(&state.pool, &state.bus, auto_enabled, keep).await.map_err(err)
 }
 
+// ---- desktop (native) ----------------------------------------------------------
+
+#[tauri::command]
+async fn desktop_config(state: State<'_, AppState>) -> CmdResult<desktop::DesktopConfig> {
+    desktop::config(&state.pool).await.map_err(err)
+}
+
+#[tauri::command]
+async fn set_quick_add_hotkey(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    accel: String,
+) -> CmdResult<desktop::DesktopConfig> {
+    let cfg = desktop::set_hotkey(&state.pool, &state.bus, &accel).await.map_err(err)?;
+    // Re-register the global shortcut with the new accelerator.
+    use tauri_plugin_global_shortcut::GlobalShortcutExt;
+    let gs = app.global_shortcut();
+    let _ = gs.unregister_all();
+    let _ = gs.register(cfg.quick_add_hotkey.as_str());
+    Ok(cfg)
+}
+
+#[tauri::command]
+async fn set_notif_actions(state: State<'_, AppState>, on: bool) -> CmdResult<desktop::DesktopConfig> {
+    desktop::set_notif_actions(&state.pool, &state.bus, on).await.map_err(err)
+}
+
+#[tauri::command]
+async fn set_autostart(
+    app: tauri::AppHandle,
+    state: State<'_, AppState>,
+    on: bool,
+) -> CmdResult<desktop::DesktopConfig> {
+    use tauri_plugin_autostart::ManagerExt;
+    let mgr = app.autolaunch();
+    let _ = if on { mgr.enable() } else { mgr.disable() };
+    desktop::set_autostart_flag(&state.pool, &state.bus, on).await.map_err(err)?;
+    desktop::config(&state.pool).await.map_err(err)
+}
+
+#[tauri::command]
+fn open_quick_add_window(app: tauri::AppHandle) -> CmdResult<()> {
+    desktop::open_or_focus(&app, "quickadd", "win=quickadd", "Quick add", 520.0, 180.0)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn open_focus_window(app: tauri::AppHandle) -> CmdResult<()> {
+    desktop::open_or_focus(&app, "focus", "win=focus", "Focus", 320.0, 220.0)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+fn open_sticky_window(app: tauri::AppHandle, id: String) -> CmdResult<()> {
+    desktop::open_or_focus(&app, &format!("sticky-{id}"), &format!("win=sticky&id={id}"), "Sticky", 260.0, 240.0)
+        .map_err(|e| e.to_string())
+}
+
+#[tauri::command]
+async fn today_count(state: State<'_, AppState>) -> CmdResult<i64> {
+    let tz_off = chrono::Local::now().offset().local_minus_utc() / 60;
+    let today = (chrono::Utc::now() + chrono::Duration::minutes(tz_off as i64))
+        .format("%Y-%m-%d")
+        .to_string();
+    let counts = repo::tasks::smart_counts(&state.pool, &today, tz_off).await.map_err(err)?;
+    Ok(counts.today)
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_deep_link::init())
+        .plugin(tauri_plugin_autostart::init(
+            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            None::<Vec<&str>>,
+        ))
+        .plugin(
+            tauri_plugin_global_shortcut::Builder::new()
+                .with_handler(|app, _shortcut, event| {
+                    // We register a single shortcut (quick-add), so any press opens it.
+                    if event.state == tauri_plugin_global_shortcut::ShortcutState::Pressed {
+                        let _ = desktop::open_or_focus(app, "quickadd", "win=quickadd", "Quick add", 520.0, 180.0);
+                    }
+                })
+                .build(),
+        )
         .setup(|app| {
             let data_dir = app.path().app_data_dir()?;
             std::fs::create_dir_all(&data_dir)?;
@@ -1288,6 +1371,16 @@ pub fn run() {
                             eprintln!("mark_fired failed: {e}");
                             continue;
                         }
+                        // In-app Complete/Snooze popover — the reliable action path
+                        // across OSes (native notification buttons are best-effort).
+                        let _ = sched_handle.emit(
+                            "reminder-fired",
+                            serde_json::json!({
+                                "taskId": r.task_id,
+                                "reminderId": r.reminder_id,
+                                "title": r.task_title,
+                            }),
+                        );
                         sched_bus.emit(events::DomainEvent::ReminderFired {
                             task_id: r.task_id,
                             reminder_id: r.reminder_id,
@@ -1398,6 +1491,80 @@ pub fn run() {
                     Err(e) => eprintln!("API server failed to start: {e}"),
                 }
             }
+
+            // Register the quick-add global shortcut from settings.
+            {
+                use tauri_plugin_global_shortcut::GlobalShortcutExt;
+                let accel = tauri::async_runtime::block_on(desktop::config(&pool))
+                    .map(|c| c.quick_add_hotkey)
+                    .unwrap_or_else(|_| desktop::DEFAULT_HOTKEY.to_string());
+                if let Err(e) = app.global_shortcut().register(accel.as_str()) {
+                    eprintln!("global shortcut register failed: {e}");
+                }
+            }
+
+            // System tray: quick actions + a Today-count tooltip.
+            {
+                use tauri::menu::{Menu, MenuItem};
+                use tauri::tray::TrayIconBuilder;
+                let quick = MenuItem::with_id(app, "quick_add", "Quick add", true, None::<&str>)?;
+                let today = MenuItem::with_id(app, "open_today", "Open Today", true, None::<&str>)?;
+                let focus = MenuItem::with_id(app, "start_focus", "Start focus", true, None::<&str>)?;
+                let show = MenuItem::with_id(app, "show_hide", "Show / Hide", true, None::<&str>)?;
+                let quit = MenuItem::with_id(app, "quit", "Quit", true, None::<&str>)?;
+                let menu = Menu::with_items(app, &[&quick, &today, &focus, &show, &quit])?;
+                TrayIconBuilder::with_id("main")
+                    .icon(app.default_window_icon().cloned().unwrap())
+                    .tooltip("Toodoo")
+                    .menu(&menu)
+                    .on_menu_event(|app, event| match event.id.as_ref() {
+                        "quick_add" => {
+                            let _ = desktop::open_or_focus(app, "quickadd", "win=quickadd", "Quick add", 520.0, 180.0);
+                        }
+                        "start_focus" => {
+                            let _ = desktop::open_or_focus(app, "focus", "win=focus", "Focus", 320.0, 220.0);
+                        }
+                        "open_today" => {
+                            if let Some(w) = app.get_webview_window("main") {
+                                let _ = w.show();
+                                let _ = w.set_focus();
+                                let _ = w.emit("open-view", "today");
+                            }
+                        }
+                        "show_hide" => {
+                            if let Some(w) = app.get_webview_window("main") {
+                                if w.is_visible().unwrap_or(true) {
+                                    let _ = w.hide();
+                                } else {
+                                    let _ = w.show();
+                                    let _ = w.set_focus();
+                                }
+                            }
+                        }
+                        "quit" => app.exit(0),
+                        _ => {}
+                    })
+                    .build(app)?;
+            }
+
+            // Keep the tray tooltip's Today count fresh.
+            let tray_pool = pool.clone();
+            let tray_handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                let mut tick = tokio::time::interval(std::time::Duration::from_secs(60));
+                loop {
+                    tick.tick().await;
+                    let tz_off = chrono::Local::now().offset().local_minus_utc() / 60;
+                    let today = (chrono::Utc::now() + chrono::Duration::minutes(tz_off as i64))
+                        .format("%Y-%m-%d")
+                        .to_string();
+                    if let Ok(c) = repo::tasks::smart_counts(&tray_pool, &today, tz_off).await {
+                        if let Some(tray) = tray_handle.tray_by_id("main") {
+                            let _ = tray.set_tooltip(Some(format!("Toodoo — {} due today", c.today)));
+                        }
+                    }
+                }
+            });
 
             app.manage(AppState { pool, bus, data_dir, api_token, api_server });
             Ok(())
@@ -1550,7 +1717,15 @@ pub fn run() {
             restore_backup,
             delete_backup,
             backup_config,
-            set_backup_config
+            set_backup_config,
+            desktop_config,
+            set_quick_add_hotkey,
+            set_notif_actions,
+            set_autostart,
+            open_quick_add_window,
+            open_focus_window,
+            open_sticky_window,
+            today_count
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

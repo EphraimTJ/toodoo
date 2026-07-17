@@ -330,6 +330,12 @@ export interface BackupConfig {
   lastAt: string | null;
 }
 
+export interface DesktopConfig {
+  quickAddHotkey: string;
+  autostart: boolean;
+  notifActions: boolean;
+}
+
 // ---- Search -----------------------------------------------------------------
 
 export interface SearchFilters {
@@ -705,6 +711,15 @@ export interface Api {
   backupConfig(): Promise<BackupConfig>;
   setBackupConfig(autoEnabled: boolean, keep: number): Promise<BackupConfig>;
 
+  desktopConfig(): Promise<DesktopConfig>;
+  setQuickAddHotkey(accel: string): Promise<DesktopConfig>;
+  setNotifActions(on: boolean): Promise<DesktopConfig>;
+  setAutostart(on: boolean): Promise<DesktopConfig>;
+  openQuickAddWindow(): Promise<void>;
+  openFocusWindow(): Promise<void>;
+  openStickyWindow(id: string): Promise<void>;
+  todayCount(): Promise<number>;
+
   listHabits(includeArchived: boolean): Promise<Habit[]>;
   getHabit(id: string): Promise<Habit>;
   createHabit(input: HabitInput): Promise<Habit>;
@@ -947,6 +962,15 @@ const tauriApi: Api = {
   setBackupConfig: (autoEnabled, keep) =>
     invoke("set_backup_config", { autoEnabled, keep }),
 
+  desktopConfig: () => invoke("desktop_config"),
+  setQuickAddHotkey: (accel) => invoke("set_quick_add_hotkey", { accel }),
+  setNotifActions: (on) => invoke("set_notif_actions", { on }),
+  setAutostart: (on) => invoke("set_autostart", { on }),
+  openQuickAddWindow: () => invoke("open_quick_add_window"),
+  openFocusWindow: () => invoke("open_focus_window"),
+  openStickyWindow: (id) => invoke("open_sticky_window", { id }),
+  todayCount: () => invoke("today_count"),
+
   listHabits: (includeArchived) => invoke("list_habits", { includeArchived }),
   getHabit: (id) => invoke("get_habit", { id }),
   createHabit: (input) => invoke("create_habit", { input }),
@@ -1047,6 +1071,13 @@ function browserStubApi(): Api {
   const backupCfg: BackupConfig = { autoEnabled: true, keep: 10, lastAt: null };
   let recentSearchList: string[] = [];
   const savedSearchList: SavedSearch[] = [];
+  // Native desktop config the browser can't apply — the stub tracks it so the
+  // Settings panel renders and toggles.
+  const desktopCfg: DesktopConfig = {
+    quickAddHotkey: "CmdOrCtrl+Shift+A",
+    autostart: false,
+    notifActions: true,
+  };
   const nowIso = () => new Date().toISOString();
   const uid = () => crypto.randomUUID();
 
@@ -2307,6 +2338,31 @@ function browserStubApi(): Api {
       backupCfg.autoEnabled = autoEnabled;
       backupCfg.keep = Math.max(1, keep);
       return { ...backupCfg };
+    },
+
+    desktopConfig: async () => ({ ...desktopCfg }),
+    setQuickAddHotkey: async (accel) => {
+      if (accel.trim()) desktopCfg.quickAddHotkey = accel.trim();
+      return { ...desktopCfg };
+    },
+    setNotifActions: async (on) => {
+      desktopCfg.notifActions = on;
+      return { ...desktopCfg };
+    },
+    setAutostart: async (on) => {
+      desktopCfg.autostart = on;
+      return { ...desktopCfg };
+    },
+    openQuickAddWindow: async () => {
+      /* native-only; no-op in the browser */
+    },
+    openFocusWindow: async () => {},
+    openStickyWindow: async () => {},
+    todayCount: async () => {
+      const { today } = localDateParams();
+      return tasks.filter(
+        (t) => t.status === "ACTIVE" && t.kind !== "NOTE" && (effDate(t) ?? "9999") <= today,
+      ).length;
     },
 
     listHabits: async (includeArchived) =>

@@ -10,6 +10,8 @@ import { useTags } from "../../tags/hooks/useTags";
 import { flattenTree, useTaskMutations, useViewTasks, type TreeRow } from "../hooks/useTasks";
 import { useViewOptions, type GroupMode, type SortMode } from "../hooks/useViewOptions";
 import { completedDateLabel, organizeTasks } from "../lib/sortGroup";
+import { downloadText } from "../../../lib/download";
+import { listToMarkdown } from "../../share/lib/shareText";
 import { BatchToolbar } from "./BatchToolbar";
 import { TaskAddBar } from "./TaskAddBar";
 import { TaskRow } from "./TaskRow";
@@ -214,6 +216,16 @@ export function TaskListView({ view }: { view: ViewSelection }) {
                 const project = (projects ?? []).find((p) => p.id === view.projectId);
                 return project ? <ViewModeToggle project={project} /> : null;
               })()}
+            <button
+              type="button"
+              aria-label="Share list as markdown"
+              className="rounded-md px-2 py-1 text-xs text-text-muted hover:bg-surface"
+              onClick={() =>
+                downloadText(`${title}.md`, listToMarkdown(title, tasks ?? []), "text/markdown")
+              }
+            >
+              ↗
+            </button>
             <DropdownMenu.Root>
               <DropdownMenu.Trigger asChild>
                 <button

@@ -2,6 +2,8 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { DropdownMenu, Popover } from "radix-ui";
 import { api, type Priority, type Task } from "../../../../lib/api";
+import { downloadText } from "../../../../lib/download";
+import { taskToMarkdown, taskToText } from "../../../share/lib/shareText";
 import { useUiStore } from "../../../../lib/uiStore";
 import { useTags, useTagMutations } from "../../../tags/hooks/useTags";
 import { useTaskMutations } from "../../hooks/useTasks";
@@ -425,6 +427,36 @@ export function TaskDetail() {
         >
           🔗 Copy link
         </button>
+        <DropdownMenu.Root>
+          <DropdownMenu.Trigger asChild>
+            <button
+              type="button"
+              aria-label="Share task"
+              className="rounded-md border border-border px-2 py-1 text-xs text-text-muted hover:text-accent"
+            >
+              ↗ Share
+            </button>
+          </DropdownMenu.Trigger>
+          <DropdownMenu.Portal>
+            <DropdownMenu.Content
+              sideOffset={6}
+              className="z-50 min-w-40 rounded-md border border-border bg-surface p-1 text-sm shadow-lg"
+            >
+              <DropdownMenu.Item
+                className="cursor-pointer select-none rounded px-2 py-1 outline-none hover:bg-bg data-[highlighted]:bg-bg"
+                onSelect={() => void navigator.clipboard.writeText(taskToText(task)).catch(() => {})}
+              >
+                Copy as text
+              </DropdownMenu.Item>
+              <DropdownMenu.Item
+                className="cursor-pointer select-none rounded px-2 py-1 outline-none hover:bg-bg data-[highlighted]:bg-bg"
+                onSelect={() => downloadText(`${task.title || "task"}.md`, taskToMarkdown(task), "text/markdown")}
+              >
+                Download markdown
+              </DropdownMenu.Item>
+            </DropdownMenu.Content>
+          </DropdownMenu.Portal>
+        </DropdownMenu.Root>
         <button
           type="button"
           className="rounded-md border border-border px-2 py-1 text-xs text-text-muted hover:text-accent"

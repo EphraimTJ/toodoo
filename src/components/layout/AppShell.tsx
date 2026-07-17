@@ -3,7 +3,9 @@ import { Sidebar } from "./Sidebar";
 import { ListPane } from "./ListPane";
 import { DetailPane } from "./DetailPane";
 import { CommandPalette } from "../../features/search/components/CommandPalette";
+import { ReminderToasts } from "../../features/reminders/components/ReminderToasts";
 import { api } from "../../lib/api";
+import { useUiStore } from "../../lib/uiStore";
 import { useDomainEvents } from "../../lib/useDomainEvents";
 import { useDeepLinks } from "../../lib/useDeepLinks";
 
@@ -21,12 +23,31 @@ export function AppShell() {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, []);
+
+  // Tray "Open Today" focuses the window and switches to the Today list.
+  useEffect(() => {
+    if (!("__TAURI_INTERNALS__" in window)) return;
+    let unlisten: (() => void) | undefined;
+    let disposed = false;
+    void import("@tauri-apps/api/event").then(({ listen }) =>
+      listen("open-view", () => useUiStore.getState().setView({ kind: "smart", view: "today" })).then((fn) => {
+        if (disposed) fn();
+        else unlisten = fn;
+      }),
+    );
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  }, []);
+
   return (
     <div className="flex h-full">
       <Sidebar />
       <ListPane />
       <DetailPane />
       <CommandPalette />
+      <ReminderToasts />
     </div>
   );
 }

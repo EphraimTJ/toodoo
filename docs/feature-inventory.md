@@ -141,8 +141,8 @@ This is the checklist the whole project is graded against, converted from §3 of
 - [x] Attach a focus session to a task or habit
 - [x] Focus notes per session
 - [x] White noise / ambient sounds during focus
-- [ ] Mini floating focus window — deferred to Phase 12 (desktop pass)
-- [ ] Tray countdown — deferred to Phase 12 (desktop pass)
+- [x] Mini floating focus window
+- [x] Tray countdown
 - [x] Focus statistics (Pro)
   - [x] Daily/weekly/monthly focus duration
   - [x] Pomo counts
@@ -188,9 +188,8 @@ This is the checklist the whole project is graded against, converted from §3 of
 
 - [x] Note-type items (a list can be a "note list"; notes have no due date
       semantics, support rich text)
-- [ ] Desktop Sticky Notes: pop any note/task out as an always-on-top mini window
-      — in-app sticky board shipped; the always-on-top pop-out window is deferred
-      to Phase 12 (desktop pass)
+- [x] Desktop Sticky Notes: pop any note/task out as an always-on-top mini window
+      (in-app sticky board also remains)
   - [x] Color options
 
 ## 3.9 Search
@@ -215,12 +214,13 @@ This is the checklist the whole project is graded against, converted from §3 of
 
 ## 3.11 Desktop UX
 
-- [ ] Global quick-add hotkey (system-wide)
+- [x] Global quick-add hotkey (system-wide)
 - [ ] Full in-app shortcut map
 - [x] Command palette (⌘K)
-- [ ] System tray with today count + quick actions
-- [ ] Launch at login
-- [ ] Native notifications with action buttons (Complete / Snooze)
+- [x] System tray with today count + quick actions
+- [x] Launch at login
+- [x] Native notifications with action buttons (Complete / Snooze) — in-app
+      Complete/Snooze popover is the reliable path; OS buttons best-effort per platform
 - [ ] Themes (Pro): light/dark/auto
   - [ ] Color themes + custom accent
   - [ ] Font size options
