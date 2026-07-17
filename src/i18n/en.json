@@ -1,0 +1,35 @@
+{
+  "app": {
+    "inbox": "Inbox",
+    "search": "Search"
+  },
+  "smart": {
+    "today": "Today",
+    "tomorrow": "Tomorrow",
+    "next7Days": "Next 7 Days",
+    "all": "All",
+    "completed": "Completed",
+    "wontDo": "Won't Do",
+    "trash": "Trash"
+  },
+  "action": {
+    "add": "Add",
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "done": "Done"
+  },
+  "settings": {
+    "title": "Settings",
+    "appearance": "Appearance",
+    "language": "Language",
+    "desktop": "Desktop",
+    "smartLists": "Smart Lists",
+    "dataBackups": "Data & Backups",
+    "apiIntegrations": "API & Integrations"
+  },
+  "tasks": {
+    "count_one": "{{count}} task",
+    "count_other": "{{count}} tasks"
+  }
+}

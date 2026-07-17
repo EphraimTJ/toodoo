@@ -1,3 +1,4 @@
+import { useTranslation } from "react-i18next";
 import type { SmartView } from "../../lib/api";
 import { useUiStore } from "../../lib/uiStore";
 import { ThemeToggle } from "../../features/settings/components/ThemeToggle";
@@ -19,6 +20,7 @@ const SMART_META: Record<SmartView, { label: string; countKey?: "today" | "tomor
 };
 
 export function Sidebar() {
+  const { t } = useTranslation();
   const { view, setView } = useUiStore();
   const { data: counts } = useSmartCounts();
   const { items: smartLists } = useSmartLists();
@@ -59,7 +61,7 @@ export function Sidebar() {
                   : ""
               }`}
             >
-              Inbox
+              {t("app.inbox")}
               {(counts?.inbox ?? 0) > 0 && (
                 <span className="text-xs text-text-muted">{counts?.inbox}</span>
               )}
@@ -80,7 +82,7 @@ export function Sidebar() {
                       active ? "bg-bg font-medium text-accent" : ""
                     }`}
                   >
-                    {meta.label}
+                    {t(`smart.${smart.view}`)}
                     {count !== undefined && count > 0 && (
                       <span className="text-xs text-text-muted">{count}</span>
                     )}

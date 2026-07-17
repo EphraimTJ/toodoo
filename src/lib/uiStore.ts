@@ -52,6 +52,7 @@ interface UiState {
   focusTaskId: string | null;
   /** Query to seed the Search view when it opens (consumed on mount). */
   searchSeed: string;
+  shortcutsOpen: boolean;
 
   setView(view: ViewSelection): void;
   selectTask(id: string | null): void;
@@ -60,6 +61,7 @@ interface UiState {
   setPaletteOpen(open: boolean): void;
   openFocus(taskId?: string | null): void;
   openSearch(query?: string): void;
+  setShortcutsOpen(open: boolean): void;
 }
 
 export const useUiStore = create<UiState>((set) => ({
@@ -69,6 +71,7 @@ export const useUiStore = create<UiState>((set) => ({
   paletteOpen: false,
   focusTaskId: null,
   searchSeed: "",
+  shortcutsOpen: false,
 
   setView: (view) => set({ view, selectedTaskId: null, multiSelect: new Set() }),
   openFocus: (taskId = null) => set({ view: { kind: "focus" }, focusTaskId: taskId }),
@@ -84,4 +87,5 @@ export const useUiStore = create<UiState>((set) => ({
     }),
   clearMultiSelect: () => set({ multiSelect: new Set() }),
   setPaletteOpen: (paletteOpen) => set({ paletteOpen }),
+  setShortcutsOpen: (shortcutsOpen) => set({ shortcutsOpen }),
 }));

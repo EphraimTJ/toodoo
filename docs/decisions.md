@@ -5,6 +5,42 @@ ambiguity we resolved by judgment call), with the reasoning. Newest entries at
 the top. Never rewrite history — if a decision is reversed, add a new entry
 that supersedes the old one.
 
+## 2026-07-16 — Themes, i18n, shortcuts, polish (Phase 12E, user-approved)
+
+The last feature slice before v1.0 (frontend-only; no schema, no Rust).
+
+**Themes:** mode **light/dark/auto** + accent (an 8-swatch palette + a custom hex
+picker) + font-size **S/M/L**, all persisted in `settings`
+(`theme.mode`/`theme.accent`/`theme.fontSize`). Applied by `AppearanceProvider`
+(mounted once at the root, so pop-out windows are themed too): toggles the root
+`.dark` class — **`auto` follows `prefers-color-scheme` live** — sets
+`--color-accent`/`--color-accent-fg` (foreground auto-picked for contrast via a
+luminance threshold tuned to the accent-button convention, `theme.ts`), and sets
+the root `font-size`. The sidebar `ThemeToggle` is now a light/dark quick-toggle
+over the same store.
+
+**i18n is scaffolding + a representative string set** (react-i18next + `en.json` +
+a language switcher). English is the only shipped locale; a visible subset
+(sidebar labels, settings headings) uses `t()`, and the rest follow the same
+pattern **incrementally** — a deliberate partial close of the item, not a full
+extraction (confirmed with the user).
+
+**Shortcuts:** a `registry.ts` map + `useShortcuts` (single-key + `g`-prefix set:
+`n` add-bar, `/` palette, `t` theme, `g i`/`g t` navigation, `?` cheatsheet) and a
+`?` **cheatsheet overlay**. ⌘K remains owned by the command palette.
+
+**Share image** uses **`html-to-image`** → PNG (client-side render of an offscreen
+card, blob download), **superseding the 12D "image deferred" note** — the §3.11
+share box is now fully checked (task text/markdown/image; list text/markdown).
+
+**Ops polish is release/manual work, not this slice:** perf-audit targets
+(list < 16 ms/frame, cold start < 2 s on the 10k fixture), packaging/signing, and
+the app-icon swap live on `docs/manual-test-checklist.md` — none are CI-verifiable
+here (no GUI/packaging/certs), so they are not claimed as done.
+
+New deps: `i18next`, `react-i18next`, `html-to-image`. The 12B attachments-
+deferred / DB-only-backup decisions remain untouched.
+
 ## 2026-07-16 — Native desktop integration (Phase 12D, user-approved)
 
 Ships the native desktop surface: global quick-add hotkey, system tray (Today

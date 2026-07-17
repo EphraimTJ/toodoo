@@ -35,9 +35,12 @@
     "chrono-node": "^2.10.0",
     "cmdk": "^1.1.1",
     "date-fns": "^4.4.0",
+    "html-to-image": "^1.11.13",
+    "i18next": "^26.3.6",
     "radix-ui": "^1.6.2",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "react-i18next": "^17.0.10",
     "recharts": "^2.15.4",
     "rrule": "^2.8.1",
     "zustand": "^5.0.14"

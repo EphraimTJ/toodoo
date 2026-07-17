@@ -4,6 +4,8 @@ import { ListPane } from "./ListPane";
 import { DetailPane } from "./DetailPane";
 import { CommandPalette } from "../../features/search/components/CommandPalette";
 import { ReminderToasts } from "../../features/reminders/components/ReminderToasts";
+import { ShortcutCheatsheet } from "../../features/shortcuts/components/ShortcutCheatsheet";
+import { useShortcuts } from "../../features/shortcuts/useShortcuts";
 import { api } from "../../lib/api";
 import { useUiStore } from "../../lib/uiStore";
 import { useDomainEvents } from "../../lib/useDomainEvents";
@@ -12,6 +14,7 @@ import { useDeepLinks } from "../../lib/useDeepLinks";
 export function AppShell() {
   useDomainEvents();
   useDeepLinks();
+  useShortcuts();
 
   // Dev-only perf fixture (§8 budget): Ctrl+Shift+F9 seeds 10k tasks.
   // The backend command refuses to run in release builds.
@@ -48,6 +51,7 @@ export function AppShell() {
       <DetailPane />
       <CommandPalette />
       <ReminderToasts />
+      <ShortcutCheatsheet />
     </div>
   );
 }

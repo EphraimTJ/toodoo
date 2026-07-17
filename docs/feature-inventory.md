@@ -215,17 +215,17 @@ This is the checklist the whole project is graded against, converted from §3 of
 ## 3.11 Desktop UX
 
 - [x] Global quick-add hotkey (system-wide)
-- [ ] Full in-app shortcut map
+- [x] Full in-app shortcut map
 - [x] Command palette (⌘K)
 - [x] System tray with today count + quick actions
 - [x] Launch at login
 - [x] Native notifications with action buttons (Complete / Snooze) — in-app
       Complete/Snooze popover is the reliable path; OS buttons best-effort per platform
-- [ ] Themes (Pro): light/dark/auto
-  - [ ] Color themes + custom accent
-  - [ ] Font size options
-- [ ] Multi-language-ready i18n scaffolding (English first)
-- [ ] Share task/list as text/markdown/image export
+- [x] Themes (Pro): light/dark/auto
+  - [x] Color themes + custom accent
+  - [x] Font size options
+- [x] Multi-language-ready i18n scaffolding (English first)
+- [x] Share task/list as text/markdown/image export
 
 ## 3.12 Data, Import/Export, Integration
 

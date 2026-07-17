@@ -51,3 +51,19 @@ Legend: ⬜ untested · ✅ pass · ❌ fail (file an issue)
 - Windows 11: _record notification action-button support + any quirks here._
 - macOS: _record LaunchAgent autostart + notification behavior here._
 - Linux: _record tray/notification behavior here._
+
+## Phase 12E — Appearance & release polish
+
+### Themes (auto-tested for the DOM effect; verify the *look* by eye)
+- ⬜ **Auto** theme flips light↔dark when you change the OS appearance while the
+  app is open (no restart).
+- ⬜ Each accent preset + a **custom** hex applies immediately; text on accent
+  buttons stays legible (foreground auto-contrast).
+- ⬜ Font-size S/M/L scales the whole UI without breaking layouts.
+
+### Release polish (ops — not done in CI)
+- ⬜ **Perf audit** on the 10k fixture (Ctrl+Shift+F9): list scrolls at
+  < 16 ms/frame; cold start < 2 s.
+- ⬜ **App icon** swapped to the final artwork (`src-tauri/icons/`).
+- ⬜ **Packaging/signing** for your OS produces an installable, signed build.
+- ⬜ Empty states read well across list / search / stats / habits.

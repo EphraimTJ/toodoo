@@ -4,6 +4,7 @@ import { DropdownMenu, Popover } from "radix-ui";
 import { api, type Priority, type Task } from "../../../../lib/api";
 import { downloadText } from "../../../../lib/download";
 import { taskToMarkdown, taskToText } from "../../../share/lib/shareText";
+import { downloadTaskImage } from "../../../share/lib/shareImage";
 import { useUiStore } from "../../../../lib/uiStore";
 import { useTags, useTagMutations } from "../../../tags/hooks/useTags";
 import { useTaskMutations } from "../../hooks/useTasks";
@@ -453,6 +454,12 @@ export function TaskDetail() {
                 onSelect={() => downloadText(`${task.title || "task"}.md`, taskToMarkdown(task), "text/markdown")}
               >
                 Download markdown
+              </DropdownMenu.Item>
+              <DropdownMenu.Item
+                className="cursor-pointer select-none rounded px-2 py-1 outline-none hover:bg-bg data-[highlighted]:bg-bg"
+                onSelect={() => void downloadTaskImage(task)}
+              >
+                Download image
               </DropdownMenu.Item>
             </DropdownMenu.Content>
           </DropdownMenu.Portal>

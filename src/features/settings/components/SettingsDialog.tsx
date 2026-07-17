@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { Dialog } from "radix-ui";
 import { ApiSettings } from "./ApiSettings";
+import { AppearanceSettings } from "./AppearanceSettings";
+import { LanguageSettings } from "./LanguageSettings";
 import { DataSettings } from "./DataSettings";
 import { DesktopSettings } from "./DesktopSettings";
 import { SmartListSettings } from "./SmartListSettings";
@@ -30,6 +32,15 @@ export function SettingsDialog() {
         >
           <Dialog.Title className="mb-4 text-base font-semibold">Settings</Dialog.Title>
           <div className="max-h-[70vh] space-y-6 overflow-y-auto pr-1">
+            <section>
+              <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-text-muted">
+                Appearance
+              </h3>
+              <AppearanceSettings />
+              <div className="mt-3">
+                <LanguageSettings />
+              </div>
+            </section>
             <section>
               <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-text-muted">
                 Desktop
