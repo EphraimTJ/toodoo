@@ -1,155 +1,136 @@
 # Toodoo — Pre-Launch Handoff (v1.0)
 
-> **Updated 2026-07-17 (v1.0-fixes branch).** All five adversarial-review
-> findings are fixed and committed; the window-management cluster is
-> instrumented and could not be reproduced at HEAD (details below). What
-> remains before `v1.0.0` is the **user's manual re-verification** against the
-> freshly rebuilt installer (Section 3) and the release audit (Section 5).
-> Do **not** tag until both pass.
+> **Updated 2026-07-17, round 2 (`v1.0-fixes`).** Round 1 fixed the five
+> adversarial-review findings. The user's re-test of that installer showed
+> reminders still silent and the focus/sticky pop-outs still white and
+> unclosable — with no way to capture evidence. Round 2 therefore added
+> always-on file logging, hard failsafes around the pop-outs, a one-click
+> notification test, and a sample-data seed, and re-verified everything
+> possible against a **locally silent-installed NSIS build**. What remains is
+> the user's scripted re-test below. **No `v1.0.0` tag** until it passes plus
+> the release audit (Section 5).
 
 ---
 
 ## 1. WHERE WE ARE
 
-- **Phases 0–12E complete** (tags `phase-0` … `phase-12E`).
-- **Branch:** `v1.0-fixes` (off `v-phase-12E`). **`v1.0.0` is NOT tagged.**
-- **This branch's commits, oldest first:**
-  - `175fdc8` docs(checklist): record installed-build manual test results
-  - `b38225a` fix(backup): validate staged restores + rollback until the new db opens *(finding 1)*
-  - `9e734d8` fix(tasks): recurring completion idempotent under retry *(finding 2)*
-  - `ae3c38e` fix(reminders): claim/ack dispatch with bounded retry *(finding 5)*
-  - `535618b` fix(import): whole CSV import in one transaction *(finding 3)*
-  - `1d2f35d` feat(import): attach parsed tags in the import transaction *(finding 4, user-approved)*
-  - `1fc97e7` fix(windows): error boundary + boot beacon for pop-outs; diag hook
-- **All three adversarial proof tests are live and passing** (were `#[ignore]`d);
-  see `docs/adversarial-review-findings.md` for the original findings and
-  `docs/decisions.md` (five new 2026-07-17 entries) for the contracts.
-- **Automated suites (all green at HEAD):** `cargo test` **199 passed, 1
-  ignored** (the search perf gate) + clippy clean; `npm test` **143 passed**;
-  `npx tsc --noEmit` clean; `npm run build` clean; `npx playwright test`
-  **18 passed**.
-- **Installers (unsigned, rebuilt from this branch — install THIS one):**
-  - NSIS: `src-tauri/target/release/bundle/nsis/Toodoo_0.1.0_x64-setup.exe`
-  - MSI: `src-tauri/target/release/bundle/msi/Toodoo_0.1.0_x64_en-US.msi`
-- New migrations **0008** (completion-ledger unique index) and **0009**
-  (reminder dispatch claim state) apply on first launch.
+- **Branch:** `v1.0-fixes`. Round-1 commits fixed adversarial findings 1–5
+  (restore safety, completion idempotency, reminder claim/ack, atomic import,
+  imported tags). Round-2 commits, oldest first:
+  - `8498536` feat(logging): rotating toodoo.log + Settings → Advanced → Open logs folder
+  - `e3ffe9c` fix(windows): center pop-outs + boot watchdog destroying dead windows
+  - `9068093` feat(reminders): one-click test-notification path + permission logging
+  - `ed5c290` feat(seed): guarded, feature-complete sample workspace + first-run prompt
+- **Automated suites (green at HEAD):** `cargo test` **200 passed, 1 ignored**
+  (search perf gate) + clippy clean; `npm test` **143**; `npx playwright test`
+  **18**; `tsc --noEmit` + `npm run build` clean.
+- **Installers (unsigned):** rebuild from HEAD →
+  `src-tauri/target/release/bundle/nsis/Toodoo_0.1.0_x64-setup.exe` (+ MSI).
+- **Logging:** every `[reminders]`, `[window]`, `[notify]` diagnostic and any
+  panic goes to a rotating `toodoo.log` (Settings → Advanced → **Open logs
+  folder**), always on — a normal double-click launch now produces evidence.
 
-## 2. WHAT WAS FIXED / WHAT THE EVIDENCE SAYS
+## 2. THE TWO OPEN BUGS — current understanding & what changed
 
-### (a) Adversarial-review findings — all fixed
-1. **Restore safety:** staging validates the snapshot as SQLite (integrity
-   check + schema sanity), fsyncs, renames atomically; apply re-validates and
-   parks the live db at `toodoo.db.rollback` until the restored db opens and
-   migrates; a failed open rolls back automatically.
-2. **Recurring completion idempotency:** in-transaction re-read guard + an
-   optional `expectedOccurrence` key (the UI sends it); a stale retry is a
-   no-op returning `[]`; the completion ledger has a per-occurrence unique
-   index. REST stays keyless (race-guarded only) — documented.
-3. **Notifications:** claim-before-attempt / ack-only-on-success with backoff
-   30/60/120/300 s, give-up after 5 attempts, stale-claim recovery; the in-app
-   toast fires once per fire time on the first attempt regardless of native
-   delivery. Unit-tested via an injectable notification backend.
-4. **Import atomicity:** one transaction, events after commit, all-or-nothing.
-5. **Import tags:** now attached (resolved/created case-insensitively) inside
-   the import transaction — user-approved scope upgrade.
+### (a) Focus/sticky pop-outs: white + unclosable (user's machine)
+- **Packaged-build evidence (local silent install of the identical build):**
+  the webview *does* load — `page load started/finished` on
+  `http://tauri.localhost/index.html?win=…` plus both boot beacons in the
+  log, and the windows render (screenshot-verified). So the white screen is
+  not a deterministic asset/URL/CSP failure of this build.
+- **Real bug found while reproducing:** the windows spawned at an OS-default
+  position **mostly off-screen at the bottom edge** — visually a broken
+  window fragment. Pop-outs are now **centered**.
+- **Failsafes now in place (a white window can never strand you again):**
+  native title bar + close on every pop-out; **Esc closes any pop-out**; a
+  **5 s watchdog** destroys a window whose content never boots, logs it, and
+  raises an in-app error toast; window URL + page-load progress + builder
+  errors are logged. Closing a pop-out never exits the app.
+- If white recurs on the user's machine, `toodoo.log` now pinpoints the stage
+  (created → page load started → finished → booted).
 
-### (b) "Reminders never fire" — root cause still NEEDS the user's log capture
-The checklist showed **neither the native toast nor the in-app toast** ever
-appeared. The in-app `reminder-fired` emit never depended on native `show()`
-success, so finding 5 (ack-on-failure) **cannot be the root cause** — the
-failure is upstream: either `due_reminders` finds nothing (scheduler/data
-path) or the emit/toast wiring. No `[reminders]` log lines were captured on
-the installed build, so this is unresolved. The scheduler now also logs
-reminders that can never fire (a REL trigger on a task with no due/start
-anchor — a silent no-op before). **Re-test per Section 3 with a terminal so
-the logs decide it.**
+### (b) Reminders never fire (user's machine)
+- Round-2 result (no toast, no in-app toast, fresh installer) **still
+  implicates the scheduler/data path or event delivery** — the in-app toast
+  has never depended on native `show()` succeeding.
+- New: startup logs the notification **permission state** (never checked
+  before) and identifier; **Settings → Advanced → "Send test notification
+  now"** runs claim→show→ack style stages immediately (permission check +
+  request, native `show()`, in-app toast) and reports each stage inline and
+  to the log. The scheduler logs polls, computed fire times, skips
+  (including reminders that can never fire), attempts, and outcomes.
+- OS-side candidates for the user to check: Windows Settings → System →
+  Notifications (Toodoo allowed, notifications on, Focus Assist / Do Not
+  Disturb off).
+- Design note (documented): **a due date alone never fires a notification** —
+  a reminder must be added in the task's Reminders panel. (Default reminders
+  à la TickTick are a possible post-1.0 follow-up.)
 
-### (c) Focus/sticky white screens — NOT reproducible at HEAD; suspect a stale installer
-With a boot beacon added to every pop-out window, the **release build** logs
-`[window] ?win=focus: booted ok` / `?win=sticky…: booted ok` and renders both
-windows (verified by launching the release exe with `TOODOO_DIAG_WINDOWS=1`,
-which auto-opens them). The reported "can't resize" also matches the
-pre-`2ac96ca` frameless windows — so the tested installer most likely
-predated the window fixes. If a white screen recurs on the new installer, it
-is no longer silent: run from a terminal and the window either renders its
-error or logs a `[window-error]` line.
+## 3. RE-TEST SCRIPT (user, against the NEW installer)
 
-### (d) Tray focus countdown — N/A by decision
-Not wired in v1.0 (2026-07-17 decision); the checklist's "(if wired)" item is
-closed as N/A, not a failure.
+**Setup:** uninstall Toodoo → install the freshly built
+`Toodoo_0.1.0_x64-setup.exe` → launch normally (no terminal needed — the log
+file records everything).
 
-## 3. MANUAL RE-VERIFICATION (user, against the NEW installer)
-
-**First: uninstall any existing Toodoo, then install the freshly built NSIS
-setup.exe from Section 1** (this is critical — the white-screen evidence says
-the previous test likely ran an older build).
-
-Launch from a terminal so stderr is visible:
-`& "$env:LOCALAPPDATA\Toodoo\Toodoo.exe"`
-
-1. **Reminders:** add a task; task detail → Reminders panel → set one ~2 min
-   out. Watch for: `[reminders] poll … N due` (does N go to 1?), `dispatch
-   notification (attempt 1)`, `show() ok/FAILED`, and any `skip: … no
-   computable fire time` line. Expect the native toast AND the in-app
-   Complete/Snooze toast. Test both actions (Complete closes the task; Snooze
-   10m re-fires). **Capture the log lines either way** — they pick the branch
-   of the decision tree if it still fails.
-2. **OS toast action buttons:** note whether the native toast shows
-   Complete/Snooze buttons; record the observed Windows behavior in
-   `decisions.md` (either outcome gets an entry, per the 12D decision).
-3. **Focus pop-out:** Focus header **↗** → always-on-top window with the
-   timer, movable, **resizable**. (If white: the window now shows the error
-   text, and stderr has `[window]` lines — send them.)
-4. **Sticky pop-out:** **↗** on a card → always-on-top window with
-   title/content/color, resizable; position/color persist after reopen.
-5. **Restore:** Settings → Data → Back up now → Restore that backup →
-   relaunch → data intact. (Corrupt-file/rollback safety is covered by
-   automated tests — no need to simulate corruption by hand.)
-6. **Recurring double-click:** double-click complete on a daily recurring
-   task → it advances exactly one day, one completion recorded, points once.
-7. **Import:** import a CSV containing tags → tags are attached; import a CSV
-   with one malformed row (e.g. priority `2`) → the import fails and imports
-   **nothing** (new all-or-nothing failure mode).
-8. **Regression spot-check (previously ✅ on the installed build):** global
-   hotkey, quick-add Esc, tray tooltip count updates, launch-at-login,
-   timed due chip ("Today H:MM PM").
+1. **Sample data:** on first launch with an empty workspace a card offers
+   "Load sample data" — accept it (or Settings → Advanced → Load sample
+   data…). Expect lists (Work kanban with sections, Personal, Reading Notes),
+   tasks in every date bucket, tags, habits with streaks, stickies, filters,
+   templates, countdowns, non-empty stats — and **two reminders that fire
+   within ~3–5 minutes** of seeding.
+2. **Notification test:** Settings → Advanced → **Send test notification
+   now**. Expect: a native Windows toast AND an in-app toast bottom-right;
+   the button prints a stage report (e.g. `permission: Granted; native
+   show(): ok`).
+3. **Scheduled reminder:** wait for the seeded "Stand-up call" /
+   "Stretch break" reminders (~3–5 min after seeding), or add your own 2 min
+   out via a task's Reminders panel. Expect native + in-app toast; test
+   **Complete** and **Snooze 10m** on the in-app one.
+4. **Focus pop-out:** Focus header **↗**. Expect a centered, titled,
+   resizable always-on-top window showing the timer — or, if content fails,
+   it closes itself within ~5 s and an error toast appears in the main
+   window. **Either way, no stuck white window.**
+5. **Sticky pop-out:** **↗** on a sticky card. Same expectations; check
+   move/resize persists after closing and reopening.
+6. **If anything fails:** Settings → Advanced → **Open logs folder** → send
+   `toodoo.log` (and say which step failed). The log contains the
+   stage-by-stage evidence this diagnosis needs.
+7. Also confirm Windows Settings → Notifications: Toodoo allowed, Focus
+   Assist off during the test.
 
 ## 4. REMAINING OPS (unchanged)
 
-- **Release-build perf audit** on the 10k fixture (Ctrl+Shift+F9): list
-  scroll < 16 ms/frame, cold start < 2 s — record the numbers. Automated
-  proxies are green (virtualization gate in `e2e/perf.spec.ts`; Rust search
-  gate `search_under_50ms_on_10k`).
-- **Signing** (or record "unsigned for v1.0" as a decision) and confirm the
-  app icon in the installed build.
+- Release-build perf audit on the 10k fixture (< 16 ms/frame scroll, < 2 s
+  cold start) — record numbers; automated proxies are green.
+- Signing (or an explicit "unsigned for v1.0" decision) + final icon check.
 
-## 5. RELEASE PROCEDURE — unchanged from the previous handoff
+## 5. RELEASE PROCEDURE — unchanged
 
-1. Inventory audit (sanctioned deferrals listed in decisions.md).
-2. Automated suites green (expected: cargo 199+1 ignored, vitest 143,
-   playwright 18, tsc/build/clippy clean).
-3. Backup → restore gate (cargo `repo::backup` tests — now 6, incl. corrupt
-   rejection + rollback).
-4. Search < 50 ms on 10k (`cargo test --lib -- --ignored --nocapture
-   search_under_50ms_on_10k`).
+1. Inventory audit (sanctioned deferrals in decisions.md).
+2. Automated suites green (cargo 200+1 ignored, vitest 143, playwright 18,
+   tsc/build/clippy clean).
+3. Backup → restore gate (repo::backup tests, incl. corrupt rejection +
+   rollback).
+4. Search < 50 ms on 10k (ignored perf test).
 5. Manual checklist all native items ✅ on the installed build; record OS
    notification-button behavior in decisions.md.
-6. Ops: perf numbers recorded, icon confirmed, signing decided.
+6. Ops: perf numbers, icon, signing decision.
 7. README written/refreshed.
-8. Commit, decide the merge strategy to `main`, then `git tag v1.0.0`.
+8. Commit, merge strategy to `main`, then `git tag v1.0.0`.
 
 ## Key file map
 
-- Reminder scheduler + dispatch state machine: `src-tauri/src/lib.rs`
-  (scheduler loop), `src-tauri/src/repo/reminders.rs` (`dispatch_due`,
-  `NotificationBackend`).
-- Restore safety: `src-tauri/src/repo/backup.rs` (validate/rollback), startup
-  wiring in `lib.rs`.
-- Completion idempotency: `src-tauri/src/repo/tasks.rs`
-  (`complete_task_with`, `advance_recurrence`), migration 0008.
-- Atomic import + tags: `src-tauri/src/repo/importers.rs` (+ tx cores in
-  `tasks.rs`/`projects.rs`/`tags.rs`).
-- Pop-out shells + error boundary/beacon: `src/windows/WindowRoot.tsx`;
-  window opening: `src-tauri/src/desktop.rs::open_or_focus`; diag hook:
-  `TOODOO_DIAG_WINDOWS=1` (lib.rs setup).
-- Capabilities: `src-tauri/capabilities/default.json`.
+- Logging: `tauri-plugin-log` init + panic hook in `src-tauri/src/lib.rs`;
+  `open_logs_folder` command; Settings → Advanced panel
+  (`src/features/settings/components/AdvancedSettings.tsx`).
+- Pop-outs: `src-tauri/src/desktop.rs` (`open_or_focus`: center, decorations,
+  page-load logging, watchdog, `WindowWatch`); beacon command
+  `log_window_error` in `lib.rs`; shells + error boundary + beacon in
+  `src/windows/WindowRoot.tsx`; error toasts in
+  `src/components/layout/SystemToasts.tsx`. Diag hooks:
+  `TOODOO_DIAG_WINDOWS=1|watchdog`, `TOODOO_DIAG_NOTIFY=1`.
+- Reminders: dispatch state machine `src-tauri/src/repo/reminders.rs`;
+  `send_test_notification` in `lib.rs`; in-app toasts
+  `src/features/reminders/components/ReminderToasts.tsx`.
+- Sample data: `src-tauri/src/repo/seed.rs::seed_sample_data`; first-run card
+  `src/components/layout/SampleDataPrompt.tsx`; Advanced action.

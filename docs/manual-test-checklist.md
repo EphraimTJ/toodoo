@@ -29,27 +29,43 @@ Legend: ⬜ untested · ✅ pass · ❌ fail (file an issue)
 
 ### Mini focus window + tray countdown
 - ❌ **Start focus** opens an always-on-top mini window mirroring the running
-  timer; it stays on top of other apps. (Start focus opened a mini window that stays on top but it was just a white screen that was non responsive, its buggy)
+  timer; it stays on top of other apps. (Round 2, fresh v1.0-fixes installer:
+  still a pure white unresponsive window with no close control — Task Manager
+  only. NOT reproducible on a locally silent-installed identical build, where
+  the log shows page-load + boot beacons and the window renders. Since then:
+  windows are centered — they previously spawned mostly off-screen — carry
+  native decorations, Esc closes them, and a 5s watchdog destroys any window
+  whose content fails to load and raises a main-window error toast. Re-test;
+  if it recurs, send toodoo.log.)
 - ⬜ ~~(If wired) the tray tooltip reflects the focus countdown during a session.~~
   **N/A for v1.0** — confirmed not wired; deliberate (see the 2026-07-17
   "Tray focus countdown is not wired in v1.0" decision).
 
 ### Sticky-note pop-out windows
 - ❌ Popping a sticky out opens an always-on-top window showing that sticky's
-  title/content with its color. (pops out of the window but again its a non responsive white screen in that window just like the focus)
+  title/content with its color. (Round 2: same white unclosable result as the
+  focus window; same fixes/failsafes apply — re-test on the new installer.)
 - ❌ Moving/resizing the pop-out persists position/color (survives reopen). The
-  in-app sticky board still works alongside it. (im not able to resize it)
+  in-app sticky board still works alongside it. (Blocked on the item above;
+  decorations + centering should make move/resize work once content shows.)
 
 ### Launch at login
 - ✅ Toggling **Launch Toodoo at login** on, then rebooting, starts Toodoo
   automatically. Toggling off stops it. 
 
 ### Notification Complete / Snooze
-- ❌ When a reminder fires, a native notification appears. (no reminder came)
+- ❌ When a reminder fires, a native notification appears. (Round 2, fresh
+  installer: still nothing fires — no native toast, no in-app toast; no logs
+  were captured. Since then: always-on file logging, startup permission
+  logging, and Settings → Advanced → "Send test notification now" exercise
+  the full path on demand — re-test per docs/pre-launch.md and send
+  toodoo.log if it still fails.)
 - ❌ **Where the OS supports action buttons** (record which): Complete and Snooze
-  buttons act correctly. (i didnt get any snooze buttons or anything, but maybe i didnt check properly)
+  buttons act correctly. (Blocked on the item above.)
 - ❌ **Everywhere**: an in-app Complete / Snooze toast also appears — Complete
-  closes the task, Snooze 10m reschedules it. (This is the reliable path.) (I couldnt test it because a reminder never came)
+  closes the task, Snooze 10m reschedules it. (This is the reliable path.)
+  (Round 2: never appeared either — which is what implicates the scheduler/
+  data path rather than the OS toast pipeline. Re-test with the test button.)
 
 ### Per-OS notes
 - Windows 11: _record notification action-button support + any quirks here._
