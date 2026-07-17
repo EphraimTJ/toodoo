@@ -5,6 +5,15 @@ ambiguity we resolved by judgment call), with the reasoning. Newest entries at
 the top. Never rewrite history — if a decision is reversed, add a new entry
 that supersedes the old one.
 
+## 2026-07-17 — Tray focus countdown is not wired in v1.0
+
+The 12D checklist carries a conditional item — "(If wired) the tray tooltip
+reflects the focus countdown during a session." Confirmed against the code:
+`desktop::refresh_tray_tooltip` shows only the Today due-count; no focus-session
+state reaches the tray. **Decision: stays unwired for v1.0** (the mini focus
+window is the countdown surface); the checklist item is N/A, not a failure.
+Revisit post-1.0 if the mini window proves insufficient.
+
 ## 2026-07-17 — Imported tags are attached (supersedes the 2026-07-16 "tags parsed but not attached" line)
 
 User-approved scope upgrade for adversarial-review finding 4: a "successful"

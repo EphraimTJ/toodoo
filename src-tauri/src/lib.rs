@@ -1265,6 +1265,14 @@ async fn set_autostart(
     desktop::config(&state.pool).await.map_err(err)
 }
 
+/// Pop-out windows forward their boot beacon and any uncaught webview error
+/// here, so a packaged build's white screen becomes a diagnosable stderr line.
+#[tauri::command]
+fn log_window_error(message: String, win: Option<String>) -> CmdResult<()> {
+    eprintln!("[window] {}: {message}", win.as_deref().unwrap_or("?"));
+    Ok(())
+}
+
 #[tauri::command]
 fn open_quick_add_window(app: tauri::AppHandle) -> CmdResult<()> {
     desktop::open_or_focus(&app, "quickadd", "win=quickadd", "Quick add", 520.0, 180.0, false)
@@ -1341,6 +1349,20 @@ pub fn run() {
             // The db opened and migrated — the pre-restore rollback (if any) is
             // no longer needed.
             repo::backup::finalize_restore(&data_dir);
+
+            // Diagnostic hook: TOODOO_DIAG_WINDOWS=1 auto-opens the pop-out
+            // windows shortly after launch, so their load/boot can be observed
+            // from stderr (with the WindowRoot boot beacon) without clicking
+            // through the UI. Used to verify packaged-build window loading.
+            if std::env::var("TOODOO_DIAG_WINDOWS").is_ok() {
+                let h = app.handle().clone();
+                tauri::async_runtime::spawn(async move {
+                    tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+                    eprintln!("[diag] opening focus + sticky windows");
+                    let _ = desktop::open_or_focus(&h, "focus", "win=focus", "Focus", 320.0, 220.0, true);
+                    let _ = desktop::open_or_focus(&h, "sticky-diag", "win=sticky&id=diag", "Sticky", 260.0, 240.0, true);
+                });
+            }
             let bus = EventBus::new();
 
             // Forward every domain event to the webview so views stay live, and
@@ -1777,6 +1799,7 @@ pub fn run() {
             set_quick_add_hotkey,
             set_notif_actions,
             set_autostart,
+            log_window_error,
             open_quick_add_window,
             open_focus_window,
             open_sticky_window,
