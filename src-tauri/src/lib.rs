@@ -1266,11 +1266,25 @@ async fn set_autostart(
 }
 
 /// Pop-out windows forward their boot beacon and any uncaught webview error
-/// here, so a packaged build's white screen becomes a diagnosable stderr line.
+/// here, so a packaged build's white screen becomes a diagnosable log line.
 #[tauri::command]
 fn log_window_error(message: String, win: Option<String>) -> CmdResult<()> {
-    eprintln!("[window] {}: {message}", win.as_deref().unwrap_or("?"));
+    if message == "booted ok" {
+        log::info!("[window] {}: {message}", win.as_deref().unwrap_or("?"));
+    } else {
+        log::error!("[window] {}: {message}", win.as_deref().unwrap_or("?"));
+    }
     Ok(())
+}
+
+/// Reveal the rotating log file's folder (Settings → Advanced), so the user
+/// can grab toodoo.log without knowing the path.
+#[tauri::command]
+fn open_logs_folder(app: tauri::AppHandle) -> CmdResult<()> {
+    let dir = app.path().app_log_dir().map_err(|e| e.to_string())?;
+    std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    tauri_plugin_opener::open_path(dir.to_string_lossy().into_owned(), None::<&str>)
+        .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
@@ -1303,7 +1317,31 @@ async fn today_count(state: State<'_, AppState>) -> CmdResult<i64> {
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
+    // Panics must reach the log file, not just a vanished console.
+    let default_panic = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        log::error!("panic: {info}");
+        default_panic(info);
+    }));
+
     tauri::Builder::default()
+        // File + stdout logging, always on: rotating toodoo.log under the
+        // app-local-data logs dir (surfaced by Settings → Advanced → "Open
+        // logs folder"). Every [reminders]/[window]/panic diagnostic lands
+        // there, so a packaged-build failure is diagnosable from the file.
+        .plugin(
+            tauri_plugin_log::Builder::new()
+                .targets([
+                    tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::Stdout),
+                    tauri_plugin_log::Target::new(tauri_plugin_log::TargetKind::LogDir {
+                        file_name: Some("toodoo".into()),
+                    }),
+                ])
+                .level(log::LevelFilter::Info)
+                .max_file_size(5_000_000)
+                .rotation_strategy(tauri_plugin_log::RotationStrategy::KeepOne)
+                .build(),
+        )
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_notification::init())
         .plugin(tauri_plugin_deep_link::init())
@@ -1331,16 +1369,16 @@ pub fn run() {
             // validated first and the previous db is kept as a rollback until
             // the restored one opens and migrates successfully.
             match tauri::async_runtime::block_on(repo::backup::apply_pending_restore(&data_dir)) {
-                Ok(true) => eprintln!("restored database from a staged backup"),
+                Ok(true) => log::info!("restored database from a staged backup"),
                 Ok(false) => {}
-                Err(e) => eprintln!("pending restore failed: {e}"),
+                Err(e) => log::error!("pending restore failed: {e}"),
             }
 
             let pool = match tauri::async_runtime::block_on(repo::db::connect(&db_path)) {
                 Ok(pool) => pool,
                 Err(e) => match repo::backup::undo_failed_restore(&data_dir) {
                     Ok(true) => {
-                        eprintln!("restored database failed to open ({e}); rolled back to the previous database");
+                        log::error!("restored database failed to open ({e}); rolled back to the previous database");
                         tauri::async_runtime::block_on(repo::db::connect(&db_path))?
                     }
                     _ => return Err(e.into()),
@@ -1358,7 +1396,7 @@ pub fn run() {
                 let h = app.handle().clone();
                 tauri::async_runtime::spawn(async move {
                     tokio::time::sleep(std::time::Duration::from_secs(3)).await;
-                    eprintln!("[diag] opening focus + sticky windows");
+                    log::info!("[diag] opening focus + sticky windows");
                     let _ = desktop::open_or_focus(&h, "focus", "win=focus", "Focus", 320.0, 220.0, true);
                     let _ = desktop::open_or_focus(&h, "sticky-diag", "win=sticky&id=diag", "Sticky", 260.0, 240.0, true);
                 });
@@ -1442,7 +1480,7 @@ pub fn run() {
                     {
                         Ok(outcomes) => outcomes,
                         Err(e) => {
-                            eprintln!("[reminders] dispatch pass failed: {e}");
+                            log::error!("[reminders] dispatch pass failed: {e}");
                             continue;
                         }
                     };
@@ -1502,7 +1540,7 @@ pub fn run() {
                 loop {
                     tick.tick().await;
                     if let Err(e) = repo::cal_subscriptions::refresh_due(&sub_pool, &sub_bus).await {
-                        eprintln!("subscription refresh failed: {e}");
+                        log::error!("subscription refresh failed: {e}");
                     }
                 }
             });
@@ -1517,7 +1555,7 @@ pub fn run() {
                     tick.tick().await;
                     let today = chrono::Local::now().format("%Y-%m-%d").to_string();
                     if let Err(e) = repo::stats::overdue_penalty_pass(&pen_pool, &today).await {
-                        eprintln!("overdue penalty pass failed: {e}");
+                        log::error!("overdue penalty pass failed: {e}");
                     }
                 }
             });
@@ -1534,7 +1572,7 @@ pub fn run() {
                     let cfg = match repo::backup::config(&bk_pool).await {
                         Ok(c) => c,
                         Err(e) => {
-                            eprintln!("backup config read failed: {e}");
+                            log::error!("backup config read failed: {e}");
                             continue;
                         }
                     };
@@ -1551,7 +1589,7 @@ pub fn run() {
                         continue;
                     }
                     if let Err(e) = repo::backup::backup_now(&bk_pool, &bk_bus, &bk_dir).await {
-                        eprintln!("auto-backup failed: {e}");
+                        log::error!("auto-backup failed: {e}");
                     }
                 }
             });
@@ -1569,7 +1607,7 @@ pub fn run() {
                 )));
                 match handle {
                     Ok(h) => *api_server.lock().unwrap() = Some(h),
-                    Err(e) => eprintln!("API server failed to start: {e}"),
+                    Err(e) => log::error!("API server failed to start: {e}"),
                 }
             }
 
@@ -1580,7 +1618,7 @@ pub fn run() {
                     .map(|c| c.quick_add_hotkey)
                     .unwrap_or_else(|_| desktop::DEFAULT_HOTKEY.to_string());
                 if let Err(e) = app.global_shortcut().register(accel.as_str()) {
-                    eprintln!("global shortcut register failed: {e}");
+                    log::error!("global shortcut register failed: {e}");
                 }
             }
 
@@ -1800,6 +1838,7 @@ pub fn run() {
             set_notif_actions,
             set_autostart,
             log_window_error,
+            open_logs_folder,
             open_quick_add_window,
             open_focus_window,
             open_sticky_window,

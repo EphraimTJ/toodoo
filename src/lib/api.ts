@@ -721,6 +721,8 @@ export interface Api {
   openFocusWindow(): Promise<void>;
   openStickyWindow(id: string): Promise<void>;
   todayCount(): Promise<number>;
+  /** Reveal the folder holding the rotating toodoo.log (no-op in the browser). */
+  openLogsFolder(): Promise<void>;
 
   listHabits(includeArchived: boolean): Promise<Habit[]>;
   getHabit(id: string): Promise<Habit>;
@@ -977,6 +979,7 @@ const tauriApi: Api = {
   openFocusWindow: () => invoke("open_focus_window"),
   openStickyWindow: (id) => invoke("open_sticky_window", { id }),
   todayCount: () => invoke("today_count"),
+  openLogsFolder: () => invoke("open_logs_folder"),
 
   listHabits: (includeArchived) => invoke("list_habits", { includeArchived }),
   getHabit: (id) => invoke("get_habit", { id }),
@@ -2379,6 +2382,7 @@ function browserStubApi(): Api {
     },
     openFocusWindow: async () => {},
     openStickyWindow: async () => {},
+    openLogsFolder: async () => {},
     todayCount: async () => {
       const { today } = localDateParams();
       return tasks.filter(

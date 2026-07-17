@@ -132,7 +132,7 @@ pub async fn due_reminders(pool: &SqlitePool, now_instant: DateTime<Utc>) -> Res
         let Some(fire) = fire_at(row) else {
             // Diagnosis aid: this reminder exists but can never fire (e.g. a
             // REL trigger on a task with no due/start anchor).
-            eprintln!(
+            log::warn!(
                 "[reminders] skip: reminder {} (task {:?}) has no computable fire time",
                 row.reminder_id, row.task_title
             );
@@ -245,31 +245,31 @@ pub async fn dispatch_due(
     now_instant: DateTime<Utc>,
 ) -> Result<Vec<DispatchOutcome>> {
     let due = due_reminders(pool, now_instant).await?;
-    eprintln!("[reminders] poll @ {}: {} due", now_instant.to_rfc3339(), due.len());
+    log::info!("[reminders] poll @ {}: {} due", now_instant.to_rfc3339(), due.len());
     let mut outcomes = Vec::new();
     for r in due {
         let Some(attempts) = claim(pool, &r.reminder_id, now_instant, r.fire_attempts).await? else {
             continue;
         };
-        eprintln!(
+        log::info!(
             "[reminders] dispatch notification (attempt {attempts}): reminder={} task={} title={:?}",
             r.reminder_id, r.task_id, r.task_title
         );
         let (delivered, gave_up) = match backend.show("Toodoo", &r.task_title) {
             Ok(()) => {
-                eprintln!("[reminders] notification.show() ok");
+                log::info!("[reminders] notification.show() ok");
                 mark_fired(pool, &r.reminder_id, &r.fire_at).await?;
                 (true, false)
             }
             Err(e) if attempts >= MAX_FIRE_ATTEMPTS => {
-                eprintln!(
+                log::error!(
                     "[reminders] notification.show() FAILED: {e} — giving up after {attempts} attempts (acking; the in-app toast already fired)"
                 );
                 mark_fired(pool, &r.reminder_id, &r.fire_at).await?;
                 (false, true)
             }
             Err(e) => {
-                eprintln!(
+                log::warn!(
                     "[reminders] notification.show() FAILED: {e} — will retry in {}s",
                     backoff_secs(attempts)
                 );

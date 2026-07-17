@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Dialog } from "radix-ui";
+import { AdvancedSettings } from "./AdvancedSettings";
 import { ApiSettings } from "./ApiSettings";
 import { AppearanceSettings } from "./AppearanceSettings";
 import { LanguageSettings } from "./LanguageSettings";
@@ -64,6 +65,12 @@ export function SettingsDialog() {
                 API &amp; Integrations
               </h3>
               <ApiSettings />
+            </section>
+            <section>
+              <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-text-muted">
+                Advanced
+              </h3>
+              <AdvancedSettings />
             </section>
           </div>
         </Dialog.Content>

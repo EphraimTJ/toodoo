@@ -139,7 +139,7 @@ pub async fn serve(state: ApiState) -> Result<ServerHandle> {
             let _ = rx.await;
         });
         if let Err(e) = server.await {
-            eprintln!("API server error: {e}");
+            log::error!("API server error: {e}");
         }
     });
     Ok(ServerHandle { shutdown: Some(tx) })
