@@ -1315,12 +1315,28 @@ pub fn run() {
             let pool = tauri::async_runtime::block_on(repo::db::connect(&db_path))?;
             let bus = EventBus::new();
 
-            // Forward every domain event to the webview so views stay live.
+            // Forward every domain event to the webview so views stay live, and
+            // refresh the tray's Today count when a task-affecting event fires
+            // (event-driven, not polled).
             let mut rx = bus.subscribe();
             let handle = app.handle().clone();
+            let fwd_pool = pool.clone();
             tauri::async_runtime::spawn(async move {
                 while let Ok(event) = rx.recv().await {
                     let _ = handle.emit("domain-event", &event);
+                    if matches!(
+                        event,
+                        events::DomainEvent::TaskCreated { .. }
+                            | events::DomainEvent::TaskUpdated { .. }
+                            | events::DomainEvent::TaskCompleted { .. }
+                            | events::DomainEvent::TaskTrashed { .. }
+                            | events::DomainEvent::TaskRestored { .. }
+                            | events::DomainEvent::TaskDeleted { .. }
+                            | events::DomainEvent::TaskMoved { .. }
+                            | events::DomainEvent::SeedCompleted
+                    ) {
+                        desktop::refresh_tray_tooltip(&handle, &fwd_pool).await;
+                    }
                 }
             });
 
@@ -1560,22 +1576,18 @@ pub fn run() {
                     .build(app)?;
             }
 
-            // Keep the tray tooltip's Today count fresh.
+            // Tray Today count: computed once now, then event-driven (above).
+            // A slow fallback catches the date rolling over at midnight without a
+            // task mutation — not a tight poll.
             let tray_pool = pool.clone();
             let tray_handle = app.handle().clone();
             tauri::async_runtime::spawn(async move {
-                let mut tick = tokio::time::interval(std::time::Duration::from_secs(60));
+                desktop::refresh_tray_tooltip(&tray_handle, &tray_pool).await;
+                let mut tick = tokio::time::interval(std::time::Duration::from_secs(600));
+                tick.tick().await; // consume the immediate first tick
                 loop {
                     tick.tick().await;
-                    let tz_off = chrono::Local::now().offset().local_minus_utc() / 60;
-                    let today = (chrono::Utc::now() + chrono::Duration::minutes(tz_off as i64))
-                        .format("%Y-%m-%d")
-                        .to_string();
-                    if let Ok(c) = repo::tasks::smart_counts(&tray_pool, &today, tz_off).await {
-                        if let Some(tray) = tray_handle.tray_by_id("main") {
-                            let _ = tray.set_tooltip(Some(format!("Toodoo — {} due today", c.today)));
-                        }
-                    }
+                    desktop::refresh_tray_tooltip(&tray_handle, &tray_pool).await;
                 }
             });
 

@@ -7,6 +7,19 @@ use serde::Serialize;
 use sqlx::SqlitePool;
 use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindowBuilder};
 
+/// Recompute the "Today" count and set the tray tooltip. No-op until the tray
+/// exists. Called at startup and on every task-affecting domain event.
+pub async fn refresh_tray_tooltip(app: &AppHandle, pool: &SqlitePool) {
+    let tz_off = chrono::Local::now().offset().local_minus_utc() / 60;
+    let today = (chrono::Utc::now() + chrono::Duration::minutes(tz_off as i64))
+        .format("%Y-%m-%d")
+        .to_string();
+    let Ok(counts) = crate::repo::tasks::smart_counts(pool, &today, tz_off).await else { return };
+    if let Some(tray) = app.tray_by_id("main") {
+        let _ = tray.set_tooltip(Some(format!("Toodoo — {} due today", counts.today)));
+    }
+}
+
 use crate::error::Result;
 use crate::events::EventBus;
 use crate::repo::settings::{get_setting, set_setting};
