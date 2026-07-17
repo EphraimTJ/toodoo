@@ -162,17 +162,31 @@ pub async fn create_task(pool: &SqlitePool, bus: &EventBus, input: NewTask) -> R
             return Err(RepoError::Invalid("subtasks are limited to 4 levels".into()));
         }
     }
+    let mut tx = pool.begin().await?;
+    let id = create_task_core(&mut tx, &input, None).await?;
+    tx.commit().await?;
+
+    bus.emit(DomainEvent::TaskCreated { id: id.clone() });
+    get_task(pool, &id).await
+}
+
+/// Insert + changelog + activity for a new task, inside the caller's
+/// transaction (shared by `create_task` and the atomic CSV import). Returns
+/// the new id; the caller emits `TaskCreated` after its commit.
+pub(crate) async fn create_task_core(
+    conn: &mut SqliteConnection,
+    input: &NewTask,
+    content_plain: Option<&str>,
+) -> Result<String> {
     let id = new_id();
     let ts = now();
-
-    let mut tx = pool.begin().await?;
     let next_order: i64 = sqlx::query_scalar(
         "SELECT COALESCE(MAX(CAST(json_extract(sort_orders_json, '$.project') AS INTEGER)), 0) + ?
          FROM tasks WHERE project_id = ? AND deleted_at IS NULL",
     )
     .bind(SORT_STEP)
     .bind(&input.project_id)
-    .fetch_one(&mut *tx)
+    .fetch_one(&mut *conn)
     .await?;
 
     let kind = match input.kind.as_deref() {
@@ -183,9 +197,9 @@ pub async fn create_task(pool: &SqlitePool, bus: &EventBus, input: NewTask) -> R
     sqlx::query(
         "INSERT INTO tasks (id, project_id, parent_id, title, kind, status, priority,
                             start_at, due_at, is_all_day, duration_min, time_zone, rrule,
-                            repeat_from, pinned, sort_orders_json, created_at, updated_at)
+                            repeat_from, pinned, sort_orders_json, content_plain, created_at, updated_at)
          VALUES (?, ?, ?, ?, ?, 'ACTIVE', ?, ?, ?, ?, ?, ?, ?, ?, 0,
-                 json_object('project', ?), ?, ?)",
+                 json_object('project', ?), ?, ?, ?)",
     )
     .bind(&id)
     .bind(&input.project_id)
@@ -201,19 +215,46 @@ pub async fn create_task(pool: &SqlitePool, bus: &EventBus, input: NewTask) -> R
     .bind(&input.rrule)
     .bind(&input.repeat_from)
     .bind(next_order)
+    .bind(content_plain)
     .bind(&ts)
     .bind(&ts)
-    .execute(&mut *tx)
+    .execute(&mut *conn)
     .await?;
 
     let payload = serde_json::json!({ "title": input.title, "projectId": input.project_id });
-    append_changelog(&mut tx, "task", &id, ChangeOp::Insert, &payload).await?;
-    activity::log(&mut tx, "task", &id, "created", &serde_json::json!({ "title": input.title }))
+    append_changelog(conn, "task", &id, ChangeOp::Insert, &payload).await?;
+    activity::log(conn, "task", &id, "created", &serde_json::json!({ "title": input.title }))
         .await?;
-    tx.commit().await?;
+    Ok(id)
+}
 
-    bus.emit(DomainEvent::TaskCreated { id: id.clone() });
-    get_task(pool, &id).await
+/// Completion for a freshly-imported, non-recurring, childless task inside the
+/// import transaction: status flip + changelog/activity + ledger row + points,
+/// matching what `complete_task` records for a simple task. The caller emits
+/// `TaskCompleted` after its commit.
+pub(crate) async fn complete_imported_core(
+    conn: &mut SqliteConnection,
+    id: &str,
+    due_at: Option<&str>,
+    start_at: Option<&str>,
+) -> Result<()> {
+    let ts = now();
+    sqlx::query(
+        "UPDATE tasks SET status = 'COMPLETED', completed_at = ?, updated_at = ?
+         WHERE id = ? AND status = 'ACTIVE' AND deleted_at IS NULL",
+    )
+    .bind(&ts)
+    .bind(&ts)
+    .bind(id)
+    .execute(&mut *conn)
+    .await?;
+    append_changelog(conn, "task", id, ChangeOp::Update, &serde_json::json!({ "status": "COMPLETED" }))
+        .await?;
+    activity::log(conn, "task", id, "completed", &serde_json::json!({})).await?;
+    if record_completion(conn, id, due_at.or(start_at), &ts, "COMPLETED").await? {
+        super::stats::award_completion(conn, due_at, &ts, 0).await?;
+    }
+    Ok(())
 }
 
 async fn subtree_depth_to_root(pool: &SqlitePool, id: &str) -> Result<i64> {

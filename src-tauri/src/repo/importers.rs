@@ -10,10 +10,10 @@ use serde::Serialize;
 use sqlx::SqlitePool;
 
 use crate::error::Result;
-use crate::events::EventBus;
+use crate::events::{DomainEvent, EventBus};
 
-use super::projects::{create_project, NewProject};
-use super::tasks::{complete_task, create_task, update_task, NewTask, TaskPatch};
+use super::projects::{create_project_core, NewProject};
+use super::tasks::{complete_imported_core, create_task_core, NewTask};
 
 /// A source-agnostic imported task, ready to be inserted.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -226,7 +226,13 @@ pub fn parse_generic_csv(text: &str) -> Vec<ImportTask> {
 
 /// Resolve a list name to a project id, creating the list if missing. Empty or
 /// "inbox" (any case) maps to the seeded Inbox.
-async fn get_or_create_by_name(pool: &SqlitePool, bus: &EventBus, name: &str) -> Result<String> {
+/// Resolve a list name to a project id inside the import transaction, creating
+/// the project (and queuing its event) if missing. Empty / "inbox" → Inbox.
+async fn resolve_project_tx(
+    conn: &mut sqlx::SqliteConnection,
+    name: &str,
+    events: &mut Vec<DomainEvent>,
+) -> Result<String> {
     let name = name.trim();
     if name.is_empty() || name.eq_ignore_ascii_case("inbox") {
         return Ok("inbox".to_string());
@@ -235,36 +241,52 @@ async fn get_or_create_by_name(pool: &SqlitePool, bus: &EventBus, name: &str) ->
         "SELECT id FROM projects WHERE name = ? COLLATE NOCASE AND deleted_at IS NULL LIMIT 1",
     )
     .bind(name)
-    .fetch_optional(pool)
+    .fetch_optional(&mut *conn)
     .await?;
     if let Some(id) = existing {
         return Ok(id);
     }
-    let p = create_project(
-        pool,
-        bus,
-        NewProject { name: name.to_string(), color: None, icon: None, kind: None },
+    let id = create_project_core(
+        conn,
+        &NewProject { name: name.to_string(), color: None, icon: None, kind: None },
     )
     .await?;
-    Ok(p.id)
+    events.push(DomainEvent::ProjectCreated { id: id.clone() });
+    Ok(id)
 }
 
 /// Insert imported rows (append-only; lists created by name). Tasks marked
 /// completed are created then completed. Returns the number of tasks inserted.
+///
+/// The whole import runs in **one transaction**: if any row fails, nothing is
+/// persisted — no orphaned tasks or projects from a partial import
+/// (docs/decisions.md). Domain events are queued and emitted only after the
+/// commit.
 pub async fn import_tasks(pool: &SqlitePool, bus: &EventBus, rows: Vec<ImportTask>) -> Result<usize> {
+    let mut tx = pool.begin().await?;
+    let mut events: Vec<DomainEvent> = Vec::new();
+    // Cache resolved list names so each project is looked up / created once.
+    let mut project_ids: HashMap<String, String> = HashMap::new();
     let mut count = 0;
     for row in rows {
-        let project_id = get_or_create_by_name(pool, bus, &row.list).await?;
-        let task = create_task(
-            pool,
-            bus,
-            NewTask {
+        let key = row.list.trim().to_lowercase();
+        let project_id = match project_ids.get(&key) {
+            Some(id) => id.clone(),
+            None => {
+                let id = resolve_project_tx(&mut tx, &row.list, &mut events).await?;
+                project_ids.insert(key, id.clone());
+                id
+            }
+        };
+        let task_id = create_task_core(
+            &mut tx,
+            &NewTask {
                 project_id,
                 parent_id: None,
                 title: row.title,
                 priority: row.priority,
-                start_at: row.start_at,
-                due_at: row.due_at,
+                start_at: row.start_at.clone(),
+                due_at: row.due_at.clone(),
                 is_all_day: None,
                 duration_min: None,
                 time_zone: None,
@@ -272,21 +294,21 @@ pub async fn import_tasks(pool: &SqlitePool, bus: &EventBus, rows: Vec<ImportTas
                 repeat_from: None,
                 kind: None,
             },
+            row.content.as_deref(),
         )
         .await?;
-        if let Some(content) = row.content {
-            update_task(
-                pool,
-                bus,
-                &task.id,
-                TaskPatch { content_plain: Some(Some(content)), ..Default::default() },
-            )
-            .await?;
-        }
+        events.push(DomainEvent::TaskCreated { id: task_id.clone() });
         if row.completed {
-            complete_task(pool, bus, &task.id, 0).await?;
+            complete_imported_core(&mut tx, &task_id, row.due_at.as_deref(), row.start_at.as_deref())
+                .await?;
+            events.push(DomainEvent::TaskCompleted { ids: vec![task_id] });
         }
         count += 1;
+    }
+    tx.commit().await?;
+
+    for event in events {
+        bus.emit(event);
     }
     Ok(count)
 }
@@ -411,14 +433,10 @@ task,Low prio thing,,2,\n";
         assert_eq!(done, 1);
     }
 
-    /// docs/adversarial-review-findings.md — "CSV import is non-atomic and
-    /// retries duplicate already imported tasks". Each row is inserted
-    /// independently with no outer transaction, so a later row's failure
-    /// leaves earlier rows persisted even though `import_tasks` returns an
-    /// error. This asserts the desired all-or-nothing behavior, which the
-    /// current implementation fails.
+    /// docs/adversarial-review-findings.md finding 3 (non-atomic portion):
+    /// the import runs in one transaction, so a failing row rolls back every
+    /// earlier row and project — all-or-nothing.
     #[tokio::test]
-    #[ignore = "reproduces adversarial-review finding: import is not transactional"]
     async fn import_tasks_partial_failure_leaves_earlier_rows_persisted() {
         let pool = connect_in_memory().await.unwrap();
         let bus = EventBus::new();
@@ -455,5 +473,13 @@ task,Low prio thing,,2,\n";
             .await
             .unwrap();
         assert_eq!(n, 0, "import left a partially-inserted row after failing");
+        // The project created for the first row must roll back too.
+        let p: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM projects WHERE name = 'Work' AND deleted_at IS NULL",
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(p, 0, "import left an orphaned project after failing");
     }
 }

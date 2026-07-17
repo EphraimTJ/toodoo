@@ -5,6 +5,18 @@ ambiguity we resolved by judgment call), with the reasoning. Newest entries at
 the top. Never rewrite history — if a decision is reversed, add a new entry
 that supersedes the old one.
 
+## 2026-07-17 — CSV import is atomic (all-or-nothing failure mode)
+
+Response to adversarial-review finding 3 (non-atomic portion): a row failing
+mid-import used to leave every earlier task/project persisted while the command
+reported an error. `import_tasks` now runs the **whole import in a single
+transaction** (via tx-aware `create_task_core` / `create_project_core` /
+`complete_imported_core`), and domain events are queued and emitted **after
+commit**. **User-visible failure-mode change:** a failed import now imports
+*nothing* (previously: an unlabeled prefix of the file). The 2026-07-16
+"imports append, no dedupe" behavior is unchanged — re-running a *successful*
+import still appends duplicates by design.
+
 ## 2026-07-17 — Reminder dispatch: claim/ack with bounded retry (supersedes the 2026-07-15 scheduler entry's fire-then-stamp step)
 
 Response to adversarial-review finding 5: the scheduler acknowledged
