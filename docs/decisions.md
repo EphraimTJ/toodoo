@@ -5,6 +5,31 @@ ambiguity we resolved by judgment call), with the reasoning. Newest entries at
 the top. Never rewrite history — if a decision is reversed, add a new entry
 that supersedes the old one.
 
+## 2026-07-17 — Sample data: guarded, feature-complete, repo-driven
+
+A packaged build now ships a **"Load sample data"** flow so manual testing is
+realistic (user request, round-2 retest):
+
+- `repo::seed::seed_sample_data` builds a deterministic example workspace
+  **through the normal repository functions** (invariants/changelog/events all
+  hold): every date bucket and priority, timed/all-day/duration tasks, subtask
+  nesting, check items, nested tags, recurring daily / weekly / monthly-last-
+  Friday, reminders minutes out, templates, comments, a KANBAN project with
+  sections, a NOTE list, stickies, filters, habits with back-dated streaks,
+  focus history, countdowns, saved/recent searches, and completions that feed
+  stats. **Attachments are N/A** — the deferred feature has no repo layer, so
+  nothing is faked.
+- **Never auto-seeds:** a first-run card offers it only when the workspace is
+  empty (no tasks, Inbox-only) and can be dismissed (persisted
+  `seed.promptDismissed`); Settings → Advanced offers it behind an explicit
+  confirm (`force=true`, appends on top of existing data; tags
+  resolve-or-create so a re-run can't collide with unique names). The repo
+  function refuses a non-empty workspace without `force`.
+- Available in release builds — unlike the dev-only 10k perf fixture
+  (`seed_demo_data`), which is unchanged.
+- Coverage is pinned by
+  `repo::seed::tests::sample_data_exercises_every_feature_and_guards_non_empty`.
+
 ## 2026-07-17 — Tray focus countdown is not wired in v1.0
 
 The 12D checklist carries a conditional item — "(If wired) the tray tooltip

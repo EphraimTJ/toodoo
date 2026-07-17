@@ -5,6 +5,7 @@ import { DetailPane } from "./DetailPane";
 import { CommandPalette } from "../../features/search/components/CommandPalette";
 import { ReminderToasts } from "../../features/reminders/components/ReminderToasts";
 import { SystemToasts } from "./SystemToasts";
+import { SampleDataPrompt } from "./SampleDataPrompt";
 import { ShortcutCheatsheet } from "../../features/shortcuts/components/ShortcutCheatsheet";
 import { useShortcuts } from "../../features/shortcuts/useShortcuts";
 import { api } from "../../lib/api";
@@ -53,6 +54,7 @@ export function AppShell() {
       <CommandPalette />
       <ReminderToasts />
       <SystemToasts />
+      <SampleDataPrompt />
       <ShortcutCheatsheet />
     </div>
   );

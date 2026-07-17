@@ -725,6 +725,9 @@ export interface Api {
   openLogsFolder(): Promise<void>;
   /** Fire the full notification path now; resolves to a short stage report. */
   sendTestNotification(): Promise<string>;
+  /** Load the feature-complete sample workspace. Refuses a non-empty
+   *  workspace unless `force` (the Advanced action confirms first). */
+  seedSampleData(force: boolean): Promise<void>;
 
   listHabits(includeArchived: boolean): Promise<Habit[]>;
   getHabit(id: string): Promise<Habit>;
@@ -983,6 +986,7 @@ const tauriApi: Api = {
   todayCount: () => invoke("today_count"),
   openLogsFolder: () => invoke("open_logs_folder"),
   sendTestNotification: () => invoke("send_test_notification"),
+  seedSampleData: (force) => invoke("seed_sample_data", { force }),
 
   listHabits: (includeArchived) => invoke("list_habits", { includeArchived }),
   getHabit: (id) => invoke("get_habit", { id }),
@@ -2394,6 +2398,31 @@ function browserStubApi(): Api {
         }),
       );
       return "browser stub: in-app toast emitted";
+    },
+    seedSampleData: async (force) => {
+      // Browser stub: a representative subset of the Rust sample seed, enough
+      // to drive the first-run prompt and give the UI something to render.
+      if (!force && tasks.length > 0) {
+        throw new Error("the workspace already has tasks — sample data must be loaded explicitly");
+      }
+      const day = (d: number) =>
+        new Date(Date.now() + d * 86_400_000).toISOString().slice(0, 10) + "T00:00:00.000Z";
+      const work = await self.createProject({ name: "Work" });
+      const personal = await self.createProject({ name: "Personal" });
+      await self.createTask({ projectId: personal.id, title: "Pay the electricity bill", dueAt: day(-1), priority: 5 });
+      await self.createTask({ projectId: personal.id, title: "Water the plants", dueAt: day(0), priority: 3 });
+      await self.createTask({ projectId: work.id, title: "Review the quarterly report", dueAt: day(0), priority: 1 });
+      await self.createTask({ projectId: personal.id, title: "Return the library books", dueAt: day(1) });
+      await self.createTask({ projectId: work.id, title: "Prepare the demo script", dueAt: day(5), priority: 3 });
+      await self.createTask({ projectId: personal.id, title: "Research summer trip ideas" });
+      await self.createTask({
+        projectId: personal.id,
+        title: "Journal for five minutes",
+        dueAt: day(0),
+        rrule: "FREQ=DAILY",
+      });
+      const done = await self.createTask({ projectId: personal.id, title: "Book flights", dueAt: day(1) });
+      await self.completeTask(done.id);
     },
     todayCount: async () => {
       const { today } = localDateParams();

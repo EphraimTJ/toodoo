@@ -410,6 +410,14 @@ async fn set_setting(state: State<'_, AppState>, key: String, value: Value) -> C
     repo::settings::set_setting(&state.pool, &state.bus, &key, value).await.map_err(err)
 }
 
+/// Load the feature-complete sample workspace (first-run prompt passes
+/// `force=false`; the Settings → Advanced action confirms first and passes
+/// `force=true`). Available in release builds, unlike the dev-only perf seed.
+#[tauri::command]
+async fn seed_sample_data(state: State<'_, AppState>, force: bool) -> CmdResult<()> {
+    repo::seed::seed_sample_data(&state.pool, &state.bus, force).await.map_err(err)
+}
+
 #[tauri::command]
 async fn seed_demo_data(state: State<'_, AppState>, tasks: usize) -> CmdResult<()> {
     if !cfg!(debug_assertions) {
@@ -1939,6 +1947,7 @@ pub fn run() {
             log_window_error,
             open_logs_folder,
             send_test_notification,
+            seed_sample_data,
             open_quick_add_window,
             open_focus_window,
             open_sticky_window,
