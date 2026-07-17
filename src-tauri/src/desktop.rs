@@ -73,8 +73,18 @@ pub async fn set_autostart_flag(pool: &SqlitePool, bus: &EventBus, on: bool) -> 
 }
 
 /// Open (or focus) an always-on-top mini window that loads the SPA with a
-/// `?win=<kind>` query the frontend entry branches on.
-pub fn open_or_focus(app: &AppHandle, label: &str, query: &str, title: &str, w: f64, h: f64) -> tauri::Result<()> {
+/// `?win=<kind>` query the frontend entry branches on. `decorations` gives the
+/// window a title bar + OS resize handles (focus/sticky want it so they can be
+/// moved and resized; the transient quick-add window stays frameless).
+pub fn open_or_focus(
+    app: &AppHandle,
+    label: &str,
+    query: &str,
+    title: &str,
+    w: f64,
+    h: f64,
+    decorations: bool,
+) -> tauri::Result<()> {
     if let Some(win) = app.get_webview_window(label) {
         let _ = win.show();
         let _ = win.set_focus();
@@ -84,7 +94,7 @@ pub fn open_or_focus(app: &AppHandle, label: &str, query: &str, title: &str, w: 
         .title(title)
         .inner_size(w, h)
         .always_on_top(true)
-        .decorations(false)
+        .decorations(decorations)
         .resizable(true)
         .build()?;
     Ok(())

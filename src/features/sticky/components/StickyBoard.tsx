@@ -1,7 +1,9 @@
 import { useRef, useState } from "react";
-import type { StickyView } from "../../../lib/api";
+import { api, type StickyView } from "../../../lib/api";
 import { useTaskMutations } from "../../tasks/hooks/useTasks";
 import { useSticky } from "../hooks/useSticky";
+
+const IS_TAURI = "__TAURI_INTERNALS__" in window;
 
 const COLORS = ["#ffd97d", "#a3e4b7", "#a7c7ff", "#f7a8c4", "#d7bde2", "#e0e0e0"];
 
@@ -60,11 +62,22 @@ function StickyCard({
             />
           ))}
         </div>
+        {IS_TAURI && (
+          <button
+            type="button"
+            aria-label={`Pop out ${sticky.title}`}
+            title="Pop out to an always-on-top window"
+            onClick={() => void api.openStickyWindow(sticky.id)}
+            className="ml-auto text-xs text-black/50 hover:text-black"
+          >
+            ↗
+          </button>
+        )}
         <button
           type="button"
           aria-label={`Close ${sticky.title}`}
           onClick={() => onClose(sticky.id)}
-          className="ml-auto text-xs text-black/50 hover:text-black"
+          className={`${IS_TAURI ? "" : "ml-auto"} text-xs text-black/50 hover:text-black`}
         >
           ✕
         </button>

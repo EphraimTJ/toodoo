@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../lib/api";
 import { QuickAddBar } from "../features/quickadd/components/QuickAddBar";
@@ -10,8 +11,18 @@ function closeWindow() {
 }
 
 function QuickAddWindow() {
+  // Esc closes the window. A window-level listener is robust regardless of which
+  // element (the add input) currently has focus.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") closeWindow();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
   return (
-    <div className="p-3" data-testid="win-quickadd" onKeyDown={(e) => e.key === "Escape" && closeWindow()}>
+    <div className="p-3" data-testid="win-quickadd">
       <h1 className="mb-1 px-1 text-xs font-semibold uppercase tracking-wide text-text-muted">Quick add</h1>
       <QuickAddBar defaults={{ projectId: "inbox" }} />
     </div>

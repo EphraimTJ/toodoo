@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { api } from "../../../lib/api";
 import { useAmbient } from "../hooks/useAmbient";
 import { useFocusSettings } from "../hooks/useFocusSettings";
 import { FocusTimer } from "./FocusTimer";
@@ -34,6 +35,17 @@ export function FocusView() {
             {label}
           </button>
         ))}
+        {"__TAURI_INTERNALS__" in window && new URLSearchParams(location.search).get("win") !== "focus" && (
+          <button
+            type="button"
+            aria-label="Pop out focus window"
+            title="Open an always-on-top focus window"
+            onClick={() => void api.openFocusWindow()}
+            className="ml-auto rounded-md px-2 py-1 text-sm text-text-muted hover:bg-surface"
+          >
+            ↗
+          </button>
+        )}
       </header>
 
       <div className="min-h-0 flex-1 overflow-y-auto">

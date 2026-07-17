@@ -1253,19 +1253,19 @@ async fn set_autostart(
 
 #[tauri::command]
 fn open_quick_add_window(app: tauri::AppHandle) -> CmdResult<()> {
-    desktop::open_or_focus(&app, "quickadd", "win=quickadd", "Quick add", 520.0, 180.0)
+    desktop::open_or_focus(&app, "quickadd", "win=quickadd", "Quick add", 520.0, 180.0, false)
         .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 fn open_focus_window(app: tauri::AppHandle) -> CmdResult<()> {
-    desktop::open_or_focus(&app, "focus", "win=focus", "Focus", 320.0, 220.0)
+    desktop::open_or_focus(&app, "focus", "win=focus", "Focus", 320.0, 220.0, true)
         .map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 fn open_sticky_window(app: tauri::AppHandle, id: String) -> CmdResult<()> {
-    desktop::open_or_focus(&app, &format!("sticky-{id}"), &format!("win=sticky&id={id}"), "Sticky", 260.0, 240.0)
+    desktop::open_or_focus(&app, &format!("sticky-{id}"), &format!("win=sticky&id={id}"), "Sticky", 260.0, 240.0, true)
         .map_err(|e| e.to_string())
 }
 
@@ -1294,7 +1294,7 @@ pub fn run() {
                 .with_handler(|app, _shortcut, event| {
                     // We register a single shortcut (quick-add), so any press opens it.
                     if event.state == tauri_plugin_global_shortcut::ShortcutState::Pressed {
-                        let _ = desktop::open_or_focus(app, "quickadd", "win=quickadd", "Quick add", 520.0, 180.0);
+                        let _ = desktop::open_or_focus(app, "quickadd", "win=quickadd", "Quick add", 520.0, 180.0, false);
                     }
                 })
                 .build(),
@@ -1532,10 +1532,10 @@ pub fn run() {
                     .menu(&menu)
                     .on_menu_event(|app, event| match event.id.as_ref() {
                         "quick_add" => {
-                            let _ = desktop::open_or_focus(app, "quickadd", "win=quickadd", "Quick add", 520.0, 180.0);
+                            let _ = desktop::open_or_focus(app, "quickadd", "win=quickadd", "Quick add", 520.0, 180.0, false);
                         }
                         "start_focus" => {
-                            let _ = desktop::open_or_focus(app, "focus", "win=focus", "Focus", 320.0, 220.0);
+                            let _ = desktop::open_or_focus(app, "focus", "win=focus", "Focus", 320.0, 220.0, true);
                         }
                         "open_today" => {
                             if let Some(w) = app.get_webview_window("main") {
