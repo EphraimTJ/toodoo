@@ -13,37 +13,39 @@ Legend: ⬜ untested · ✅ pass · ❌ fail (file an issue)
 ### Global quick-add hotkey
 - ✅ Pressing the configured accelerator (default **Ctrl+Shift+A**) anywhere opens
   the frameless always-on-top **Quick add** window.
-- ❌ Typing a phrase + Enter creates the task (NLP parsing works) and the window
-  can be dismissed with Esc. (Everything works but the window does not get dismissed on pressing Esc and also even though the NLP recognizes due in 10 minutes, it doesnt show me that it is due in 10 minutes it shows me its due today. It should she me the time so if i put that task at 7:30pm it should show due at 7:40pm)
+- ✅ Typing a phrase + Enter creates the task (NLP parsing works) and the window
+  can be dismissed with Esc. 
 - ✅ Changing the hotkey in **Settings → Desktop** re-registers it (old combo
   stops working, new one works). An invalid accelerator is rejected (no crash).
 
 ### System tray
-- ❌ A tray icon appears; its tooltip shows **"Toodoo — N due today"** and N
-  updates within ~1 min as Today tasks change.(it didnt update, i put 1 task due today but it still showed 0 tasks due even after like 3 minutes.)
+- ✅ A tray icon appears; its tooltip shows **"Toodoo — N due today"** and N
+  updates within ~1 min as Today tasks change. (Passes on the installed build
+  after the `15759b6` event-driven refresh; the earlier "stuck at 0" result was
+  the dev-mode run before that fix.)
 - ✅ Tray menu: **Quick add** opens the quick-add window · **Open Today** focuses
   the main window on the Today list · **Start focus** opens the focus window · 
   **Show / Hide** toggles the main window · **Quit** exits. 
 
 ### Mini focus window + tray countdown
 - ❌ **Start focus** opens an always-on-top mini window mirroring the running
-  timer; it stays on top of other apps. (Start focus didnt open a mini window that stays on top)
+  timer; it stays on top of other apps. (Start focus opened a mini window that stays on top but it was just a white screen that was non responsive, its buggy)
 - ❌ (If wired) the tray tooltip reflects the focus countdown during a session. (i dont know how to check this)
 
 ### Sticky-note pop-out windows
 - ❌ Popping a sticky out opens an always-on-top window showing that sticky's
-  title/content with its color. (doesnt pop out of the window, so when the app is minimized i cant see the sticky note)
+  title/content with its color. (pops out of the window but again its a non responsive white screen in that window just like the focus)
 - ❌ Moving/resizing the pop-out persists position/color (survives reopen). The
   in-app sticky board still works alongside it. (im not able to resize it)
 
 ### Launch at login
-- ❌ Toggling **Launch Toodoo at login** on, then rebooting, starts Toodoo
-  automatically. Toggling off stops it. (im not sure how to check this since i have to do npm run tauri dev to launch the app)
+- ✅ Toggling **Launch Toodoo at login** on, then rebooting, starts Toodoo
+  automatically. Toggling off stops it. 
 
 ### Notification Complete / Snooze
 - ❌ When a reminder fires, a native notification appears. (no reminder came)
 - ❌ **Where the OS supports action buttons** (record which): Complete and Snooze
-  buttons act correctly. (i am only testing on windows so im not sure what to check)
+  buttons act correctly. (i didnt get any snooze buttons or anything, but maybe i didnt check properly)
 - ❌ **Everywhere**: an in-app Complete / Snooze toast also appears — Complete
   closes the task, Snooze 10m reschedules it. (This is the reliable path.) (I couldnt test it because a reminder never came)
 
