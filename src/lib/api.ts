@@ -723,6 +723,8 @@ export interface Api {
   todayCount(): Promise<number>;
   /** Reveal the folder holding the rotating toodoo.log (no-op in the browser). */
   openLogsFolder(): Promise<void>;
+  /** Fire the full notification path now; resolves to a short stage report. */
+  sendTestNotification(): Promise<string>;
 
   listHabits(includeArchived: boolean): Promise<Habit[]>;
   getHabit(id: string): Promise<Habit>;
@@ -980,6 +982,7 @@ const tauriApi: Api = {
   openStickyWindow: (id) => invoke("open_sticky_window", { id }),
   todayCount: () => invoke("today_count"),
   openLogsFolder: () => invoke("open_logs_folder"),
+  sendTestNotification: () => invoke("send_test_notification"),
 
   listHabits: (includeArchived) => invoke("list_habits", { includeArchived }),
   getHabit: (id) => invoke("get_habit", { id }),
@@ -2383,6 +2386,15 @@ function browserStubApi(): Api {
     openFocusWindow: async () => {},
     openStickyWindow: async () => {},
     openLogsFolder: async () => {},
+    sendTestNotification: async () => {
+      // Browser stub: exercise the in-app toast path only.
+      window.dispatchEvent(
+        new CustomEvent("toodoo-reminder-fired", {
+          detail: { taskId: "test", reminderId: "test", title: "Test notification (in-app path)" },
+        }),
+      );
+      return "browser stub: in-app toast emitted";
+    },
     todayCount: async () => {
       const { today } = localDateParams();
       return tasks.filter(

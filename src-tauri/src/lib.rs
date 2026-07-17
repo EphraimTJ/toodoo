@@ -1285,6 +1285,66 @@ fn log_window_error(
     Ok(())
 }
 
+/// Fire the full notification path immediately (Settings → Advanced): log the
+/// plugin permission state (requesting it if needed), attempt a native
+/// `show()`, log the outcome, and emit a synthetic `reminder-fired` so the
+/// in-app toast path is exercised too. Diagnosing "reminders never fire" no
+/// longer requires waiting for the scheduler.
+#[tauri::command]
+fn send_test_notification(app: tauri::AppHandle) -> CmdResult<String> {
+    let mut report: Vec<String> = Vec::new();
+    match app.notification().permission_state() {
+        Ok(state) => {
+            log::info!("[notify-test] permission_state: {state:?}");
+            report.push(format!("permission: {state:?}"));
+            if !matches!(state, tauri_plugin_notification::PermissionState::Granted) {
+                match app.notification().request_permission() {
+                    Ok(new_state) => {
+                        log::info!("[notify-test] request_permission -> {new_state:?}");
+                        report.push(format!("requested → {new_state:?}"));
+                    }
+                    Err(e) => {
+                        log::error!("[notify-test] request_permission FAILED: {e}");
+                        report.push(format!("request FAILED: {e}"));
+                    }
+                }
+            }
+        }
+        Err(e) => {
+            log::error!("[notify-test] permission_state FAILED: {e}");
+            report.push(format!("permission check FAILED: {e}"));
+        }
+    }
+    match app
+        .notification()
+        .builder()
+        .title("Toodoo")
+        .body("Test notification — if you can read this, native toasts work.")
+        .show()
+    {
+        Ok(()) => {
+            log::info!("[notify-test] notification.show() ok");
+            report.push("native show(): ok".to_string());
+        }
+        Err(e) => {
+            log::error!("[notify-test] notification.show() FAILED: {e}");
+            report.push(format!("native show() FAILED: {e}"));
+        }
+    }
+    // The in-app toast path (reliable across OSes) — same event the scheduler
+    // emits; reminderId "test" renders dismiss-only.
+    let _ = app.emit(
+        "reminder-fired",
+        serde_json::json!({
+            "taskId": "test",
+            "reminderId": "test",
+            "title": "Test notification (in-app path)",
+        }),
+    );
+    log::info!("[notify-test] emitted in-app test toast");
+    Ok(report.join("; "))
+}
+
 /// Reveal the rotating log file's folder (Settings → Advanced), so the user
 /// can grab toodoo.log without knowing the path.
 #[tauri::command]
@@ -1403,6 +1463,28 @@ pub fn run() {
             // windows shortly after launch, so their load/boot can be observed
             // from stderr (with the WindowRoot boot beacon) without clicking
             // through the UI. Used to verify packaged-build window loading.
+            // Notification identity context in every log file: permission
+            // state + the identifier Windows resolves toasts against.
+            match app.notification().permission_state() {
+                Ok(s) => log::info!(
+                    "[notify] startup permission_state: {s:?} (identifier {})",
+                    app.config().identifier
+                ),
+                Err(e) => log::error!("[notify] startup permission_state FAILED: {e}"),
+            }
+            // TOODOO_DIAG_NOTIFY=1 fires the full test-notification path
+            // shortly after launch (headless diagnosis of packaged builds).
+            if std::env::var("TOODOO_DIAG_NOTIFY").is_ok() {
+                let h = app.handle().clone();
+                tauri::async_runtime::spawn(async move {
+                    tokio::time::sleep(std::time::Duration::from_secs(4)).await;
+                    match send_test_notification(h) {
+                        Ok(report) => log::info!("[diag] test notification: {report}"),
+                        Err(e) => log::error!("[diag] test notification failed: {e}"),
+                    }
+                });
+            }
+
             if let Ok(diag) = std::env::var("TOODOO_DIAG_WINDOWS") {
                 let h = app.handle().clone();
                 tauri::async_runtime::spawn(async move {
@@ -1856,6 +1938,7 @@ pub fn run() {
             set_autostart,
             log_window_error,
             open_logs_folder,
+            send_test_notification,
             open_quick_add_window,
             open_focus_window,
             open_sticky_window,

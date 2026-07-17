@@ -73,22 +73,27 @@ export function ReminderToasts() {
               ✕
             </button>
           </div>
-          <div className="mt-2 flex gap-2">
-            <button
-              type="button"
-              className="rounded-md bg-accent px-2.5 py-1 text-xs text-accent-fg"
-              onClick={() => void complete(f, idx)}
-            >
-              Complete
-            </button>
-            <button
-              type="button"
-              className="rounded-md border border-border px-2.5 py-1 text-xs hover:bg-bg"
-              onClick={() => void snooze(f, idx)}
-            >
-              Snooze 10m
-            </button>
-          </div>
+          {f.reminderId === "test" ? (
+            // Synthetic test toast (Settings → Advanced) — nothing to act on.
+            <div className="mt-1 text-xs text-text-muted">In-app notification path works.</div>
+          ) : (
+            <div className="mt-2 flex gap-2">
+              <button
+                type="button"
+                className="rounded-md bg-accent px-2.5 py-1 text-xs text-accent-fg"
+                onClick={() => void complete(f, idx)}
+              >
+                Complete
+              </button>
+              <button
+                type="button"
+                className="rounded-md border border-border px-2.5 py-1 text-xs hover:bg-bg"
+                onClick={() => void snooze(f, idx)}
+              >
+                Snooze 10m
+              </button>
+            </div>
+          )}
         </div>
       ))}
     </div>
