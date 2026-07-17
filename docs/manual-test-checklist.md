@@ -30,7 +30,9 @@ Legend: ⬜ untested · ✅ pass · ❌ fail (file an issue)
 ### Mini focus window + tray countdown
 - ❌ **Start focus** opens an always-on-top mini window mirroring the running
   timer; it stays on top of other apps. (Start focus opened a mini window that stays on top but it was just a white screen that was non responsive, its buggy)
-- ❌ (If wired) the tray tooltip reflects the focus countdown during a session. (i dont know how to check this)
+- ⬜ ~~(If wired) the tray tooltip reflects the focus countdown during a session.~~
+  **N/A for v1.0** — confirmed not wired; deliberate (see the 2026-07-17
+  "Tray focus countdown is not wired in v1.0" decision).
 
 ### Sticky-note pop-out windows
 - ❌ Popping a sticky out opens an always-on-top window showing that sticky's
