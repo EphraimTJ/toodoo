@@ -317,18 +317,22 @@ async fn subtree_ids(pool: &SqlitePool, id: &str) -> Result<Vec<String>> {
 
 /// Record one closed occurrence in `task_completions` — the durable per-instance
 /// history that recurrence end-counting (`COUNT=`) and the Phase 9 stats engine
-/// read. Written inside the caller's transaction.
+/// read. Written inside the caller's transaction. Returns whether a row was
+/// inserted: the `ux_task_completions_occurrence` unique index makes a repeat
+/// of an already-recorded (task, occurrence) a no-op, and the caller must then
+/// skip the point award too (idempotency contract, docs/decisions.md).
 async fn record_completion(
     conn: &mut SqliteConnection,
     task_id: &str,
     occurrence_at: Option<&str>,
     completed_at: &str,
     status: &str,
-) -> Result<()> {
-    sqlx::query(
+) -> Result<bool> {
+    let res = sqlx::query(
         "INSERT INTO task_completions
              (id, task_id, occurrence_at, completed_at, status, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?)",
+         VALUES (?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT DO NOTHING",
     )
     .bind(new_id())
     .bind(task_id)
@@ -339,7 +343,7 @@ async fn record_completion(
     .bind(completed_at)
     .execute(conn)
     .await?;
-    Ok(())
+    Ok(res.rows_affected() > 0)
 }
 
 /// Completing a parent completes all open descendants (docs/decisions.md).
@@ -357,12 +361,28 @@ pub async fn complete_task(
     id: &str,
     tz_off_min: i32,
 ) -> Result<Vec<String>> {
+    complete_task_with(pool, bus, id, tz_off_min, None).await
+}
+
+/// `complete_task` with an idempotency key for the recurring path: when the
+/// caller passes the occurrence it saw (`expected_occurrence` = the task's
+/// due-else-start at render time) and the task has since advanced, the call is
+/// a safe no-op returning `[]` instead of closing the next occurrence
+/// (docs/decisions.md idempotency contract).
+pub async fn complete_task_with(
+    pool: &SqlitePool,
+    bus: &EventBus,
+    id: &str,
+    tz_off_min: i32,
+    expected_occurrence: Option<&str>,
+) -> Result<Vec<String>> {
     let top = get_task(pool, id).await?;
     let is_recurring = top.rrule.as_deref().is_some_and(|r| !r.trim().is_empty())
         && (top.due_at.is_some() || top.start_at.is_some())
         && top.status == "ACTIVE";
     if is_recurring {
-        return advance_recurrence(pool, bus, &top, tz_off_min, "COMPLETED", true).await;
+        return advance_recurrence(pool, bus, &top, tz_off_min, "COMPLETED", true, expected_occurrence)
+            .await;
     }
 
     let ids = subtree_ids(pool, id).await?;
@@ -397,10 +417,13 @@ pub async fn complete_task(
     }
     // Record the completion of the task the user closed and award points — this
     // makes task_completions the universal stats ledger (docs/decisions.md).
+    // A repeat of an already-recorded occurrence (reopen → complete with the
+    // same dates) keeps the status flip but adds no ledger row and no points.
     if completed.iter().any(|c| c == id) {
         let occurrence = top.due_at.as_deref().or(top.start_at.as_deref());
-        record_completion(&mut tx, id, occurrence, &ts, "COMPLETED").await?;
-        super::stats::award_completion(&mut tx, top.due_at.as_deref(), &ts, tz_off_min).await?;
+        if record_completion(&mut tx, id, occurrence, &ts, "COMPLETED").await? {
+            super::stats::award_completion(&mut tx, top.due_at.as_deref(), &ts, tz_off_min).await?;
+        }
     }
     tx.commit().await?;
 
@@ -412,7 +435,8 @@ pub async fn complete_task(
 
 /// Close the current occurrence of a recurring task and roll it forward. Returns
 /// the ids that ended up COMPLETED — empty while the series continues, `[id]`
-/// once it ends.
+/// once it ends. A stale retry (the occurrence already advanced, or an
+/// already-recorded occurrence) is a safe no-op returning `[]`.
 async fn advance_recurrence(
     pool: &SqlitePool,
     bus: &EventBus,
@@ -420,12 +444,39 @@ async fn advance_recurrence(
     tz_off_min: i32,
     status: &str,
     award: bool,
+    expected_occurrence: Option<&str>,
 ) -> Result<Vec<String>> {
     let ts = now();
-    let occurrence = top.due_at.as_deref().or(top.start_at.as_deref());
     let mut tx = pool.begin().await?;
 
-    record_completion(&mut tx, &top.id, occurrence, &ts, status).await?;
+    // Idempotency guard, enforced inside the transaction: re-read the task and
+    // only advance if it still matches (a) the state the caller's pre-tx read
+    // saw — protects overlapping duplicate calls (double-click, concurrent
+    // REST retries) — and (b) the caller-declared expected occurrence, if any
+    // — protects sequential retries of a request that already advanced.
+    let current: Option<(Option<String>, Option<String>, String)> = sqlx::query_as(
+        "SELECT start_at, due_at, status FROM tasks WHERE id = ? AND deleted_at IS NULL",
+    )
+    .bind(&top.id)
+    .fetch_optional(&mut *tx)
+    .await?;
+    let Some((cur_start, cur_due, cur_status)) = current else {
+        return Err(RepoError::NotFound(format!("task {}", top.id)));
+    };
+    let cur_occurrence = cur_due.clone().or(cur_start.clone());
+    let stale = cur_status != "ACTIVE"
+        || cur_due != top.due_at
+        || cur_start != top.start_at
+        || expected_occurrence.is_some_and(|exp| Some(exp) != cur_occurrence.as_deref());
+    if stale {
+        return Ok(Vec::new());
+    }
+
+    let occurrence = top.due_at.as_deref().or(top.start_at.as_deref());
+    if !record_completion(&mut tx, &top.id, occurrence, &ts, status).await? {
+        // This exact occurrence is already recorded (a racing duplicate won).
+        return Ok(Vec::new());
+    }
     // A completed occurrence earns points; a skipped (WONT_DO) one does not.
     if award {
         super::stats::award_completion(&mut tx, top.due_at.as_deref(), &ts, tz_off_min).await?;
@@ -535,7 +586,7 @@ pub async fn set_wont_do(
         && (top.due_at.is_some() || top.start_at.is_some())
         && top.status == "ACTIVE";
     if is_recurring {
-        return advance_recurrence(pool, bus, &top, tz_off_min, "WONT_DO", false).await;
+        return advance_recurrence(pool, bus, &top, tz_off_min, "WONT_DO", false, None).await;
     }
 
     let ts = now();
@@ -555,7 +606,7 @@ pub async fn set_wont_do(
     append_changelog(&mut tx, "task", id, ChangeOp::Update, &serde_json::json!({ "status": "WONT_DO" }))
         .await?;
     activity::log(&mut tx, "task", id, "wont_do", &serde_json::json!({})).await?;
-    record_completion(&mut tx, id, occurrence, &ts, "WONT_DO").await?;
+    let _ = record_completion(&mut tx, id, occurrence, &ts, "WONT_DO").await?;
     tx.commit().await?;
 
     bus.emit(DomainEvent::TaskUpdated { id: id.to_string() });
@@ -1600,15 +1651,13 @@ pub(crate) mod tests {
     }
 
     /// docs/adversarial-review-findings.md — "Retrying completion advances
-    /// recurring tasks multiple times". A recurring task stays ACTIVE under the
-    /// same id after completion, so a retried `complete_task` call (double
-    /// click, client timeout + retry, duplicate REST request) is indistinguishable
-    /// from completing the newly-advanced occurrence. This asserts the desired
-    /// idempotent behavior (a retry of the same occurrence is a no-op), which the
-    /// current implementation fails — the retry advances a second occurrence and
-    /// awards points a second time.
+    /// recurring tasks multiple times". The idempotency contract
+    /// (docs/decisions.md): a caller that passes the occurrence it saw
+    /// (`expected_occurrence`) gets a safe no-op (`[]`) when that occurrence
+    /// has already been closed — no extra ledger row, no second advance, no
+    /// duplicate points. (A keyless repeat call is indistinguishable from
+    /// deliberately completing the next occurrence and still advances.)
     #[tokio::test]
-    #[ignore = "reproduces adversarial-review finding: recurring completion is not idempotent under retry"]
     async fn complete_task_retried_on_recurring_task_double_advances_and_double_awards() {
         // Baseline: a single completion call.
         let (pool1, bus1) = setup().await;
@@ -1627,8 +1676,9 @@ pub(crate) mod tests {
             .await
             .unwrap();
 
-        // Retry: the same completion request repeated (simulating a client
-        // retry against the same, unchanged occurrence).
+        // Retry: the same completion request repeated — both calls carry the
+        // occurrence the client rendered (what the UI and a well-behaved API
+        // client send), the second arriving after the first already advanced.
         let (pool2, bus2) = setup().await;
         let b = create_task(
             &pool2,
@@ -1637,8 +1687,10 @@ pub(crate) mod tests {
         )
         .await
         .unwrap();
-        complete_task(&pool2, &bus2, &b.id, 0).await.unwrap();
-        complete_task(&pool2, &bus2, &b.id, 0).await.unwrap(); // the retry
+        let seen = Some("2026-03-10T00:00:00.000Z");
+        complete_task_with(&pool2, &bus2, &b.id, 0, seen).await.unwrap();
+        let retry = complete_task_with(&pool2, &bus2, &b.id, 0, seen).await.unwrap();
+        assert!(retry.is_empty(), "stale retry must be a no-op returning []");
         let retried_completions = completion_count(&pool2, &b.id).await;
         let retried_due = get_task(&pool2, &b.id).await.unwrap().due_at;
         let retried_score: i64 = sqlx::query_scalar("SELECT COALESCE(SUM(score_delta), 0) FROM achievements")
@@ -1649,6 +1701,32 @@ pub(crate) mod tests {
         assert_eq!(retried_completions, single_completions, "retry recorded an extra completion");
         assert_eq!(retried_due, single_due, "retry advanced the occurrence a second time");
         assert_eq!(retried_score, single_score, "retry awarded points a second time");
+    }
+
+    /// The reopen → re-complete cycle on a non-recurring task with unchanged
+    /// dates flips status but must not farm duplicate ledger rows or points.
+    #[tokio::test]
+    async fn recomplete_after_reopen_records_no_duplicate_ledger_or_points() {
+        let (pool, bus) = setup().await;
+        let t = create_task(
+            &pool,
+            &bus,
+            NewTask { due_at: Some("2026-03-10T00:00:00.000Z".into()), ..quick("inbox", "once") },
+        )
+        .await
+        .unwrap();
+
+        complete_task(&pool, &bus, &t.id, 0).await.unwrap();
+        reopen_task(&pool, &bus, &t.id).await.unwrap();
+        complete_task(&pool, &bus, &t.id, 0).await.unwrap();
+
+        assert_eq!(get_task(&pool, &t.id).await.unwrap().status, "COMPLETED");
+        assert_eq!(completion_count(&pool, &t.id).await, 1);
+        let score: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM achievements WHERE reason LIKE 'complete%'")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert!(score <= 1, "re-completion after reopen must not award points twice");
     }
 
     async fn wont_do_count(pool: &SqlitePool, id: &str) -> i64 {

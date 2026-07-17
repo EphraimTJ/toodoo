@@ -118,7 +118,7 @@ function Subtasks({ task }: { task: Task }) {
               checked={child.status === "COMPLETED"}
               aria-label={child.title}
               onChange={(e) =>
-                e.target.checked ? completeTask.mutate(child.id) : reopenTask.mutate(child.id)
+                e.target.checked ? completeTask.mutate(child) : reopenTask.mutate(child.id)
               }
               className="h-3.5 w-3.5 accent-(--color-accent)"
             />
@@ -293,7 +293,7 @@ export function TaskDetail() {
           disabled={trashed}
           aria-label={done ? "Reopen task" : "Complete task"}
           onChange={(e) =>
-            e.target.checked ? completeTask.mutate(task.id) : reopenTask.mutate(task.id)
+            e.target.checked ? completeTask.mutate(task) : reopenTask.mutate(task.id)
           }
           className="h-4 w-4 accent-(--color-accent)"
         />

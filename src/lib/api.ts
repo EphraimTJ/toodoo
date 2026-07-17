@@ -551,7 +551,9 @@ export interface Api {
   createTask(input: NewTask): Promise<Task>;
   getTask(id: string): Promise<Task>;
   updateTask(id: string, patch: TaskPatch): Promise<Task>;
-  completeTask(id: string): Promise<string[]>;
+  /** `expectedOccurrence` is the due-else-start the caller rendered; a stale
+   *  value makes a retried recurring completion a safe no-op (returns []). */
+  completeTask(id: string, expectedOccurrence?: string | null): Promise<string[]>;
   reopenTask(id: string): Promise<void>;
   setWontDo(id: string): Promise<string[]>;
   duplicateTask(id: string): Promise<Task>;
@@ -786,7 +788,12 @@ const tauriApi: Api = {
   createTask: (input) => invoke("create_task", { input }),
   getTask: (id) => invoke("get_task", { id }),
   updateTask: (id, patch) => invoke("update_task", { id, patch }),
-  completeTask: (id) => invoke("complete_task", { id, tzOffsetMin: localDateParams().tzOffsetMin }),
+  completeTask: (id, expectedOccurrence) =>
+    invoke("complete_task", {
+      id,
+      tzOffsetMin: localDateParams().tzOffsetMin,
+      expectedOccurrence: expectedOccurrence ?? null,
+    }),
   reopenTask: (id) => invoke("reopen_task", { id }),
   setWontDo: (id) => invoke("set_wont_do", { id, tzOffsetMin: localDateParams().tzOffsetMin }),
   duplicateTask: (id) => invoke("duplicate_task", { id }),
@@ -1340,11 +1347,14 @@ function browserStubApi(): Api {
       logActivity(t.id, "edited");
       return clone(t);
     },
-    completeTask: async (id) => {
+    completeTask: async (id, expectedOccurrence) => {
       const top = findTask(id);
       const anchor = top.dueAt ?? top.startAt;
       // Recurring task with an anchor: advance in place instead of completing.
       if (top.status === "ACTIVE" && top.rrule && top.rrule.trim() && anchor) {
+        // Idempotency guard (mirrors the Rust contract): a retry carrying an
+        // occurrence that has already advanced is a no-op.
+        if (expectedOccurrence != null && expectedOccurrence !== anchor) return [];
         const next = advanceIso(anchor, top.rrule);
         if (next) {
           const newAnchor = top.isAllDay ? next.slice(0, 10) + "T00:00:00.000Z" : next;

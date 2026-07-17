@@ -134,8 +134,21 @@ async fn update_task(state: State<'_, AppState>, id: String, patch: TaskPatch) -
 }
 
 #[tauri::command]
-async fn complete_task(state: State<'_, AppState>, id: String, tz_offset_min: i32) -> CmdResult<Vec<String>> {
-    repo::tasks::complete_task(&state.pool, &state.bus, &id, tz_offset_min).await.map_err(err)
+async fn complete_task(
+    state: State<'_, AppState>,
+    id: String,
+    tz_offset_min: i32,
+    expected_occurrence: Option<String>,
+) -> CmdResult<Vec<String>> {
+    repo::tasks::complete_task_with(
+        &state.pool,
+        &state.bus,
+        &id,
+        tz_offset_min,
+        expected_occurrence.as_deref(),
+    )
+    .await
+    .map_err(err)
 }
 
 #[tauri::command]

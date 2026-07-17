@@ -331,6 +331,9 @@ mod tests {
         .execute(&pool)
         .await
         .unwrap();
+        // Fold the WAL into the main file so a plain file copy is complete
+        // (production snapshots use VACUUM INTO, which never has a WAL).
+        sqlx::query("PRAGMA wal_checkpoint(TRUNCATE)").execute(&pool).await.unwrap();
         pool.close().await;
     }
 

@@ -55,7 +55,12 @@ export function useTaskMutations() {
     onSuccess: invalidate,
   });
   const completeTask = useMutation({
-    mutationFn: (id: string) => api.completeTask(id),
+    // Pass the task the caller rendered so the backend can treat a stale retry
+    // of a recurring completion as a no-op (a bare id sends no occurrence key).
+    mutationFn: (t: string | Pick<Task, "id" | "dueAt" | "startAt">) =>
+      typeof t === "string"
+        ? api.completeTask(t)
+        : api.completeTask(t.id, t.dueAt ?? t.startAt ?? undefined),
     onSuccess: invalidate,
   });
   const reopenTask = useMutation({

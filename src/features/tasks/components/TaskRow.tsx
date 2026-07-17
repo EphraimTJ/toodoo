@@ -47,7 +47,7 @@ export function TaskRow({ task, depth, tags, draggable, inTrash }: Props) {
       // Let the fill/strike animation play before the row moves away.
       setCompleting(true);
       window.setTimeout(() => {
-        completeTask.mutate(task.id);
+        completeTask.mutate(task);
         setCompleting(false);
       }, 350);
     }

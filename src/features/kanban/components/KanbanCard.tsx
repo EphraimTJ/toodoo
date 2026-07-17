@@ -47,7 +47,7 @@ export function KanbanCard({ task, tags, subtaskTotal, subtaskDone }: Props) {
           aria-label={`Complete ${task.title}`}
           onClick={(e) => {
             e.stopPropagation();
-            completeTask.mutate(task.id);
+            completeTask.mutate(task);
           }}
           className={`mt-0.5 h-3.5 w-3.5 shrink-0 rounded-full border ${
             PRIORITY_DOT[task.priority] ?? PRIORITY_DOT[0]

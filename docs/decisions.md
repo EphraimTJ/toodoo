@@ -5,6 +5,42 @@ ambiguity we resolved by judgment call), with the reasoning. Newest entries at
 the top. Never rewrite history — if a decision is reversed, add a new entry
 that supersedes the old one.
 
+## 2026-07-17 — Completion idempotency contract (recurring advance + ledger)
+
+Response to adversarial-review finding 2: retrying `complete_task` on a
+recurring task double-advanced the occurrence and double-awarded points.
+
+The contract, enforced **inside the completion transaction** (`repo/tasks.rs`):
+
+- **Race guard (all callers, no API change):** `advance_recurrence` re-reads the
+  task within the transaction and compares to the caller's pre-transaction
+  snapshot. If the dates/status moved in between (overlapping duplicate calls —
+  double-click, concurrent REST requests), the later call is a **safe no-op
+  returning `[]`** (the same shape as "series continues": nothing newly
+  COMPLETED). No ledger row, no points, no advance.
+- **Retry guard (occurrence key):** callers may pass `expected_occurrence` (the
+  task's due-else-start **as the client rendered it**). If it no longer matches
+  the persisted occurrence, the call is the same safe no-op. The Tauri
+  `complete_task` command accepts optional `expectedOccurrence` and the UI
+  passes the rendered task, so a double-click or a repeat of a stale request
+  cannot skip occurrences. The **REST complete endpoint stays keyless**
+  (TickTick Open API shape): concurrent duplicates are covered by the race
+  guard; a *sequential* keyless repeat is indistinguishable from deliberately
+  completing the next occurrence and advances it — documented limitation.
+- **Ledger uniqueness (migration 0008):** a partial unique index allows at most
+  one live COMPLETED `task_completions` row per `(task_id, occurrence_at)`;
+  inserts use `ON CONFLICT DO NOTHING`. A conflicting recurring completion
+  no-ops; a non-recurring reopen → re-complete with unchanged dates flips
+  status but records **no duplicate ledger row and no duplicate points** (also
+  closes the reopen/complete point-farming loophole). The migration
+  soft-deletes pre-existing duplicates (keeping the earliest per occurrence)
+  before creating the index.
+
+The browser stub mirrors the occurrence-key no-op so UI tests exercise the same
+contract. Covered by `complete_task_retried_on_recurring_task_double_advances_
+and_double_awards` (previously `#[ignore]`d, now live) and
+`recomplete_after_reopen_records_no_duplicate_ledger_or_points`.
+
 ## 2026-07-17 — Restore is validated and rollback-protected (supersedes the 2026-07-16 staged-restore mechanism)
 
 Response to adversarial-review finding 1 (critical): the previous staged restore
