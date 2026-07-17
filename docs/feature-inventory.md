@@ -35,13 +35,13 @@ This is the checklist the whole project is graded against, converted from §3 of
   - [ ] Lunar-calendar option (stretch)
   - [x] "Repeat after completion" vs. fixed schedule
   - [x] End conditions (never / after N / until date)
-- [ ] Smart date recognition (NLP quick-add)
-  - [ ] Parse dates and times
-  - [ ] Parse recurrence ("every friday")
-  - [ ] Parse priority (`!high`)
-  - [ ] Parse tags (`#tag`)
-  - [ ] Parse list (`~list`)
-  - [ ] Inline highlights with tap-to-dismiss
+- [x] Smart date recognition (NLP quick-add)
+  - [x] Parse dates and times
+  - [x] Parse recurrence ("every friday")
+  - [x] Parse priority (`!high`)
+  - [x] Parse tags (`#tag`)
+  - [x] Parse list (`~list`)
+  - [x] Inline highlights with tap-to-dismiss
 - [x] Task templates
 - [ ] Attachments (files, images, audio) stored locally
   - [ ] Per-task gallery

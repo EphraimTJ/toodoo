@@ -5,6 +5,34 @@ ambiguity we resolved by judgment call), with the reasoning. Newest entries at
 the top. Never rewrite history — if a decision is reversed, add a new entry
 that supersedes the old one.
 
+## 2026-07-16 — NLP quick-add (Phase 12C, user-approved)
+
+**Pure frontend, no schema/commands.** Parsing lives in
+`src/features/quickadd/lib/parse.ts` (`chrono-node` for dates/times + a custom
+`every …` grammar + the filter-grammar tokens `#tag`/`~list`/`!priority`); the
+parsed result flows through the normal `createTask` path. No Rust mirror (per the
+2026-07-14 E2E decision — the parser is frontend-only and unit-tested directly).
+
+**Recurrence phrases emit RRULEs via `composeRrule`** (12B) — `every day`,
+`every 2 weeks`, `every friday`/`every mon, wed` (WEEKLY BYDAY), and the bare
+adverbs `daily|weekly|monthly|yearly`. The emitted string round-trips through
+`parseRrule`, so the Phase-2 engine accepts it. Recurrence is matched **before**
+chrono so "every friday" isn't consumed as a one-off date.
+
+**Resolution on submit:** `#tag` **auto-creates** the tag if missing (matches
+TickTick); `~list` **matches an existing list by name** (case-insensitive) and,
+if none matches, the `~name` **stays literal** in the title — a quick-add never
+silently creates a project.
+
+**Highlights = a removable chip row** under a plain-text input (each chip's ✕
+strips that token's exact substring from the text), a deliberate, fully-testable
+simplification of TickTick's inline colored-span field (a contenteditable was
+rejected as fiddly/hard to test). This is what closes "inline highlights with
+tap-to-dismiss".
+
+The 12B attachments-deferred / DB-only-backup decisions are untouched (12C adds
+nothing native; no `manual-test-checklist.md` this slice).
+
 ## 2026-07-16 — Task & Organization completeness (Phase 12B, user-approved)
 
 Closes the §3.1/§3.2/§3.3 long tail — almost entirely UI over the existing
