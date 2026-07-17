@@ -1187,9 +1187,10 @@ async fn list_backups(state: State<'_, AppState>) -> CmdResult<Vec<repo::backup:
 
 #[tauri::command]
 async fn restore_backup(state: State<'_, AppState>, path: String) -> CmdResult<()> {
-    // Stage the snapshot; it is swapped in on the next launch (before the pool opens).
+    // Stage the snapshot (validated, fsynced, atomically renamed); it is
+    // swapped in on the next launch (before the pool opens).
     let staged = state.data_dir.join(repo::backup::PENDING_RESTORE);
-    repo::backup::stage_restore(std::path::Path::new(&path), &staged).map_err(err)
+    repo::backup::stage_restore(std::path::Path::new(&path), &staged).await.map_err(err)
 }
 
 #[tauri::command]
@@ -1305,14 +1306,28 @@ pub fn run() {
             let db_path = data_dir.join("toodoo.db");
 
             // Apply a staged restore before opening the pool, so we never swap
-            // the database out from under a live connection.
-            match repo::backup::apply_pending_restore(&data_dir) {
+            // the database out from under a live connection. The staged file is
+            // validated first and the previous db is kept as a rollback until
+            // the restored one opens and migrates successfully.
+            match tauri::async_runtime::block_on(repo::backup::apply_pending_restore(&data_dir)) {
                 Ok(true) => eprintln!("restored database from a staged backup"),
                 Ok(false) => {}
                 Err(e) => eprintln!("pending restore failed: {e}"),
             }
 
-            let pool = tauri::async_runtime::block_on(repo::db::connect(&db_path))?;
+            let pool = match tauri::async_runtime::block_on(repo::db::connect(&db_path)) {
+                Ok(pool) => pool,
+                Err(e) => match repo::backup::undo_failed_restore(&data_dir) {
+                    Ok(true) => {
+                        eprintln!("restored database failed to open ({e}); rolled back to the previous database");
+                        tauri::async_runtime::block_on(repo::db::connect(&db_path))?
+                    }
+                    _ => return Err(e.into()),
+                },
+            };
+            // The db opened and migrated — the pre-restore rollback (if any) is
+            // no longer needed.
+            repo::backup::finalize_restore(&data_dir);
             let bus = EventBus::new();
 
             // Forward every domain event to the webview so views stay live, and

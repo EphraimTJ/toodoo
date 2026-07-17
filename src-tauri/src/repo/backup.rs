@@ -8,7 +8,8 @@ use std::path::Path;
 use chrono::{DateTime, SecondsFormat, Utc};
 use serde::Serialize;
 use serde_json::json;
-use sqlx::SqlitePool;
+use sqlx::sqlite::SqliteConnectOptions;
+use sqlx::{Connection, SqliteConnection, SqlitePool};
 
 use crate::error::{RepoError, Result};
 use crate::events::EventBus;
@@ -20,6 +21,10 @@ const PREFIX: &str = "toodoo-";
 const SUFFIX: &str = ".db";
 /// Staged-restore filename under the app data dir.
 pub const PENDING_RESTORE: &str = "pending-restore.db";
+/// Where the previous live db is parked while a restore is being confirmed.
+pub const RESTORE_ROLLBACK: &str = "toodoo.db.rollback";
+/// Where a restored db that failed to open is parked for inspection.
+pub const FAILED_RESTORE: &str = "toodoo.db.failed-restore";
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -145,18 +150,120 @@ pub fn prune(dir: &Path, keep: usize) -> Result<()> {
     Ok(())
 }
 
-/// Stage a snapshot to be applied on the next launch (copied to `staged`).
-pub fn stage_restore(src: &Path, staged: &Path) -> Result<()> {
-    fs::copy(src, staged).map_err(io_err)?;
+/// Verify that `path` is a healthy SQLite database carrying our core schema.
+/// Guards both staging and application of a restore: a partial/corrupt file
+/// (interrupted copy, disk full, antivirus) must never become the live db.
+async fn validate_snapshot(path: &Path) -> Result<()> {
+    let invalid = |what: &str| RepoError::Invalid(format!("restore validation failed: {what}"));
+    let opts = SqliteConnectOptions::new().filename(path).read_only(true);
+    let mut conn = SqliteConnection::connect_with(&opts)
+        .await
+        .map_err(|e| invalid(&format!("cannot open as SQLite: {e}")))?;
+    let verdict: String = sqlx::query_scalar("PRAGMA integrity_check")
+        .fetch_one(&mut conn)
+        .await
+        .map_err(|e| invalid(&format!("integrity_check errored: {e}")))?;
+    if verdict != "ok" {
+        let _ = conn.close().await;
+        return Err(invalid(&format!("integrity_check reported {verdict:?}")));
+    }
+    let core_tables: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name IN ('tasks', 'projects')",
+    )
+    .fetch_one(&mut conn)
+    .await
+    .map_err(|e| invalid(&format!("schema check errored: {e}")))?;
+    conn.close().await.map_err(|e| invalid(&format!("close failed: {e}")))?;
+    if core_tables != 2 {
+        return Err(invalid("not a Toodoo database (tasks/projects tables missing)"));
+    }
     Ok(())
 }
 
-/// If a staged restore exists in `data_dir`, swap it onto `toodoo.db` (clearing
-/// the stale `-wal`/`-shm` sidecars) before the pool opens. Returns whether one
-/// was applied.
-pub fn apply_pending_restore(data_dir: &Path) -> Result<bool> {
+fn with_tmp_suffix(path: &Path) -> std::path::PathBuf {
+    let mut os = path.as_os_str().to_owned();
+    os.push(".tmp");
+    std::path::PathBuf::from(os)
+}
+
+/// Stage a snapshot to be applied on the next launch: copy to a temp file,
+/// validate it as a SQLite db with our schema, fsync, then atomically rename to
+/// `staged`. An invalid or partially-copied snapshot never becomes
+/// `pending-restore.db`, so `apply_pending_restore` only ever sees a file that
+/// passed validation at staging time (and re-validates anyway).
+pub async fn stage_restore(src: &Path, staged: &Path) -> Result<()> {
+    let tmp = with_tmp_suffix(staged);
+    if let Err(e) = fs::copy(src, &tmp) {
+        let _ = fs::remove_file(&tmp);
+        return Err(io_err(e));
+    }
+    if let Err(e) = validate_snapshot(&tmp).await {
+        let _ = fs::remove_file(&tmp);
+        return Err(e);
+    }
+    // fsync needs a writable handle on Windows (FlushFileBuffers).
+    match fs::OpenOptions::new().write(true).open(&tmp).and_then(|f| f.sync_all()) {
+        Ok(()) => {}
+        Err(e) => {
+            let _ = fs::remove_file(&tmp);
+            return Err(io_err(e));
+        }
+    }
+    fs::rename(&tmp, staged).map_err(io_err)?;
+    Ok(())
+}
+
+/// If a staged restore exists in `data_dir`, swap it onto `toodoo.db` before
+/// the pool opens. The staged file is re-validated first (a corrupt file is
+/// discarded and the live db left untouched), and the live db is renamed to
+/// `RESTORE_ROLLBACK` — never deleted — so a restore that later fails to open
+/// can be undone (`undo_failed_restore`). Call `finalize_restore` once the
+/// restored db has opened and migrated to drop the rollback. Returns whether a
+/// restore was applied.
+pub async fn apply_pending_restore(data_dir: &Path) -> Result<bool> {
     let staged = data_dir.join(PENDING_RESTORE);
     if !staged.exists() {
+        return Ok(false);
+    }
+    if let Err(e) = validate_snapshot(&staged).await {
+        let _ = fs::remove_file(&staged);
+        return Err(e);
+    }
+    let target = data_dir.join("toodoo.db");
+    for sidecar in ["toodoo.db-wal", "toodoo.db-shm"] {
+        let p = data_dir.join(sidecar);
+        if p.exists() {
+            let _ = fs::remove_file(p);
+        }
+    }
+    let rollback = data_dir.join(RESTORE_ROLLBACK);
+    let _ = fs::remove_file(&rollback);
+    if target.exists() {
+        fs::rename(&target, &rollback).map_err(io_err)?;
+    }
+    if let Err(e) = fs::rename(&staged, &target) {
+        // Put the live db back so a rename failure can't leave the app with
+        // no database at all.
+        if rollback.exists() {
+            let _ = fs::rename(&rollback, &target);
+        }
+        return Err(io_err(e));
+    }
+    Ok(true)
+}
+
+/// Drop the rollback copy of the pre-restore db. Call only after the restored
+/// db has successfully opened and migrated.
+pub fn finalize_restore(data_dir: &Path) {
+    let _ = fs::remove_file(data_dir.join(RESTORE_ROLLBACK));
+}
+
+/// Undo a just-applied restore whose db failed to open: park the bad file at
+/// `FAILED_RESTORE` (for inspection) and put the rollback back as the live db.
+/// Returns whether a rollback existed to restore.
+pub fn undo_failed_restore(data_dir: &Path) -> Result<bool> {
+    let rollback = data_dir.join(RESTORE_ROLLBACK);
+    if !rollback.exists() {
         return Ok(false);
     }
     let target = data_dir.join("toodoo.db");
@@ -167,9 +274,11 @@ pub fn apply_pending_restore(data_dir: &Path) -> Result<bool> {
         }
     }
     if target.exists() {
-        fs::remove_file(&target).map_err(io_err)?;
+        let failed = data_dir.join(FAILED_RESTORE);
+        let _ = fs::remove_file(&failed);
+        fs::rename(&target, &failed).map_err(io_err)?;
     }
-    fs::rename(&staged, &target).map_err(io_err)?;
+    fs::rename(&rollback, &target).map_err(io_err)?;
     Ok(true)
 }
 
@@ -209,52 +318,115 @@ mod tests {
         fs::remove_dir_all(&dir).ok();
     }
 
-    #[test]
-    fn stage_and_apply_swaps_the_database() {
+    /// A real migrated db at `path` with a marker project so the file can be
+    /// identified after swaps. Closed (pool dropped) before returning.
+    async fn seeded_db(path: &Path, marker: &str) {
+        let pool = crate::repo::db::connect(path).await.unwrap();
+        sqlx::query(
+            "INSERT INTO projects (id, name, sort_order, created_at, updated_at)
+             VALUES (?, ?, 0, '2026-01-01T00:00:00.000Z', '2026-01-01T00:00:00.000Z')",
+        )
+        .bind(marker)
+        .bind(marker)
+        .execute(&pool)
+        .await
+        .unwrap();
+        pool.close().await;
+    }
+
+    async fn has_project(path: &Path, id: &str) -> bool {
+        let pool = crate::repo::db::connect(path).await.unwrap();
+        let n: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM projects WHERE id = ?")
+            .bind(id)
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        pool.close().await;
+        n == 1
+    }
+
+    #[tokio::test]
+    async fn stage_and_apply_swaps_the_database() {
         let data_dir = temp_dir();
         let target = data_dir.join("toodoo.db");
-        fs::write(&target, b"OLD").unwrap();
+        seeded_db(&target, "old-marker").await;
         // A leftover WAL sidecar should be cleared on apply.
         fs::write(data_dir.join("toodoo.db-wal"), b"junk").unwrap();
 
         let snapshot = data_dir.join("snap.db");
-        fs::write(&snapshot, b"NEW-CONTENT").unwrap();
-        stage_restore(&snapshot, &data_dir.join(PENDING_RESTORE)).unwrap();
+        seeded_db(&snapshot, "new-marker").await;
+        stage_restore(&snapshot, &data_dir.join(PENDING_RESTORE)).await.unwrap();
 
-        assert!(apply_pending_restore(&data_dir).unwrap());
-        assert_eq!(fs::read(&target).unwrap(), b"NEW-CONTENT");
+        assert!(apply_pending_restore(&data_dir).await.unwrap());
         assert!(!data_dir.join(PENDING_RESTORE).exists());
         assert!(!data_dir.join("toodoo.db-wal").exists());
-        // Second call is a no-op.
-        assert!(!apply_pending_restore(&data_dir).unwrap());
+        // The restored db is live; the old db is parked as the rollback.
+        assert!(has_project(&target, "new-marker").await);
+        assert!(data_dir.join(RESTORE_ROLLBACK).exists());
+        // Confirming the restore drops the rollback; second apply is a no-op.
+        finalize_restore(&data_dir);
+        assert!(!data_dir.join(RESTORE_ROLLBACK).exists());
+        assert!(!apply_pending_restore(&data_dir).await.unwrap());
 
         fs::remove_dir_all(&data_dir).ok();
     }
 
-    /// docs/adversarial-review-findings.md — "Interrupted restore staging can
-    /// replace the live database with a corrupt partial file". Neither
-    /// `stage_restore` nor `apply_pending_restore` validates the staged file
-    /// before installing it — mere existence is treated as validity. This
-    /// asserts the desired safe behavior (a corrupt/truncated staged file must
-    /// not replace the live database), which the current implementation fails.
-    #[test]
-    #[ignore = "reproduces adversarial-review finding: apply_pending_restore has no integrity check"]
-    fn apply_pending_restore_rejects_a_truncated_corrupt_file() {
+    /// docs/adversarial-review-findings.md finding 1: a corrupt/truncated
+    /// staged file (interrupted copy, disk full, antivirus lock) must never
+    /// replace the live database.
+    #[tokio::test]
+    async fn apply_pending_restore_rejects_a_truncated_corrupt_file() {
         let data_dir = temp_dir();
         let target = data_dir.join("toodoo.db");
         fs::write(&target, b"GOOD-LIVE-DB").unwrap();
 
-        // A truncated/corrupt staged file, e.g. from an interrupted copy
-        // (disk full, process killed mid-write, antivirus lock) — not a valid
-        // SQLite database.
         fs::write(data_dir.join(PENDING_RESTORE), b"TRUNC").unwrap();
 
-        let result = apply_pending_restore(&data_dir);
-        let live_intact = fs::read(&target).unwrap() == b"GOOD-LIVE-DB";
-        assert!(
-            result.is_err() || !result.unwrap() || live_intact,
-            "a corrupt staged restore replaced the live database without validation"
-        );
+        let result = apply_pending_restore(&data_dir).await;
+        assert!(result.is_err(), "corrupt staged restore must be rejected");
+        assert_eq!(fs::read(&target).unwrap(), b"GOOD-LIVE-DB");
+        // The garbage file is discarded so it can't be retried next launch.
+        assert!(!data_dir.join(PENDING_RESTORE).exists());
+
+        fs::remove_dir_all(&data_dir).ok();
+    }
+
+    #[tokio::test]
+    async fn stage_restore_rejects_an_invalid_source_snapshot() {
+        let data_dir = temp_dir();
+        let bad = data_dir.join("bad-snap.db");
+        fs::write(&bad, b"not a database").unwrap();
+
+        let staged = data_dir.join(PENDING_RESTORE);
+        assert!(stage_restore(&bad, &staged).await.is_err());
+        assert!(!staged.exists(), "invalid snapshot must not become pending-restore.db");
+        assert!(!with_tmp_suffix(&staged).exists(), "temp staging file must be cleaned up");
+
+        fs::remove_dir_all(&data_dir).ok();
+    }
+
+    /// After an apply, the pre-restore db survives as the rollback until the
+    /// restored db is confirmed; `undo_failed_restore` puts it back.
+    #[tokio::test]
+    async fn rollback_survives_failed_apply() {
+        let data_dir = temp_dir();
+        let target = data_dir.join("toodoo.db");
+        seeded_db(&target, "original-marker").await;
+
+        let snapshot = data_dir.join("snap.db");
+        seeded_db(&snapshot, "restored-marker").await;
+        stage_restore(&snapshot, &data_dir.join(PENDING_RESTORE)).await.unwrap();
+        assert!(apply_pending_restore(&data_dir).await.unwrap());
+
+        // Simulate the restored db failing to open/migrate on startup: the
+        // rollback must still exist and undo must reinstate the original.
+        assert!(data_dir.join(RESTORE_ROLLBACK).exists());
+        assert!(undo_failed_restore(&data_dir).unwrap());
+        assert!(has_project(&target, "original-marker").await);
+        // The bad restore is parked for inspection, not lost.
+        assert!(data_dir.join(FAILED_RESTORE).exists());
+        // Without a rollback, undo is a no-op.
+        assert!(!undo_failed_restore(&data_dir).unwrap());
 
         fs::remove_dir_all(&data_dir).ok();
     }

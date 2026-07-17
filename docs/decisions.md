@@ -5,6 +5,33 @@ ambiguity we resolved by judgment call), with the reasoning. Newest entries at
 the top. Never rewrite history — if a decision is reversed, add a new entry
 that supersedes the old one.
 
+## 2026-07-17 — Restore is validated and rollback-protected (supersedes the 2026-07-16 staged-restore mechanism)
+
+Response to adversarial-review finding 1 (critical): the previous staged restore
+treated mere existence of `pending-restore.db` as validity, deleted the live db,
+and renamed the staged file into place — a corrupt/partial staged file (disk
+full, interrupted copy, antivirus) could destroy the database.
+
+New mechanism (`repo/backup.rs`):
+- **Staging:** the snapshot is copied to `pending-restore.db.tmp`, validated as
+  SQLite (opens + `PRAGMA integrity_check` = ok + `tasks`/`projects` tables
+  present), fsynced, then **atomically renamed** to `pending-restore.db`. An
+  invalid snapshot errors out and never becomes a pending restore.
+- **Apply (next launch, before the pool opens):** the staged file is
+  **re-validated** (a corrupt one is discarded, live db untouched); the live db
+  is **renamed to `toodoo.db.rollback`** — never deleted; the staged file is
+  renamed into place (a rename failure puts the rollback straight back).
+- **Confirmation:** only after the restored db opens **and migrates** is the
+  rollback removed (`finalize_restore`). If the open fails, startup parks the
+  bad file at `toodoo.db.failed-restore` and reinstates the rollback
+  (`undo_failed_restore`), then reconnects to the original db.
+
+The "applied on next launch, before the pool opens" property of the 2026-07-16
+Data Safety decision is unchanged; only the swap's safety mechanics are
+superseded. Covered by `repo::backup` tests, including the previously-ignored
+`apply_pending_restore_rejects_a_truncated_corrupt_file` (now live) and
+`rollback_survives_failed_apply`.
+
 ## 2026-07-16 — v1.0 sanctioned deferrals (release audit)
 
 Consolidates every feature-inventory box left **unchecked** at v1.0, so each is
