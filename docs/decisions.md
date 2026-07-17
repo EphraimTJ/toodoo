@@ -5,6 +5,15 @@ ambiguity we resolved by judgment call), with the reasoning. Newest entries at
 the top. Never rewrite history — if a decision is reversed, add a new entry
 that supersedes the old one.
 
+## 2026-07-16 — MCP server deferred to post-v1.0 (user-approved)
+
+Slice **12F (MCP server) is skipped for v1.0** and becomes the **first post-1.0
+item**. It's optional in the build plan, nothing in v1.0 depends on it, and the
+REST API it would wrap already ships (Phase 10) — so it can be added later
+without rework. The §3.12 MCP checkbox stays unchecked with this note; the v1.0
+Definition of Done (docs/phase-12-plan.md) lists it among the explicitly-deferred
+items.
+
 ## 2026-07-16 — Themes, i18n, shortcuts, polish (Phase 12E, user-approved)
 
 The last feature slice before v1.0 (frontend-only; no schema, no Rust).

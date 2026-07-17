@@ -153,25 +153,39 @@ render, and add `docs/manual-test-checklist.md`** for the native behaviors.
   < 2 s), onboarding seed data, app icon, packaging/signing for your OS,
   final pass over empty states and animations.
 
-## 12F — MCP server (optional, ~half a session)
+## 12F — MCP server (DEFERRED to post-v1.0)
 
-Thin wrapper over the Phase-10 REST API, per the 2026-07-16 decision: an MCP
-server (stdio) exposing `list_projects`, `list_tasks`, `create_task`,
-`update_task`, `complete_task`, `delete_task`, plus read-only habit/focus/filter
-tools that call the `/open/v1/toodoo/*` extensions. Requires the API server
-enabled; reads the token from config. Ship as a separate small package
-(`packages/toodoo-mcp/`) so it versions independently. If you skip it now, it
-remains the first post-1.0 item — nothing in v1.0 depends on it.
+**Skipped for v1.0** (decision 2026-07-16) — it is the **first post-1.0 item**.
+Nothing in v1.0 depends on it, and the REST API it would wrap already ships
+(Phase 10).
+
+The shape when it lands: a thin stdio MCP server wrapping the Phase-10 REST API —
+`list_projects`, `list_tasks`, `create_task`, `update_task`, `complete_task`,
+`delete_task`, plus read-only habit/focus/filter tools over `/open/v1/toodoo/*`.
+Requires the API server enabled; reads the token from config. Ship as a separate
+package (`packages/toodoo-mcp/`) so it versions independently.
 
 ---
 
-## v1.0 Definition of Done (updated)
+## v1.0 Definition of Done (updated 2026-07-16)
 
-Every checkbox in `docs/feature-inventory.md` is checked **except**: §3.13,
-lunar-calendar recurrence, location reminders, and (if skipped) the MCP server —
-each backed by a decisions.md entry. Test suite green (`npm test`, `cargo test`,
-Playwright, plus the new manual-test checklist executed once on your OS).
-Backup/restore round-trips **including attachments**. Search meets the 50 ms
-gate on the 10k fixture. Tag `v1.0.0`.
+Every checkbox in `docs/feature-inventory.md` is checked **except** these
+explicitly-deferred items, each backed by a decisions.md entry:
+
+- **§3.13** (collaboration, cloud sync, mobile/Siri/Health, AI) — out of scope.
+- **Lunar-calendar recurrence** and **location reminders** — stretch/mobile-only.
+- **MCP server** — deferred to post-1.0 (first item after 1.0).
+- **Attachments + per-task gallery** — deferred to a post-12E slice; consequently
+  backup/restore remains **DB-file-only** (no attachments zip) for v1.0.
+- **Full i18n string extraction** — v1.0 ships the react-i18next **scaffolding +
+  a representative set**; remaining strings migrate incrementally.
+
+**Ops gates run on your machine** (not CI, see `docs/manual-test-checklist.md`):
+perf audit (list < 16 ms/frame, cold start < 2 s on the 10k fixture; search
+< 50 ms), the native-desktop checklist, packaging/signing, and the final app
+icon.
+
+Automated suite green — `npm test`, `cargo test`, `cargo clippy`, `npm run build`,
+Playwright. Then tag **`v1.0.0`**.
 
 ---

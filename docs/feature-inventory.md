@@ -251,6 +251,7 @@ This is the checklist the whole project is graded against, converted from §3 of
   - [x] Toodoo extensions for habits, focus, filters
 - [x] `toodoo://` URL scheme (open task/list, quick add)
 - [ ] Optional MCP server exposing Toodoo to Claude and other AI agents
+      — deferred to post-v1.0 (first item after 1.0); nothing in v1.0 depends on it
 
 ## 3.13 Adapted / Deferred (see §9 of the build plan)
 
