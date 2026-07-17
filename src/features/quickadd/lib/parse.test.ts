@@ -68,6 +68,17 @@ describe("parseQuickAdd — dates & times", () => {
     expect(r.title).toBe("Call");
   });
 
+  it("parses 'in N minutes' as a timed due (not all-day)", () => {
+    // REF is 09:00 local, so +10 min → 09:10 local, timed.
+    const r = parseQuickAdd("Call back in 10 minutes", REF);
+    expect(r.isAllDay).toBe(false);
+    expect(r.dueAt).not.toBeNull();
+    const d = new Date(r.dueAt!);
+    expect(d.getHours()).toBe(9);
+    expect(d.getMinutes()).toBe(10);
+    expect(r.title).toBe("Call back");
+  });
+
   it("does not eat 'every friday' as a date", () => {
     const r = parseQuickAdd("Review every friday", REF);
     expect(r.rrule).toBe("FREQ=WEEKLY;BYDAY=FR");

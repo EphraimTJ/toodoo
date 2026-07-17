@@ -118,8 +118,13 @@ export function dueChip(task: Task): { text: string; overdue: boolean } | null {
   const iso = task.dueAt ?? task.startAt;
   if (!iso) return null;
   const date = parseISO(iso);
-  const overdue = startOfDay(date) < startOfDay(new Date()) && task.status === "ACTIVE";
-  if (isToday(date)) return { text: "Today", overdue: false };
-  if (isTomorrow(date)) return { text: "Tomorrow", overdue: false };
-  return { text: format(date, "MMM d"), overdue };
+  const now = new Date();
+  // Timed tasks compare by the actual instant; all-day by calendar day.
+  const overdue =
+    task.status === "ACTIVE" && (task.isAllDay ? startOfDay(date) < startOfDay(now) : date < now);
+  // Show the time for timed tasks (e.g. "Today 7:40 PM"), date only for all-day.
+  const time = task.isAllDay ? "" : ` ${format(date, "h:mm a")}`;
+  if (isToday(date)) return { text: `Today${time}`, overdue };
+  if (isTomorrow(date)) return { text: `Tomorrow${time}`, overdue };
+  return { text: `${format(date, "MMM d")}${time}`, overdue };
 }
