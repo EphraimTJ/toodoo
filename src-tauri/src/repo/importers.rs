@@ -13,6 +13,7 @@ use crate::error::Result;
 use crate::events::{DomainEvent, EventBus};
 
 use super::projects::{create_project_core, NewProject};
+use super::tags::{assign_tag_core, create_tag_core};
 use super::tasks::{complete_imported_core, create_task_core, NewTask};
 
 /// A source-agnostic imported task, ready to be inserted.
@@ -255,18 +256,46 @@ async fn resolve_project_tx(
     Ok(id)
 }
 
+/// Resolve a tag name to a tag id inside the import transaction, creating the
+/// tag (and queuing its event) if missing. Empty names resolve to `None`.
+async fn resolve_tag_tx(
+    conn: &mut sqlx::SqliteConnection,
+    name: &str,
+    events: &mut Vec<DomainEvent>,
+) -> Result<Option<String>> {
+    let name = name.trim();
+    if name.is_empty() {
+        return Ok(None);
+    }
+    let existing: Option<String> = sqlx::query_scalar(
+        "SELECT id FROM tags WHERE lower(name) = lower(?) AND deleted_at IS NULL LIMIT 1",
+    )
+    .bind(name)
+    .fetch_optional(&mut *conn)
+    .await?;
+    if let Some(id) = existing {
+        return Ok(Some(id));
+    }
+    let (id, _) = create_tag_core(conn, name, None).await?;
+    events.push(DomainEvent::TagCreated { id: id.clone() });
+    Ok(Some(id))
+}
+
 /// Insert imported rows (append-only; lists created by name). Tasks marked
-/// completed are created then completed. Returns the number of tasks inserted.
+/// completed are created then completed; parsed tags are resolved or created
+/// (case-insensitive by name) and assigned. Returns the number of tasks
+/// inserted.
 ///
 /// The whole import runs in **one transaction**: if any row fails, nothing is
-/// persisted — no orphaned tasks or projects from a partial import
+/// persisted — no orphaned tasks, projects, or tags from a partial import
 /// (docs/decisions.md). Domain events are queued and emitted only after the
 /// commit.
 pub async fn import_tasks(pool: &SqlitePool, bus: &EventBus, rows: Vec<ImportTask>) -> Result<usize> {
     let mut tx = pool.begin().await?;
     let mut events: Vec<DomainEvent> = Vec::new();
-    // Cache resolved list names so each project is looked up / created once.
+    // Cache resolved list/tag names so each is looked up / created once.
     let mut project_ids: HashMap<String, String> = HashMap::new();
+    let mut tag_ids: HashMap<String, Option<String>> = HashMap::new();
     let mut count = 0;
     for row in rows {
         let key = row.list.trim().to_lowercase();
@@ -298,6 +327,25 @@ pub async fn import_tasks(pool: &SqlitePool, bus: &EventBus, rows: Vec<ImportTas
         )
         .await?;
         events.push(DomainEvent::TaskCreated { id: task_id.clone() });
+        let mut assigned_any = false;
+        for tag_name in &row.tags {
+            let tag_key = tag_name.trim().to_lowercase();
+            let tag_id = match tag_ids.get(&tag_key) {
+                Some(cached) => cached.clone(),
+                None => {
+                    let id = resolve_tag_tx(&mut tx, tag_name, &mut events).await?;
+                    tag_ids.insert(tag_key, id.clone());
+                    id
+                }
+            };
+            if let Some(tag_id) = tag_id {
+                assign_tag_core(&mut tx, &task_id, &tag_id).await?;
+                assigned_any = true;
+            }
+        }
+        if assigned_any {
+            events.push(DomainEvent::TaskTagsChanged { task_id: task_id.clone() });
+        }
         if row.completed {
             complete_imported_core(&mut tx, &task_id, row.due_at.as_deref(), row.start_at.as_deref())
                 .await?;
@@ -481,5 +529,52 @@ task,Low prio thing,,2,\n";
         .await
         .unwrap();
         assert_eq!(p, 0, "import left an orphaned project after failing");
+    }
+
+    /// docs/adversarial-review-findings.md finding 4 (user-approved scope
+    /// upgrade): parsed tags are attached on import — resolved or created by
+    /// name, case-insensitively, each created at most once.
+    #[tokio::test]
+    async fn import_attaches_parsed_tags_creating_each_once() {
+        let pool = connect_in_memory().await.unwrap();
+        let bus = EventBus::new();
+        let base = ImportTask {
+            list: "Work".into(),
+            title: String::new(),
+            content: None,
+            priority: None,
+            due_at: None,
+            start_at: None,
+            completed: false,
+            tags: vec![],
+        };
+        let rows = vec![
+            ImportTask { title: "A".into(), tags: vec!["urgent".into(), "release".into()], ..base.clone() },
+            // "Urgent" must reuse the tag created for the first row.
+            ImportTask { title: "B".into(), tags: vec!["Urgent".into()], ..base },
+        ];
+        assert_eq!(import_tasks(&pool, &bus, rows).await.unwrap(), 2);
+
+        let tags: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM tags WHERE deleted_at IS NULL")
+            .fetch_one(&pool)
+            .await
+            .unwrap();
+        assert_eq!(tags, 2, "case-insensitive reuse should create each tag once");
+        let assigns: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM task_tags WHERE deleted_at IS NULL")
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(assigns, 3);
+        let urgent_on_b: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM task_tags tt
+             JOIN tasks t ON t.id = tt.task_id
+             JOIN tags g ON g.id = tt.tag_id
+             WHERE t.title = 'B' AND g.name = 'urgent' AND tt.deleted_at IS NULL",
+        )
+        .fetch_one(&pool)
+        .await
+        .unwrap();
+        assert_eq!(urgent_on_b, 1);
     }
 }

@@ -2320,6 +2320,17 @@ function browserStubApi(): Api {
           startAt: row.startAt ?? undefined,
         });
         if (row.content) await self.updateTask(created.id, { contentPlain: row.content });
+        // Parsed tags are attached (resolved or created case-insensitively),
+        // mirroring the Rust importer.
+        for (const tagName of row.tags) {
+          const trimmed = tagName.trim();
+          if (!trimmed) continue;
+          const existingTag = (await self.listTags()).find(
+            (t) => t.name.toLowerCase() === trimmed.toLowerCase(),
+          );
+          const tagId = existingTag ? existingTag.id : (await self.createTag(trimmed)).id;
+          await self.assignTag(created.id, tagId);
+        }
         if (row.completed) await self.completeTask(created.id);
       }
       return rows.length;

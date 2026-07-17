@@ -5,6 +5,16 @@ ambiguity we resolved by judgment call), with the reasoning. Newest entries at
 the top. Never rewrite history — if a decision is reversed, add a new entry
 that supersedes the old one.
 
+## 2026-07-17 — Imported tags are attached (supersedes the 2026-07-16 "tags parsed but not attached" line)
+
+User-approved scope upgrade for adversarial-review finding 4: a "successful"
+import silently dropped all tag organization. Within the atomic import
+transaction, every parsed tag is now **resolved or created by name**
+(case-insensitive, matching the tag-uniqueness rule) and assigned to its task
+via `task_tags`; each tag is created at most once per import. The browser stub
+mirrors the behavior. The rest of the 2026-07-16 Import decision (append-only,
+priority mapping, list-by-name) is unchanged.
+
 ## 2026-07-17 — CSV import is atomic (all-or-nothing failure mode)
 
 Response to adversarial-review finding 3 (non-atomic portion): a row failing

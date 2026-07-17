@@ -40,13 +40,27 @@ pub async fn create_tag(
     if name_taken(pool, name, None).await? {
         return Err(RepoError::Invalid(format!("tag \"{name}\" already exists")));
     }
+    let mut tx = pool.begin().await?;
+    let (id, next_order) = create_tag_core(&mut tx, name, color).await?;
+    tx.commit().await?;
+    bus.emit(DomainEvent::TagCreated { id: id.clone() });
+    Ok(Tag { id, name: name.to_string(), color: color.map(String::from), parent_id: None, sort_order: next_order })
+}
+
+/// Insert + changelog for a new tag inside the caller's transaction (shared by
+/// `create_tag` and the atomic CSV import). Returns (id, sort_order); the
+/// caller emits `TagCreated` after its commit.
+pub(crate) async fn create_tag_core(
+    conn: &mut sqlx::SqliteConnection,
+    name: &str,
+    color: Option<&str>,
+) -> Result<(String, i64)> {
     let id = new_id();
     let ts = now();
-    let mut tx = pool.begin().await?;
     let next_order: i64 = sqlx::query_scalar(
         "SELECT COALESCE(MAX(sort_order) + 1, 0) FROM tags WHERE deleted_at IS NULL",
     )
-    .fetch_one(&mut *tx)
+    .fetch_one(&mut *conn)
     .await?;
     sqlx::query(
         "INSERT INTO tags (id, name, color, sort_order, created_at, updated_at)
@@ -58,13 +72,11 @@ pub async fn create_tag(
     .bind(next_order)
     .bind(&ts)
     .bind(&ts)
-    .execute(&mut *tx)
+    .execute(&mut *conn)
     .await?;
-    append_changelog(&mut tx, "tag", &id, ChangeOp::Insert, &serde_json::json!({ "name": name }))
+    append_changelog(conn, "tag", &id, ChangeOp::Insert, &serde_json::json!({ "name": name }))
         .await?;
-    tx.commit().await?;
-    bus.emit(DomainEvent::TagCreated { id: id.clone() });
-    Ok(Tag { id, name: name.to_string(), color: color.map(String::from), parent_id: None, sort_order: next_order })
+    Ok((id, next_order))
 }
 
 pub async fn list_tags(pool: &SqlitePool) -> Result<Vec<Tag>> {
@@ -255,8 +267,22 @@ pub async fn merge_tags(pool: &SqlitePool, bus: &EventBus, src: &str, dst: &str)
 /// Idempotent: assigning an already-assigned tag is a no-op (revives a
 /// soft-deleted assignment).
 pub async fn assign_tag(pool: &SqlitePool, bus: &EventBus, task_id: &str, tag_id: &str) -> Result<()> {
-    let ts = now();
     let mut tx = pool.begin().await?;
+    assign_tag_core(&mut tx, task_id, tag_id).await?;
+    tx.commit().await?;
+    bus.emit(DomainEvent::TaskTagsChanged { task_id: task_id.to_string() });
+    Ok(())
+}
+
+/// Assignment insert + changelog inside the caller's transaction (shared by
+/// `assign_tag` and the atomic CSV import). The caller emits
+/// `TaskTagsChanged` after its commit.
+pub(crate) async fn assign_tag_core(
+    conn: &mut sqlx::SqliteConnection,
+    task_id: &str,
+    tag_id: &str,
+) -> Result<()> {
+    let ts = now();
     sqlx::query(
         "INSERT INTO task_tags (task_id, tag_id, created_at, updated_at, deleted_at)
          VALUES (?, ?, ?, ?, NULL)
@@ -266,18 +292,16 @@ pub async fn assign_tag(pool: &SqlitePool, bus: &EventBus, task_id: &str, tag_id
     .bind(tag_id)
     .bind(&ts)
     .bind(&ts)
-    .execute(&mut *tx)
+    .execute(&mut *conn)
     .await?;
     append_changelog(
-        &mut tx,
+        conn,
         "task_tag",
         task_id,
         ChangeOp::Update,
         &serde_json::json!({ "tagId": tag_id, "assigned": true }),
     )
     .await?;
-    tx.commit().await?;
-    bus.emit(DomainEvent::TaskTagsChanged { task_id: task_id.to_string() });
     Ok(())
 }
 
