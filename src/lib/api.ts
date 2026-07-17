@@ -2587,7 +2587,61 @@ function browserStubApi(): Api {
     setSetting: async (key, value) => {
       settings.set(key, value);
     },
-    seedDemoData: async () => {},
+    seedDemoData: async (tasksN = 10_000, projectsN = 20) => {
+      // Dev/perf fixture: bulk-push tasks straight into the in-memory store
+      // (mirrors the Rust seed_demo_data command used in the Tauri app).
+      const projectIds: string[] = [];
+      for (let i = 0; i < projectsN; i++) {
+        const id = uid();
+        projects.push({
+          id,
+          folderId: null,
+          name: `Seed project ${i}`,
+          color: null,
+          icon: null,
+          kind: "TASK",
+          viewMode: "LIST",
+          muted: false,
+          sortOrder: i + 100,
+          closed: false,
+          createdAt: nowIso(),
+          updatedAt: nowIso(),
+        });
+        projectIds.push(id);
+      }
+      const base = nowIso();
+      for (let i = 0; i < tasksN; i++) {
+        const dued = i % 5 !== 0;
+        const day = new Date(Date.now() + ((i % 61) - 30) * 86_400_000);
+        tasks.push({
+          id: uid(),
+          projectId: projectIds[i % projectIds.length],
+          sectionId: null,
+          parentId: null,
+          title: `Seed task ${i} — lorem ipsum dolor`,
+          contentRich: null,
+          contentPlain: null,
+          kind: "TASK",
+          status: "ACTIVE",
+          priority: [0, 1, 3, 5][i % 4] as Priority,
+          startAt: null,
+          dueAt: dued ? `${day.toISOString().slice(0, 10)}T00:00:00.000Z` : null,
+          isAllDay: true,
+          durationMin: null,
+          timeZone: null,
+          rrule: null,
+          repeatFrom: null,
+          pinned: false,
+          estPomos: null,
+          estDurationMin: null,
+          sortOrder: (i + 1) * 1024,
+          completedAt: null,
+          createdAt: base,
+          updatedAt: base,
+          tagIds: [],
+        });
+      }
+    },
   };
   return self;
 }

@@ -151,7 +151,7 @@ export function TaskListView({ view }: { view: ViewSelection }) {
   };
 
   const list = (
-    <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto px-3 pb-16">
+    <div ref={scrollRef} data-testid="task-scroller" className="min-h-0 flex-1 overflow-y-auto px-3 pb-16">
       <div style={{ height: virtualizer.getTotalSize(), position: "relative" }}>
         {virtualizer.getVirtualItems().map((virtualRow) => {
           const item = items[virtualRow.index];
@@ -305,13 +305,13 @@ export function TaskListView({ view }: { view: ViewSelection }) {
       <div
         data-testid="task-list"
         data-density={options.density}
-        className={
+        className={`flex min-h-0 flex-1 flex-col ${
           options.density === "compact"
             ? "[&_[data-testid=task-row]]:py-0.5"
             : options.density === "detailed"
               ? "[&_[data-testid=task-row]]:py-2.5"
               : ""
-        }
+        }`}
       >
         <DndContext sensors={sensors} onDragEnd={onDragEnd}>
           <SortableContext items={activeIds} strategy={verticalListSortingStrategy}>
