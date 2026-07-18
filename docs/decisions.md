@@ -5,6 +5,15 @@ ambiguity we resolved by judgment call), with the reasoning. Newest entries at
 the top. Never rewrite history — if a decision is reversed, add a new entry
 that supersedes the old one.
 
+## 2026-07-18 — v1.0.0 ships unsigned (owner-approved release)
+
+The release-audit signing decision: **v1.0.0 ships as an unsigned NSIS
+installer**. No code-signing certificate is available; SmartScreen will show
+the "unknown publisher" warning on first run (documented in the README).
+Revisit if/when distribution widens (an OV/EV cert or MSIX + store listing).
+Version bumped 0.1.0 → 1.0.0 across package.json / Cargo.toml /
+tauri.conf.json for the tag.
+
 ## 2026-07-18 — Close-to-tray by default (app lifecycle change) + single instance
 
 TickTick-style lifecycle: **the main window's X hides to the system tray**
