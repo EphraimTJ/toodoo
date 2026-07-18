@@ -86,3 +86,92 @@ Legend: ⬜ untested · ✅ pass · ❌ fail (file an issue)
 - ✅ **App icon** swapped to the final artwork (`src-tauri/icons/`).
 - ⬜ **Packaging/signing** for your OS produces an installable, signed build.
 - ✅ Empty states read well across list / search / stats / habits.
+
+## Round-3b final re-test (2026-07-18) — run on the LATEST installer
+
+> Uninstall Toodoo first, then install the newest
+> `src-tauri/target/release/bundle/nsis/Toodoo_0.1.0_x64-setup.exe`
+> (it contains the pill-menu clip fix). Launch normally — logging is always
+> on; if anything fails: Settings → Advanced → **Open logs folder** → send
+> `toodoo.log` and note which item failed.
+
+### Focus pill (pop-outs confirmed rendering; these are the detail checks)
+- ⬜ **Menu fix:** click the pill's **…** → the full menu (Open Toodoo /
+  Switch mode / Stop session / Close) appears below the pill, no clipping;
+  the window shrinks back when it closes.
+- ⬜ Hover the pill → controls fade in (~200 ms); mouse away → they fade out
+  after a short delay.
+- ⬜ Drag the pill by its body; drag it to touch the **top screen edge** → it
+  docks into the slim progress bar; hover the bar → the pill slides back out.
+- ⬜ Close the pill (Esc or menu) and reopen via Focus ↗ → it reopens at the
+  position you left it.
+- ⬜ Start a session in the main window → the pill's ring + countdown mirror
+  it; pause/resume/stop from the pill controls the main timer.
+
+### Sticky pill
+- ⬜ Drag by body; resize via the bottom-right corner grip; change color from
+  the hover swatches → close (✕ or Esc) and reopen → position, size, and
+  color all survived.
+
+### Notification sound ("toodoo" chirp)
+- ⬜ Settings → Desktop → Notification sound → **Preview** each of the three
+  variants; adjust volume. **Note your chosen default variant here: ____**
+- ⬜ Set a reminder ~2 min out → native toast (system sound) + in-app toast
+  (chirp at your volume). Toggle sound off → in-app toast is silent.
+
+### Resizable panes
+- ⬜ Drag the divider right of the sidebar and the one left of the detail
+  pane; double-click one → resets; restart the app → widths persisted.
+- ⬜ Quick glance at calendar / kanban / timeline / matrix at extreme pane
+  widths — nothing structurally broken.
+
+### Pomodoro durations
+- ⬜ Focus → click the idle **25:00** clock → pick **10** → idle clock shows
+  10:00 immediately → Start → session runs 10 minutes end-to-end (or verify
+  the countdown pace and stop early).
+- ⬜ Change Work minutes in Focus → Settings → idle clock follows; start a
+  session, then change the setting → the RUNNING countdown does NOT change
+  (by design).
+- ⬜ The mini pill's ring reflects the picked duration.
+
+### Remaining release ops (unchanged)
+- ⬜ OS toast action buttons: record observed Windows behavior (buttons or
+  not) — either result gets a decisions.md entry.
+- ⬜ Perf audit + signing decision (see Release polish above).
+
+## Prompt for the next session (copy-paste this to a fresh Claude session)
+
+```
+Read CLAUDE.md, docs/pre-launch.md, docs/manual-test-checklist.md, and
+docs/decisions.md (the 2026-07-17/18 entries are the recent state). Branch:
+v1.0-fixes. Do NOT tag v1.0.0 without my explicit go-ahead.
+
+Where things stand (short version — the docs above are authoritative):
+- All 5 adversarial-review findings are fixed and tested (restore safety,
+  completion idempotency, reminder claim/ack, atomic import, imported tags).
+- Reminders + in-app toasts work on my installed build; there is a
+  test-notification button and a "toodoo" chirp (3 variants, Settings →
+  Desktop) — I owe a default-variant choice in the checklist.
+- The long white-pop-out saga is CLOSED: intermittent WebView2 build() hang,
+  pill default confirmed working on my machine, protected by a pre-armed
+  watchdog (unit-tested), auto-fallback to in-app panels after 2 failures,
+  and a Pill/Solid/Windowed style setting. Diag hooks:
+  TOODOO_DIAG_WINDOWS=1|watchdog|styles, TOODOO_DIAG_NOTIFY=1. Rotating log:
+  %LOCALAPPDATA%\com.toodoo.app\logs\toodoo.log (Settings → Advanced opens it).
+- New since phase-12E: TickTick-style focus/sticky pill windows (FocusProvider
+  owns the single timer; focus-state/focus-cmd events), resizable panes
+  (layout:panes), pomodoro idle-clock fix + quick duration picker, sample-data
+  seed (first-run card + Settings → Advanced), always-on file logging.
+- Suites at HEAD: cargo 205+1 ignored (clippy clean), vitest 146,
+  playwright 19, tsc/build clean. Verify everything against the INSTALLED
+  NSIS build (dev mode has repeatedly lied on this machine); rebuild with
+  `npm run tauri build`, silent-install with `/S`.
+
+My job this session: I will run the "Round-3b final re-test (2026-07-18)"
+section of docs/manual-test-checklist.md and report results (with toodoo.log
+for any failure). Your job: fix whatever I report (plan mode first, one
+commit per fix, packaged-build verification), set my chosen chirp variant as
+the default, then walk the release procedure in docs/pre-launch.md §5
+(inventory audit, suites, gates, README, signing decision) and prepare —
+but do not create — the v1.0.0 tag and the merge plan to main.
+```
