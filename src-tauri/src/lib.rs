@@ -1363,22 +1363,26 @@ fn open_logs_folder(app: tauri::AppHandle) -> CmdResult<()> {
         .map_err(|e| e.to_string())
 }
 
+// Window-open commands are fire-and-forget: creation runs on the main thread
+// (desktop::request_popout) and its outcome is reported by the boot beacon /
+// watchdog, never by the IPC reply — an IPC-context build() hang was the
+// round-3 white-window failure mode.
 #[tauri::command]
 fn open_quick_add_window(app: tauri::AppHandle) -> CmdResult<()> {
-    desktop::open_or_focus(&app, "quickadd", "win=quickadd", "Quick add", 520.0, 180.0, false)
-        .map_err(|e| e.to_string())
+    desktop::request_popout(&app, "quickadd", "win=quickadd", "Quick add", 520.0, 180.0);
+    Ok(())
 }
 
 #[tauri::command]
 fn open_focus_window(app: tauri::AppHandle) -> CmdResult<()> {
-    desktop::open_or_focus(&app, "focus", "win=focus", "Focus", 320.0, 220.0, true)
-        .map_err(|e| e.to_string())
+    desktop::request_popout(&app, "focus", "win=focus", "Focus", 320.0, 220.0);
+    Ok(())
 }
 
 #[tauri::command]
 fn open_sticky_window(app: tauri::AppHandle, id: String) -> CmdResult<()> {
-    desktop::open_or_focus(&app, &format!("sticky-{id}"), &format!("win=sticky&id={id}"), "Sticky", 260.0, 240.0, true)
-        .map_err(|e| e.to_string())
+    desktop::request_popout(&app, &format!("sticky-{id}"), &format!("win=sticky&id={id}"), "Sticky", 260.0, 240.0);
+    Ok(())
 }
 
 #[tauri::command]
@@ -1430,7 +1434,7 @@ pub fn run() {
                 .with_handler(|app, _shortcut, event| {
                     // We register a single shortcut (quick-add), so any press opens it.
                     if event.state == tauri_plugin_global_shortcut::ShortcutState::Pressed {
-                        let _ = desktop::open_or_focus(app, "quickadd", "win=quickadd", "Quick add", 520.0, 180.0, false);
+                        desktop::request_popout(app, "quickadd", "win=quickadd", "Quick add", 520.0, 180.0);
                     }
                 })
                 .build(),
@@ -1471,6 +1475,13 @@ pub fn run() {
             // windows shortly after launch, so their load/boot can be observed
             // from stderr (with the WindowRoot boot beacon) without clicking
             // through the UI. Used to verify packaged-build window loading.
+            // Webview runtime context in every log file — machine-dependent
+            // webview failures need the version on record.
+            match tauri::webview_version() {
+                Ok(v) => log::info!("[window] WebView2 runtime version: {v}"),
+                Err(e) => log::error!("[window] WebView2 version lookup failed: {e}"),
+            }
+
             // Notification identity context in every log file: permission
             // state + the identifier Windows resolves toasts against.
             match app.notification().permission_state() {
@@ -1498,13 +1509,13 @@ pub fn run() {
                 tauri::async_runtime::spawn(async move {
                     tokio::time::sleep(std::time::Duration::from_secs(3)).await;
                     log::info!("[diag] opening focus + sticky windows");
-                    let _ = desktop::open_or_focus(&h, "focus", "win=focus", "Focus", 320.0, 220.0, true);
-                    let _ = desktop::open_or_focus(&h, "sticky-diag", "win=sticky&id=diag", "Sticky", 260.0, 240.0, true);
+                    desktop::request_popout(&h, "focus", "win=focus", "Focus", 320.0, 220.0);
+                    desktop::request_popout(&h, "sticky-diag", "win=sticky&id=diag", "Sticky", 260.0, 240.0);
                     if diag == "watchdog" {
                         // A window whose content deliberately never beacons —
                         // the watchdog must destroy it and raise the toast.
                         log::info!("[diag] opening nobeacon window to exercise the watchdog");
-                        let _ = desktop::open_or_focus(&h, "diag-nobeacon", "win=nobeacon", "Diag", 260.0, 160.0, true);
+                        desktop::request_popout(&h, "diag-nobeacon", "win=nobeacon", "Diag", 260.0, 160.0);
                     }
                 });
             }
@@ -1745,10 +1756,10 @@ pub fn run() {
                     .menu(&menu)
                     .on_menu_event(|app, event| match event.id.as_ref() {
                         "quick_add" => {
-                            let _ = desktop::open_or_focus(app, "quickadd", "win=quickadd", "Quick add", 520.0, 180.0, false);
+                            desktop::request_popout(app, "quickadd", "win=quickadd", "Quick add", 520.0, 180.0);
                         }
                         "start_focus" => {
-                            let _ = desktop::open_or_focus(app, "focus", "win=focus", "Focus", 320.0, 220.0, true);
+                            desktop::request_popout(app, "focus", "win=focus", "Focus", 320.0, 220.0);
                         }
                         "open_today" => {
                             if let Some(w) = app.get_webview_window("main") {

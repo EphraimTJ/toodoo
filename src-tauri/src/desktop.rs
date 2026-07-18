@@ -85,29 +85,95 @@ pub async fn set_autostart_flag(pool: &SqlitePool, bus: &EventBus, on: bool) -> 
     set_setting(pool, bus, KEY_AUTOSTART, serde_json::json!(on)).await
 }
 
-/// Labels of pop-out windows whose web content has reported its boot beacon.
-/// The watchdog in `open_or_focus` destroys any window that never boots, so a
-/// content-load failure can't leave a stuck, unclosable white window.
+/// Boot-tracking state machine for pop-out windows (plain data, unit-tested):
+/// a window is *pending* from the moment creation is requested — **before**
+/// `build()` is even called, so a hang inside window creation can never
+/// silence the watchdog again (the round-3 log showed exactly that: "creating
+/// window" with no page-load/beacon/watchdog lines, ever). The beacon IPC
+/// clears the pending mark; expiry fires at most once per registration and
+/// tracks consecutive failures per window kind for the in-app fallback.
 #[derive(Default)]
-pub struct WindowWatch(pub std::sync::Mutex<std::collections::HashSet<String>>);
+pub struct WatchState {
+    pending: std::collections::HashSet<String>,
+    booted: std::collections::HashSet<String>,
+    failures: std::collections::HashMap<String, u32>,
+}
+
+/// The fallback-relevant kind of a window label ("sticky-<id>" → "sticky").
+pub fn popout_kind(label: &str) -> &str {
+    if label.starts_with("sticky") {
+        "sticky"
+    } else {
+        label
+    }
+}
+
+impl WatchState {
+    /// Call when creation is requested (before build). Clears any stale boot.
+    pub fn register_pending(&mut self, label: &str) {
+        self.booted.remove(label);
+        self.pending.insert(label.to_string());
+    }
+    /// Beacon arrived: the window is healthy; its kind's failure streak resets.
+    pub fn mark_booted(&mut self, label: &str) {
+        self.pending.remove(label);
+        self.booted.insert(label.to_string());
+        self.failures.insert(popout_kind(label).to_string(), 0);
+    }
+    /// Deadline hit: returns `Some(consecutive_failures)` exactly once if the
+    /// label was still pending (never booted), `None` otherwise.
+    pub fn expire(&mut self, label: &str) -> Option<u32> {
+        if !self.pending.remove(label) {
+            return None;
+        }
+        let n = self.failures.entry(popout_kind(label).to_string()).or_insert(0);
+        *n += 1;
+        Some(*n)
+    }
+    #[cfg_attr(not(test), allow(dead_code))] // asserted by the unit tests
+    pub fn consecutive_failures(&self, kind: &str) -> u32 {
+        self.failures.get(kind).copied().unwrap_or(0)
+    }
+}
+
+/// Managed wrapper around the watch state.
+#[derive(Default)]
+pub struct WindowWatch(pub std::sync::Mutex<WatchState>);
 
 /// Record that `label`'s web content booted (called from the beacon command).
 pub fn mark_window_booted(app: &AppHandle, label: &str) {
     if let Some(watch) = app.try_state::<WindowWatch>() {
-        watch.0.lock().unwrap().insert(label.to_string());
+        watch.0.lock().unwrap().mark_booted(label);
     }
 }
 
-/// How long a pop-out's web content gets to report its boot beacon before the
-/// watchdog destroys the window and raises a main-window error toast.
+/// How long a pop-out gets from creation request to boot beacon before the
+/// watchdog destroys it and raises a main-window error toast. Includes the
+/// `build()` call itself — a hanging build is a watchdog hit, not silence.
 const BOOT_DEADLINE_SECS: u64 = 5;
 
-/// Open (or focus) an always-on-top mini window that loads the SPA with a
-/// `?win=<kind>` query the frontend entry branches on. All pop-outs keep
-/// native decorations (title bar + close + resize handles) until the packaged
-/// content-load path is proven stable — a window must always be closable even
-/// if its content never renders. The `decorations` flag is kept for when
-/// frameless cosmetics return.
+/// Request a pop-out window from any thread/context. Creation is deferred to
+/// the **main thread** — the only creation context proven to work on the
+/// machine where command/tray-context creation hung (the quick-add window,
+/// created from the global-shortcut handler on the main thread, has always
+/// worked there). Fire-and-forget: success/failure is reported by the boot
+/// beacon / watchdog, never by an IPC reply.
+pub fn request_popout(app: &AppHandle, label: &str, query: &str, title: &str, w: f64, h: f64) {
+    let app2 = app.clone();
+    let (label, query, title) = (label.to_string(), query.to_string(), title.to_string());
+    let res = app.run_on_main_thread(move || {
+        if let Err(e) = open_or_focus(&app2, &label, &query, &title, w, h) {
+            log::error!("[window] {label}: open_or_focus errored: {e}");
+        }
+    });
+    if let Err(e) = res {
+        log::error!("[window] run_on_main_thread failed: {e}");
+    }
+}
+
+/// Open (or focus) an always-on-top pop-out that loads the SPA with a
+/// `?win=<kind>` query the frontend entry branches on. The watchdog is armed
+/// **before** `build()` so no failure mode can bypass it.
 pub fn open_or_focus(
     app: &AppHandle,
     label: &str,
@@ -115,35 +181,86 @@ pub fn open_or_focus(
     title: &str,
     w: f64,
     h: f64,
-    decorations: bool,
 ) -> tauri::Result<()> {
     if let Some(win) = app.get_webview_window(label) {
         let _ = win.show();
         let _ = win.set_focus();
         return Ok(());
     }
-    // Failsafe: force decorations for now (see doc comment).
-    let _ = decorations;
 
-    // A fresh window must boot freshly — drop any stale beacon for this label.
+    // Arm the watchdog FIRST: pending registration + timer, both independent
+    // of whether build() below returns, errors, or hangs.
     if let Some(watch) = app.try_state::<WindowWatch>() {
-        watch.0.lock().unwrap().remove(label);
+        watch.0.lock().unwrap().register_pending(label);
     }
+    let label_owned = label.to_string();
+    let watchdog_app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(std::time::Duration::from_secs(BOOT_DEADLINE_SECS)).await;
+        let expired = watchdog_app
+            .try_state::<WindowWatch>()
+            .and_then(|w| w.0.lock().unwrap().expire(&label_owned));
+        let Some(failures) = expired else { return };
+        log::error!(
+            "[window-watchdog] {label_owned}: no boot beacon within {BOOT_DEADLINE_SECS}s — destroying the window (web content never loaded; consecutive {} failures for this kind: {failures})",
+            popout_kind(&label_owned)
+        );
+        if let Some(win) = watchdog_app.get_webview_window(&label_owned) {
+            let _ = win.destroy();
+        } else {
+            log::error!(
+                "[window-watchdog] {label_owned}: no window handle to destroy (creation likely hung inside build())"
+            );
+        }
+        // Persist the failure streak so the frontend can auto-fall-back to
+        // in-app panels, and tell the main window.
+        let kind = popout_kind(&label_owned).to_string();
+        if let Some(state) = watchdog_app.try_state::<crate::AppState>() {
+            let key = format!("popout.failures.{kind}");
+            if let Err(e) = crate::repo::settings::set_setting(
+                &state.pool,
+                &state.bus,
+                &key,
+                serde_json::json!(failures),
+            )
+            .await
+            {
+                log::error!("[window-watchdog] persisting {key} failed: {e}");
+            }
+        }
+        let _ = watchdog_app.emit_to(
+            "main",
+            "popout-failed",
+            serde_json::json!({ "label": label_owned, "kind": kind, "failures": failures }),
+        );
+        let _ = watchdog_app.emit_to(
+            "main",
+            "app-error",
+            serde_json::json!({
+                "message": format!(
+                    "The {kind} window failed to load and was closed — switching to the in-app panel. Details: Settings → Advanced → Open logs folder."
+                ),
+            }),
+        );
+    });
 
     let url = format!("index.html?{query}");
     log::info!("[window] {label}: creating window url={url:?} title={title:?}");
     let build_label = label.to_string();
+    let nav_label = label.to_string();
     let result = WebviewWindowBuilder::new(app, label, WebviewUrl::App(url.into()))
         .title(title)
         .inner_size(w, h)
         // Without an explicit position the OS default can spawn the window
-        // partially off-screen (observed on the installed build: only the
-        // title bar peeking at the bottom edge — indistinguishable from a
-        // broken white window). Center it.
+        // partially off-screen (observed on the installed build). Center it.
         .center()
         .always_on_top(true)
         .decorations(true)
         .resizable(true)
+        .on_navigation(move |url| {
+            log::info!("[window] {nav_label}: navigation to {url}");
+            true
+        })
         .on_page_load(move |_webview, payload| {
             let event = match payload.event() {
                 tauri::webview::PageLoadEvent::Started => "load started",
@@ -152,46 +269,68 @@ pub fn open_or_focus(
             log::info!("[window] {build_label}: page {event} url={}", payload.url());
         })
         .build();
-    if let Err(e) = &result {
-        log::error!("[window] {label}: window creation FAILED: {e}");
+    match &result {
+        Ok(_) => log::info!("[window] {label}: builder.build() returned ok"),
+        Err(e) => log::error!("[window] {label}: builder.build() FAILED: {e}"),
     }
     result?;
-
-    // Watchdog: if the beacon never arrives, destroy the window and tell the
-    // main window. A content failure must never require Task Manager.
-    let label_owned = label.to_string();
-    let watchdog_app = app.clone();
-    tauri::async_runtime::spawn(async move {
-        tokio::time::sleep(std::time::Duration::from_secs(BOOT_DEADLINE_SECS)).await;
-        let booted = watchdog_app
-            .try_state::<WindowWatch>()
-            .map(|w| w.0.lock().unwrap().contains(&label_owned))
-            .unwrap_or(true);
-        if booted {
-            return;
-        }
-        log::error!(
-            "[window] {label_owned}: no boot beacon within {BOOT_DEADLINE_SECS}s — destroying the window (web content failed to load)"
-        );
-        if let Some(win) = watchdog_app.get_webview_window(&label_owned) {
-            let _ = win.destroy();
-        }
-        let _ = watchdog_app.emit_to(
-            "main",
-            "app-error",
-            serde_json::json!({
-                "message": format!(
-                    "The {label_owned} window failed to load and was closed. Details: Settings → Advanced → Open logs folder."
-                ),
-            }),
-        );
-    });
     Ok(())
 }
 
 #[cfg(test)]
 mod tests {
-    use super::valid_accelerator;
+    use super::{popout_kind, valid_accelerator, WatchState};
+
+    #[test]
+    fn watchdog_booted_window_never_expires() {
+        let mut w = WatchState::default();
+        w.register_pending("focus");
+        w.mark_booted("focus");
+        assert_eq!(w.expire("focus"), None);
+        assert_eq!(w.consecutive_failures("focus"), 0);
+    }
+
+    #[test]
+    fn watchdog_unbooted_window_expires_exactly_once_and_counts() {
+        let mut w = WatchState::default();
+        w.register_pending("focus");
+        assert_eq!(w.expire("focus"), Some(1));
+        assert_eq!(w.expire("focus"), None, "second expiry must not double-fire");
+        w.register_pending("focus");
+        assert_eq!(w.expire("focus"), Some(2), "consecutive failures accumulate");
+    }
+
+    #[test]
+    fn watchdog_boot_resets_the_failure_streak() {
+        let mut w = WatchState::default();
+        w.register_pending("focus");
+        assert_eq!(w.expire("focus"), Some(1));
+        w.register_pending("focus");
+        w.mark_booted("focus");
+        assert_eq!(w.consecutive_failures("focus"), 0);
+        assert_eq!(w.expire("focus"), None);
+    }
+
+    #[test]
+    fn watchdog_reregistration_clears_a_stale_boot() {
+        let mut w = WatchState::default();
+        w.register_pending("focus");
+        w.mark_booted("focus");
+        // The window was closed and reopened: a fresh registration must not be
+        // satisfied by the previous boot.
+        w.register_pending("focus");
+        assert_eq!(w.expire("focus"), Some(1));
+    }
+
+    #[test]
+    fn sticky_labels_share_one_failure_kind() {
+        let mut w = WatchState::default();
+        assert_eq!(popout_kind("sticky-abc"), "sticky");
+        w.register_pending("sticky-abc");
+        assert_eq!(w.expire("sticky-abc"), Some(1));
+        w.register_pending("sticky-def");
+        assert_eq!(w.expire("sticky-def"), Some(2), "failures aggregate per kind");
+    }
 
     #[test]
     fn accepts_modifier_plus_key() {
