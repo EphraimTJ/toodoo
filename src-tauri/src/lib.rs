@@ -1261,6 +1261,11 @@ async fn set_notif_actions(state: State<'_, AppState>, on: bool) -> CmdResult<de
 }
 
 #[tauri::command]
+async fn set_simple_popouts(state: State<'_, AppState>, on: bool) -> CmdResult<desktop::DesktopConfig> {
+    desktop::set_simple_popouts(&state.pool, &state.bus, on).await.map_err(err)
+}
+
+#[tauri::command]
 async fn set_autostart(
     app: tauri::AppHandle,
     state: State<'_, AppState>,
@@ -1954,6 +1959,7 @@ pub fn run() {
             desktop_config,
             set_quick_add_hotkey,
             set_notif_actions,
+            set_simple_popouts,
             set_autostart,
             log_window_error,
             open_logs_folder,

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { api } from "../../../lib/api";
+import { openPopout } from "../../../lib/popout";
 import { useAmbient } from "../hooks/useAmbient";
 import { useFocusSettings } from "../hooks/useFocusSettings";
 import { FocusTimer } from "./FocusTimer";
@@ -40,7 +40,7 @@ export function FocusView() {
             type="button"
             aria-label="Pop out focus window"
             title="Open an always-on-top focus window"
-            onClick={() => void api.openFocusWindow()}
+            onClick={() => void openPopout({ kind: "focus" })}
             className="ml-auto rounded-md px-2 py-1 text-sm text-text-muted hover:bg-surface"
           >
             ↗

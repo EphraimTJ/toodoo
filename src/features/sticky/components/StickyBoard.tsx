@@ -1,5 +1,6 @@
 import { useRef, useState } from "react";
-import { api, type StickyView } from "../../../lib/api";
+import { type StickyView } from "../../../lib/api";
+import { openPopout } from "../../../lib/popout";
 import { useTaskMutations } from "../../tasks/hooks/useTasks";
 import { useSticky } from "../hooks/useSticky";
 
@@ -67,7 +68,7 @@ function StickyCard({
             type="button"
             aria-label={`Pop out ${sticky.title}`}
             title="Pop out to an always-on-top window"
-            onClick={() => void api.openStickyWindow(sticky.id)}
+            onClick={() => void openPopout({ kind: "sticky", id: sticky.id })}
             className="ml-auto text-xs text-black/50 hover:text-black"
           >
             ↗

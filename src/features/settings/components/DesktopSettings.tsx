@@ -4,7 +4,7 @@ import { useDesktopConfig } from "../hooks/useDesktopConfig";
 /** Desktop panel: global quick-add hotkey, launch-at-login, notification actions.
  *  The toggles apply natively in the Tauri app; the browser mirrors the config. */
 export function DesktopSettings() {
-  const { query, setHotkey, setAutostart, setNotifActions } = useDesktopConfig();
+  const { query, setHotkey, setAutostart, setNotifActions, setSimplePopouts } = useDesktopConfig();
   const cfg = query.data;
   const [hotkey, setHotkeyDraft] = useState("");
 
@@ -56,6 +56,24 @@ export function DesktopSettings() {
       <p className="text-xs text-text-muted">
         Native action buttons are used where the OS supports them; otherwise a
         Complete / Snooze popover opens in-app when a reminder fires.
+      </p>
+
+      <label className="flex items-center gap-2 text-sm">
+        <input
+          type="checkbox"
+          role="switch"
+          aria-label="Use simple in-app pop-outs"
+          data-testid="simple-popouts-toggle"
+          checked={cfg.simplePopouts}
+          onChange={(e) => setSimplePopouts.mutate(e.target.checked)}
+        />
+        Use simple in-app pop-outs
+      </label>
+      <p className="text-xs text-text-muted">
+        Opens focus / sticky pop-outs as floating panels inside the main window
+        instead of separate always-on-top windows. Turn this on if separate
+        windows open blank on your machine (the app also switches automatically
+        after repeated failures).
       </p>
     </div>
   );

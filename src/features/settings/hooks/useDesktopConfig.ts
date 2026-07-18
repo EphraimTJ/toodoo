@@ -10,6 +10,7 @@ export function useDesktopConfig() {
   const setHotkey = useMutation({ mutationFn: (a: string) => api.setQuickAddHotkey(a), onSuccess: set });
   const setAutostart = useMutation({ mutationFn: (on: boolean) => api.setAutostart(on), onSuccess: set });
   const setNotifActions = useMutation({ mutationFn: (on: boolean) => api.setNotifActions(on), onSuccess: set });
+  const setSimplePopouts = useMutation({ mutationFn: (on: boolean) => api.setSimplePopouts(on), onSuccess: set });
 
-  return { query, setHotkey, setAutostart, setNotifActions };
+  return { query, setHotkey, setAutostart, setNotifActions, setSimplePopouts };
 }

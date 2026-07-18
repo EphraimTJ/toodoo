@@ -27,6 +27,9 @@ use crate::repo::settings::{get_setting, set_setting};
 pub const KEY_HOTKEY: &str = "hotkey.quickAdd";
 pub const KEY_AUTOSTART: &str = "autostart.enabled";
 pub const KEY_NOTIF: &str = "notif.actions";
+/// "Use simple in-app pop-outs": render focus/sticky pop-outs as in-app
+/// floating panels instead of native windows (the webview-load fallback).
+pub const KEY_SIMPLE_POPOUTS: &str = "popout.simple";
 pub const DEFAULT_HOTKEY: &str = "CmdOrCtrl+Shift+A";
 
 #[derive(Debug, Clone, Serialize)]
@@ -35,6 +38,7 @@ pub struct DesktopConfig {
     pub quick_add_hotkey: String,
     pub autostart: bool,
     pub notif_actions: bool,
+    pub simple_popouts: bool,
 }
 
 /// Modifier tokens accepted in an accelerator (Tauri's `CmdOrCtrl` convention).
@@ -66,7 +70,16 @@ pub async fn config(pool: &SqlitePool) -> Result<DesktopConfig> {
         quick_add_hotkey: hotkey,
         autostart: get_setting(pool, KEY_AUTOSTART).await?.and_then(|v| v.as_bool()).unwrap_or(false),
         notif_actions: get_setting(pool, KEY_NOTIF).await?.and_then(|v| v.as_bool()).unwrap_or(true),
+        simple_popouts: get_setting(pool, KEY_SIMPLE_POPOUTS)
+            .await?
+            .and_then(|v| v.as_bool())
+            .unwrap_or(false),
     })
+}
+
+pub async fn set_simple_popouts(pool: &SqlitePool, bus: &EventBus, on: bool) -> Result<DesktopConfig> {
+    set_setting(pool, bus, KEY_SIMPLE_POPOUTS, serde_json::json!(on)).await?;
+    config(pool).await
 }
 
 pub async fn set_hotkey(pool: &SqlitePool, bus: &EventBus, accel: &str) -> Result<DesktopConfig> {

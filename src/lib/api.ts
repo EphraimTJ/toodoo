@@ -334,6 +334,8 @@ export interface DesktopConfig {
   quickAddHotkey: string;
   autostart: boolean;
   notifActions: boolean;
+  /** Render focus/sticky pop-outs as in-app floating panels (webview fallback). */
+  simplePopouts: boolean;
 }
 
 // ---- Search -----------------------------------------------------------------
@@ -716,6 +718,7 @@ export interface Api {
   desktopConfig(): Promise<DesktopConfig>;
   setQuickAddHotkey(accel: string): Promise<DesktopConfig>;
   setNotifActions(on: boolean): Promise<DesktopConfig>;
+  setSimplePopouts(on: boolean): Promise<DesktopConfig>;
   setAutostart(on: boolean): Promise<DesktopConfig>;
   openQuickAddWindow(): Promise<void>;
   openFocusWindow(): Promise<void>;
@@ -979,6 +982,7 @@ const tauriApi: Api = {
   desktopConfig: () => invoke("desktop_config"),
   setQuickAddHotkey: (accel) => invoke("set_quick_add_hotkey", { accel }),
   setNotifActions: (on) => invoke("set_notif_actions", { on }),
+  setSimplePopouts: (on) => invoke("set_simple_popouts", { on }),
   setAutostart: (on) => invoke("set_autostart", { on }),
   openQuickAddWindow: () => invoke("open_quick_add_window"),
   openFocusWindow: () => invoke("open_focus_window"),
@@ -1094,6 +1098,7 @@ function browserStubApi(): Api {
     quickAddHotkey: "CmdOrCtrl+Shift+A",
     autostart: false,
     notifActions: true,
+    simplePopouts: false,
   };
   const nowIso = () => new Date().toISOString();
   const uid = () => crypto.randomUUID();
@@ -2375,6 +2380,10 @@ function browserStubApi(): Api {
     setQuickAddHotkey: async (accel) => {
       if (accel.trim()) desktopCfg.quickAddHotkey = accel.trim();
       return { ...desktopCfg };
+    },
+    setSimplePopouts: async (on) => {
+      desktopCfg.simplePopouts = on;
+      return clone(desktopCfg);
     },
     setNotifActions: async (on) => {
       desktopCfg.notifActions = on;
