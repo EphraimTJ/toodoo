@@ -5,6 +5,24 @@ ambiguity we resolved by judgment call), with the reasoning. Newest entries at
 the top. Never rewrite history — if a decision is reversed, add a new entry
 that supersedes the old one.
 
+## 2026-07-17 — Pomodoro durations: idle clock resyncs; quick picker; no mid-session changes
+
+Root cause of "timer stuck at 25:00": `usePomodoro` seeded its countdown once
+from the default config **before** the persisted `focus:config` resolved, and
+nothing resynced the idle display afterwards (Start actually used the real
+value — a display/wiring failure, not persistence). The idle clock now resyncs
+whenever the config or phase changes **while idle**; a running countdown is
+never touched — **settings and the quick picker apply to the next session,
+never mid-session** (deliberate: silently stretching/shrinking a running pomo
+would corrupt the session's meaning). Clicking the idle clock opens a
+TickTick-style quick picker (15/25/45/60/custom 1–180) that sets a transient
+override applied immediately to the idle display and the next Start; Settings
+remain the durable default. The pill mirrors the active duration via the
+`focus-state` broadcast. Regression-tested (config→display resync, override,
+mid-session immunity). Sibling Phase-5 settings (short/long break, interval,
+auto-start, goal) were re-checked: they are read at phase transitions via
+`configRef` and were never affected by the seeding bug.
+
 ## 2026-07-17 — Notification sound: synthesized "toodoo" chirp, in-app only
 
 A signature two-note descending birdlike **"too-doo" motif (~0.5 s)** is

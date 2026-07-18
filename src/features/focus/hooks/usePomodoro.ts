@@ -22,15 +22,33 @@ export function usePomodoro(config: PomoConfig, initialTaskId: string | null = n
   const [habitId, setHabitId] = useState<string | null>(null);
   const [note, setNote] = useState("");
   const [sessionOpen, setSessionOpen] = useState(false);
+  // Quick-picker override for the next work session (null = settings default).
+  // Applies immediately to the idle clock; never changes a running session.
+  const [workMinOverride, setWorkMinOverride] = useState<number | null>(null);
+
+  const effConfig: PomoConfig =
+    workMinOverride != null ? { ...config, workMin: workMinOverride } : config;
 
   const sessionId = useRef<string | null>(null);
   const pomosRef = useRef(0);
   const pauseMsRef = useRef(0);
   const pausedAtRef = useRef<number | null>(null);
-  const configRef = useRef(config);
+  const configRef = useRef(effConfig);
   useEffect(() => {
-    configRef.current = config;
-  }, [config]);
+    configRef.current = effConfig;
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- effConfig is derived from these
+  }, [config, workMinOverride]);
+
+  // Keep the idle clock in sync with the (async-loaded or edited) config and
+  // the quick-picker override. Without this the display seeds once from the
+  // defaults and reads as "stuck at 25:00" (round-3 bug): the lazy useState
+  // initializer above runs before the persisted focus:config resolves.
+  const idle = !running && !sessionOpen;
+  useEffect(() => {
+    if (!idle || mode !== "pomo") return;
+    setRemaining(phaseDurationSec(phase, effConfig));
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- effConfig derives from config/workMinOverride
+  }, [idle, mode, phase, config, workMinOverride]);
 
   // Tick.
   useEffect(() => {
@@ -132,5 +150,8 @@ export function usePomodoro(config: PomoConfig, initialTaskId: string | null = n
     phase, remaining, elapsed, running, active,
     taskId, setTaskId, habitId, setHabitId, note, setNote,
     start, pause, resume, stop,
+    workMinOverride, setWorkMinOverride,
+    /** Full duration of the current phase (ring progress / broadcasts). */
+    totalSec: phaseDurationSec(phase, effConfig),
   };
 }

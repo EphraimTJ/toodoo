@@ -2,7 +2,7 @@ import { createContext, useContext, useEffect, useRef, type ReactNode } from "re
 import { useUiStore } from "../../lib/uiStore";
 import { useFocusSettings } from "./hooks/useFocusSettings";
 import { usePomodoro } from "./hooks/usePomodoro";
-import { phaseDurationSec, type Phase, type PomoConfig } from "./lib/pomodoro";
+import { type Phase, type PomoConfig } from "./lib/pomodoro";
 import type { Mode } from "./hooks/usePomodoro";
 
 /** Timer state mirrored to pill windows once per second (Tauri event bus). */
@@ -57,14 +57,14 @@ export function FocusProvider({ children }: { children: ReactNode }) {
         elapsed: p.elapsed,
         running: p.running,
         active: p.active,
-        totalSec: p.mode === "pomo" ? phaseDurationSec(p.phase, configRef.current) : 0,
+        totalSec: p.mode === "pomo" ? p.totalSec : 0,
       };
       void emit("focus-state", payload);
     });
     return () => {
       cancelled = true;
     };
-  }, [p.mode, p.phase, p.remaining, p.elapsed, p.running, p.active]);
+  }, [p.mode, p.phase, p.remaining, p.elapsed, p.running, p.active, p.totalSec]);
 
   // Remote control from pill windows.
   const pRef = useRef(p);
@@ -86,7 +86,7 @@ export function FocusProvider({ children }: { children: ReactNode }) {
               elapsed: t.elapsed,
               running: t.running,
               active: t.active,
-              totalSec: t.mode === "pomo" ? phaseDurationSec(t.phase, configRef.current) : 0,
+              totalSec: t.mode === "pomo" ? t.totalSec : 0,
             };
             void emit("focus-state", snapshot);
             break;

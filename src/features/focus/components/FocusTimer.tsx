@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../../../lib/api";
 import { useFocusStats } from "../hooks/useFocus";
@@ -15,6 +16,7 @@ function todayRange() {
 
 export function FocusTimer({ config }: { config: PomoConfig }) {
   const p = useFocusTimer(config);
+  const [pickerOpen, setPickerOpen] = useState(false);
   const { from, to } = todayRange();
   const stats = useFocusStats(from, to);
   const pomosToday = stats.data?.pomoCount ?? 0;
@@ -45,9 +47,66 @@ export function FocusTimer({ config }: { config: PomoConfig }) {
       {p.mode === "pomo" && (
         <div className="text-xs uppercase tracking-wide text-text-muted">{PHASE_LABEL[p.phase]}</div>
       )}
-      <div className="font-mono text-6xl tabular-nums" aria-label="Timer">
-        {clock}
-      </div>
+      {/* Idle pomodoro clock opens the quick duration picker; a running
+          session's clock is not clickable (no mid-session changes). */}
+      {!p.active && p.mode === "pomo" ? (
+        <div className="relative">
+          <button
+            type="button"
+            aria-label="Timer"
+            title="Click to change the session duration"
+            className="rounded-lg px-2 font-mono text-6xl tabular-nums hover:bg-surface"
+            onClick={() => setPickerOpen((o) => !o)}
+            data-testid="duration-picker-trigger"
+          >
+            {clock}
+          </button>
+          {pickerOpen && (
+            <div
+              className="absolute left-1/2 top-full z-20 mt-1 flex -translate-x-1/2 items-center gap-1 rounded-md border border-border bg-surface p-1 shadow-xl"
+              data-testid="duration-picker"
+            >
+              {[15, 25, 45, 60].map((min) => (
+                <button
+                  key={min}
+                  type="button"
+                  className={`rounded px-2.5 py-1 text-sm ${
+                    (p.workMinOverride ?? config.workMin) === min
+                      ? "bg-accent text-accent-fg"
+                      : "hover:bg-bg"
+                  }`}
+                  onClick={() => {
+                    p.setWorkMinOverride(min === config.workMin ? null : min);
+                    setPickerOpen(false);
+                  }}
+                >
+                  {min}
+                </button>
+              ))}
+              <input
+                type="number"
+                min={1}
+                max={180}
+                placeholder="min"
+                aria-label="Custom duration (minutes)"
+                className="w-16 rounded border border-border bg-bg px-1.5 py-1 text-sm outline-none focus:border-accent"
+                onKeyDown={(e) => {
+                  if (e.key !== "Enter") return;
+                  const v = Number((e.target as HTMLInputElement).value);
+                  if (Number.isFinite(v) && v >= 1 && v <= 180) {
+                    p.setWorkMinOverride(Math.round(v));
+                    setPickerOpen(false);
+                  }
+                }}
+              />
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="font-mono text-6xl tabular-nums" aria-label="Timer">
+          {clock}
+        </div>
+      )}
 
       <select
         aria-label="Focus target"
