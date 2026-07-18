@@ -28,30 +28,27 @@ Legend: ⬜ untested · ✅ pass · ❌ fail (file an issue)
   **Show / Hide** toggles the main window · **Quit** exits. 
 
 ### Mini focus window + tray countdown
-- ❌ **Start focus** opens an always-on-top mini window mirroring the running
-  timer; it stays on top of other apps. (Round 3, fresh installer: STILL white
-  on the owner's machine, and the log proved `build()` never returned — the
-  round-2 watchdog was armed after build and never fired. Since then: the
-  watchdog is armed BEFORE build (a no-beacon creation always logs
-  [window-watchdog], destroys the window, toasts), creation runs on the main
-  thread (the only context proven working there), the window is now a
-  TickTick-style focus PILL (ring + mm:ss, hover controls, top-edge dock),
-  and after 2 consecutive failures the app auto-falls-back to an in-app
-  floating panel (or force it: Settings → Desktop → simple in-app pop-outs).
-  Re-test per docs/pre-launch.md §3.)
+- ✅ **Start focus** opens an always-on-top mini window mirroring the running
+  timer; it stays on top of other apps. (Round 3b, owner-confirmed: the
+  default transparent PILL renders and works. The earlier build() hangs were
+  intermittent/machine-state-dependent; the permanent posture is
+  defense-in-depth — pre-armed watchdog, ≥2-failures auto-fallback to in-app
+  panels, and the Settings → Desktop pop-out style switch. Menu-clipping on
+  the pill's "…" fixed by growing the window while the menu is open —
+  re-verify the menu on the latest installer. Still to eyeball: hover
+  expand/collapse, top-edge dock/undock, position persistence.)
 - ⬜ ~~(If wired) the tray tooltip reflects the focus countdown during a session.~~
   **N/A for v1.0** — confirmed not wired; deliberate (see the 2026-07-17
   "Tray focus countdown is not wired in v1.0" decision).
 
 ### Sticky-note pop-out windows
-- ❌ Popping a sticky out opens an always-on-top window showing that sticky's
-  title/content with its color. (Round 3: same white result + same fixes as
-  the focus window above; stickies are now color-filled frameless pills.
-  Re-test.)
-- ❌ Moving/resizing the pop-out persists position/color (survives reopen). The
-  in-app sticky board still works alongside it. (Sticky pills now have body
-  drag, a corner resize grip, hover color swatches, and per-window
-  position/size persistence — re-test once the pill renders.)
+- ✅ Popping a sticky out opens an always-on-top window showing that sticky's
+  title/content with its color. (Round 3b, owner-confirmed working with the
+  default pill style — same resolution as the focus window above.)
+- ⬜ Moving/resizing the pop-out persists position/color (survives reopen). The
+  in-app sticky board still works alongside it. (Sticky pills have body drag,
+  a corner resize grip, hover color swatches, and per-window position/size
+  persistence — verify drag/resize/color survive a close + reopen.)
 
 ### Launch at login
 - ✅ Toggling **Launch Toodoo at login** on, then rebooting, starts Toodoo

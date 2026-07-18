@@ -5,6 +5,29 @@ ambiguity we resolved by judgment call), with the reasoning. Newest entries at
 the top. Never rewrite history — if a decision is reversed, add a new entry
 that supersedes the old one.
 
+## 2026-07-18 — Pop-out window posture: pill default + defense-in-depth (closes the white-window saga)
+
+Final resolution of the three-round white-pop-out investigation. The failure
+was `WebviewWindowBuilder::build()` hanging **intermittently** on one machine:
+round-3b logs showed decorated windows building while frameless/transparent
+pills hung *in the same session* — yet the identical pill style later built
+and rendered fine on the same machine (owner-confirmed). Conclusion: a
+machine-state-dependent WebView2/compositor hang, not a deterministic code or
+flag bug. Therefore the **transparent pill stays the default**, and the
+protection is structural rather than a flag change:
+
+- **Watchdog armed before build** — any pop-out that doesn't beacon within 5 s
+  is logged (`[window-watchdog]`), destroyed, and surfaced as a main-window
+  toast; a hang can never strand a white window again.
+- **Persistent per-kind failure counter** (reset on a successful boot): at 2
+  consecutive failures, pop-outs **auto-fall-back to in-app floating panels**;
+  a watchdog kill opens the panel immediately.
+- **User-switchable chrome** (`popout.style`: pill / solid / windowed) and the
+  "simple in-app pop-outs" toggle — recovery without a rebuild.
+- Diagnostics stay shipped: `TOODOO_DIAG_WINDOWS=styles` bisects the chrome
+  flags in one run; all window creation runs on the main thread and logs
+  build/navigation/page-load stages plus the WebView2 version.
+
 ## 2026-07-17 — Pomodoro durations: idle clock resyncs; quick picker; no mid-session changes
 
 Root cause of "timer stuck at 25:00": `usePomodoro` seeded its countdown once

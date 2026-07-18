@@ -52,6 +52,13 @@
   whether `build()` returned and whether navigation started — send it; the
   panels keep everything usable meanwhile.
 
+> **RESOLVED (2026-07-18):** the owner confirms pop-outs render with the
+> **default pill style**. The build() hang was intermittent/machine-state
+> dependent; the pill default stays, protected by the watchdog + auto-fallback
+> + style switch (see the 2026-07-18 decisions.md entry). Remaining manual
+> checks: pill menu on the latest installer (clip fix), hover/dock/persist,
+> sticky resize/color persistence, chirp variant choice, panes, 10-min pomo.
+
 ## 2b. ROUND-3b — the owner's log after the round-3 build (evidence update)
 
 The round-3 defenses worked exactly as designed on the owner's machine:
