@@ -340,6 +340,10 @@ export interface DesktopConfig {
   simplePopouts: boolean;
   /** Native pop-out chrome: "pill" | "solid" (frameless opaque) | "windowed". */
   popoutStyle: string;
+  /** Close button hides to the tray (reminders keep running). Default ON. */
+  closeToTray: boolean;
+  /** Autostart launches start hidden in the tray. Default ON. */
+  startMinimized: boolean;
 }
 
 // ---- Search -----------------------------------------------------------------
@@ -726,6 +730,8 @@ export interface Api {
   setSimplePopouts(on: boolean): Promise<DesktopConfig>;
   setPopoutStyle(style: string): Promise<DesktopConfig>;
   setAutostart(on: boolean): Promise<DesktopConfig>;
+  setCloseToTray(on: boolean): Promise<DesktopConfig>;
+  setStartMinimized(on: boolean): Promise<DesktopConfig>;
   openQuickAddWindow(): Promise<void>;
   openFocusWindow(): Promise<void>;
   openStickyWindow(id: string): Promise<void>;
@@ -994,6 +1000,8 @@ const tauriApi: Api = {
   setSimplePopouts: (on) => invoke("set_simple_popouts", { on }),
   setPopoutStyle: (style) => invoke("set_popout_style", { style }),
   setAutostart: (on) => invoke("set_autostart", { on }),
+  setCloseToTray: (on) => invoke("set_close_to_tray", { on }),
+  setStartMinimized: (on) => invoke("set_start_minimized", { on }),
   openQuickAddWindow: () => invoke("open_quick_add_window"),
   openFocusWindow: () => invoke("open_focus_window"),
   openStickyWindow: (id) => invoke("open_sticky_window", { id }),
@@ -1112,6 +1120,8 @@ function browserStubApi(): Api {
     notifSnoozeMin: 10,
     simplePopouts: false,
     popoutStyle: "pill",
+    closeToTray: true,
+    startMinimized: true,
   };
   const nowIso = () => new Date().toISOString();
   const uid = () => crypto.randomUUID();
@@ -2412,6 +2422,14 @@ function browserStubApi(): Api {
     },
     setAutostart: async (on) => {
       desktopCfg.autostart = on;
+      return { ...desktopCfg };
+    },
+    setCloseToTray: async (on) => {
+      desktopCfg.closeToTray = on;
+      return { ...desktopCfg };
+    },
+    setStartMinimized: async (on) => {
+      desktopCfg.startMinimized = on;
       return { ...desktopCfg };
     },
     openQuickAddWindow: async () => {

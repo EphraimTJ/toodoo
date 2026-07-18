@@ -365,6 +365,16 @@ pub async fn dispatch_toast_action(
         ToastAction::OpenTask { task_id } => {
             log::info!("[notify-action] OpenTask: task={task_id} (UI handled by caller)");
         }
+        ToastAction::AckTrayNotice => {
+            log::info!("[notify-action] AckTrayNotice: persisting tray notice dismissal");
+            super::settings::set_setting(
+                pool,
+                bus,
+                crate::desktop::KEY_TRAY_NOTICE,
+                serde_json::json!(true),
+            )
+            .await?;
+        }
     }
     Ok(())
 }

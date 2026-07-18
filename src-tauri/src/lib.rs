@@ -42,6 +42,12 @@ pub struct AppState {
     api_token: std::sync::Arc<std::sync::RwLock<String>>,
     /// The running REST server, if enabled.
     api_server: std::sync::Mutex<Option<api::ServerHandle>>,
+    /// Mirror of `tray.closeToTray` so the sync CloseRequested handler never
+    /// blocks on the DB (kept in step by `set_close_to_tray`).
+    close_to_tray: std::sync::atomic::AtomicBool,
+    /// The "still running in the tray" notice is done for this run: either
+    /// permanently dismissed (persisted) or already shown once this run.
+    tray_notice_done: std::sync::atomic::AtomicBool,
 }
 
 impl AppState {
@@ -1280,6 +1286,24 @@ async fn set_popout_style(state: State<'_, AppState>, style: String) -> CmdResul
 }
 
 #[tauri::command]
+async fn set_close_to_tray(
+    state: State<'_, AppState>,
+    on: bool,
+) -> CmdResult<desktop::DesktopConfig> {
+    let cfg = desktop::set_close_to_tray(&state.pool, &state.bus, on).await.map_err(err)?;
+    state.close_to_tray.store(on, std::sync::atomic::Ordering::Relaxed);
+    Ok(cfg)
+}
+
+#[tauri::command]
+async fn set_start_minimized(
+    state: State<'_, AppState>,
+    on: bool,
+) -> CmdResult<desktop::DesktopConfig> {
+    desktop::set_start_minimized(&state.pool, &state.bus, on).await.map_err(err)
+}
+
+#[tauri::command]
 async fn set_autostart(
     app: tauri::AppHandle,
     state: State<'_, AppState>,
@@ -1450,9 +1474,17 @@ fn handle_toast_activation(app: tauri::AppHandle, arg: Option<String>, toast_tas
     match action {
         toast_actions::ToastAction::OpenTask { task_id } => {
             let _ = show_main_window(app.clone());
-            let _ = app.emit("deep-link", &deeplink::DeepLinkAction::OpenTask { id: task_id });
+            if !task_id.is_empty() {
+                let _ = app.emit("deep-link", &deeplink::DeepLinkAction::OpenTask { id: task_id });
+            }
         }
         other => {
+            if matches!(other, toast_actions::ToastAction::AckTrayNotice) {
+                // Keep the in-memory flag in step; the repo dispatch persists it.
+                app.state::<AppState>()
+                    .tray_notice_done
+                    .store(true, std::sync::atomic::Ordering::Relaxed);
+            }
             let state = app.state::<AppState>();
             let pool = state.pool.clone();
             let bus = state.bus.clone();
@@ -1467,6 +1499,37 @@ fn handle_toast_activation(app: tauri::AppHandle, arg: Option<String>, toast_tas
             });
         }
     }
+}
+
+/// One-time "still running in the tray" notice, shown the first time the close
+/// button hides the window (at most once per run; "Don't show again" persists
+/// the dismissal via the toast-action path). Falls back to a plain plugin
+/// notification when the WinRT toast is unavailable.
+fn show_tray_notice(app: &tauri::AppHandle) {
+    const BODY: &str =
+        "Toodoo is still running in the tray — reminders keep working. Use the tray menu's Quit to exit fully.";
+    #[cfg(windows)]
+    {
+        use tauri_winrt_notification::Toast;
+        let handle = app.clone();
+        let shown = Toast::new(&toast_app_id(app))
+            .title("Toodoo")
+            .text1(BODY)
+            .add_button(
+                "Don't show again",
+                &toast_actions::encode(&toast_actions::ToastAction::AckTrayNotice),
+            )
+            .on_activated(move |arg| {
+                handle_toast_activation(handle.clone(), arg, String::new());
+                Ok(())
+            })
+            .show();
+        match shown {
+            Ok(()) => return,
+            Err(e) => log::warn!("[tray] winrt notice failed ({e}); using the plain notification"),
+        }
+    }
+    let _ = app.notification().builder().title("Toodoo").body(BODY).show();
 }
 
 // Window-open commands are fire-and-forget: creation runs on the main thread
@@ -1557,6 +1620,17 @@ pub fn run() {
     }));
 
     tauri::Builder::default()
+        // Single instance FIRST (its requirement): a second launch focuses the
+        // running instance — which may be hidden in the tray — instead of
+        // starting another process; deep-link args forward via the feature.
+        .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            log::info!("[tray] second launch detected — focusing the running instance");
+            if let Some(w) = app.get_webview_window("main") {
+                let _ = w.unminimize();
+                let _ = w.show();
+                let _ = w.set_focus();
+            }
+        }))
         // File + stdout logging, always on: rotating toodoo.log under the
         // app-local-data logs dir (surfaced by Settings → Advanced → "Open
         // logs folder"). Every [reminders]/[window]/panic diagnostic lands
@@ -1579,7 +1653,10 @@ pub fn run() {
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_autostart::init(
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
-            None::<Vec<&str>>,
+            // Lets launched_hidden() tell a login launch from a double-click
+            // (start-minimized-to-tray). Re-toggling launch-at-login refreshes
+            // an old registration that predates the flag.
+            Some(vec!["--autostart"]),
         ))
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
@@ -1622,6 +1699,34 @@ pub fn run() {
             // The db opened and migrated — the pre-restore rollback (if any) is
             // no longer needed.
             repo::backup::finalize_restore(&data_dir);
+
+            // Close-to-tray bootstrap: the main window is configured hidden
+            // (tauri.conf.json `visible: false`) so an autostart launch can
+            // stay in the tray without a flash; every other launch shows it
+            // here, immediately after the DB is up.
+            let (boot_close_to_tray, boot_start_minimized, boot_notice_done) =
+                tauri::async_runtime::block_on(async {
+                    let cfg = desktop::config(&pool).await.ok();
+                    let notice = repo::settings::get_setting(&pool, desktop::KEY_TRAY_NOTICE)
+                        .await
+                        .ok()
+                        .flatten()
+                        .and_then(|v| v.as_bool())
+                        .unwrap_or(false);
+                    (
+                        cfg.as_ref().map(|c| c.close_to_tray).unwrap_or(true),
+                        cfg.as_ref().map(|c| c.start_minimized).unwrap_or(true),
+                        notice,
+                    )
+                });
+            let launch_args: Vec<String> = std::env::args().collect();
+            if let Some(main) = app.get_webview_window("main") {
+                if desktop::launched_hidden(&launch_args, boot_start_minimized) {
+                    log::info!("[tray] autostart launch — starting hidden in the tray");
+                } else {
+                    let _ = main.show();
+                }
+            }
 
             // Diagnostic hook: TOODOO_DIAG_WINDOWS=1 auto-opens the pop-out
             // windows shortly after launch, so their load/boot can be observed
@@ -1947,6 +2052,24 @@ pub fn run() {
                     .icon(app.default_window_icon().cloned().unwrap())
                     .tooltip("Toodoo")
                     .menu(&menu)
+                    // Left-click restores the (possibly tray-hidden) window;
+                    // the menu stays on right-click.
+                    .show_menu_on_left_click(false)
+                    .on_tray_icon_event(|tray, event| {
+                        use tauri::tray::{MouseButton, MouseButtonState, TrayIconEvent};
+                        if let TrayIconEvent::Click {
+                            button: MouseButton::Left,
+                            button_state: MouseButtonState::Up,
+                            ..
+                        } = event
+                        {
+                            if let Some(w) = tray.app_handle().get_webview_window("main") {
+                                let _ = w.unminimize();
+                                let _ = w.show();
+                                let _ = w.set_focus();
+                            }
+                        }
+                    })
                     .on_menu_event(|app, event| match event.id.as_ref() {
                         "quick_add" => {
                             desktop::request_popout(app, "quickadd", "win=quickadd", "Quick add", 520.0, 180.0, desktop::PopoutStyle::Decorated);
@@ -1992,8 +2115,49 @@ pub fn run() {
                 }
             });
 
-            app.manage(AppState { pool, bus, data_dir, api_token, api_server });
+            app.manage(AppState {
+                pool,
+                bus,
+                data_dir,
+                api_token,
+                api_server,
+                close_to_tray: std::sync::atomic::AtomicBool::new(boot_close_to_tray),
+                tray_notice_done: std::sync::atomic::AtomicBool::new(boot_notice_done),
+            });
             Ok(())
+        })
+        // Close-to-tray: intercept the main window's X. Hidden, the scheduler
+        // and reminders keep running; tray Quit (`app.exit`) never routes
+        // through CloseRequested, so it always exits fully.
+        .on_window_event(|window, event| {
+            if window.label() != "main" {
+                return;
+            }
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                use std::sync::atomic::Ordering;
+                let app = window.app_handle();
+                let Some(state) = app.try_state::<AppState>() else { return };
+                let decision = desktop::close_decision(
+                    state.close_to_tray.load(Ordering::Relaxed),
+                    !state.tray_notice_done.load(Ordering::Relaxed),
+                );
+                match decision {
+                    desktop::CloseDecision::HideToTray { first_time_notice } => {
+                        api.prevent_close();
+                        let _ = window.hide();
+                        log::info!("[tray] close intercepted — hidden to tray (notice={first_time_notice})");
+                        if first_time_notice {
+                            state.tray_notice_done.store(true, Ordering::Relaxed);
+                            show_tray_notice(&app.clone());
+                        }
+                    }
+                    desktop::CloseDecision::Exit => {
+                        // Explicit exit also tears down any pop-out pills.
+                        log::info!("[tray] close-to-tray off — exiting");
+                        app.exit(0);
+                    }
+                }
+            }
         })
         .invoke_handler(tauri::generate_handler![
             list_projects,
@@ -2151,6 +2315,8 @@ pub fn run() {
             set_simple_popouts,
             set_popout_style,
             set_autostart,
+            set_close_to_tray,
+            set_start_minimized,
             log_window_error,
             open_logs_folder,
             send_test_notification,

@@ -5,7 +5,8 @@ import { useDesktopConfig } from "../hooks/useDesktopConfig";
  *  Notification settings live in NotificationSettings. The toggles apply
  *  natively in the Tauri app; the browser mirrors the config. */
 export function DesktopSettings() {
-  const { query, setHotkey, setAutostart, setSimplePopouts, setPopoutStyle } = useDesktopConfig();
+  const { query, setHotkey, setAutostart, setCloseToTray, setStartMinimized, setSimplePopouts, setPopoutStyle } =
+    useDesktopConfig();
   const cfg = query.data;
   const [hotkey, setHotkeyDraft] = useState("");
 
@@ -43,6 +44,37 @@ export function DesktopSettings() {
         />
         Launch Toodoo at login
       </label>
+      {cfg.autostart && (
+        <label className="flex items-center gap-2 pl-6 text-sm">
+          <input
+            type="checkbox"
+            role="switch"
+            aria-label="Start minimized to tray"
+            data-testid="start-minimized-toggle"
+            checked={cfg.startMinimized}
+            onChange={(e) => setStartMinimized.mutate(e.target.checked)}
+          />
+          Start minimized to the tray
+        </label>
+      )}
+
+      <label className="flex items-center gap-2 text-sm">
+        <input
+          type="checkbox"
+          role="switch"
+          aria-label="Keep running in the tray"
+          data-testid="close-to-tray-toggle"
+          checked={cfg.closeToTray}
+          onChange={(e) => setCloseToTray.mutate(e.target.checked)}
+        />
+        Keep running in the tray when the window is closed
+      </label>
+      <p className="text-xs text-text-muted">
+        Closing the window hides Toodoo to the system tray — reminders and
+        notifications keep running. Left-click the tray icon to reopen; the
+        tray menu&apos;s Quit exits fully. Turn this off to make the close
+        button quit the app.
+      </p>
 
       <label className="flex items-center gap-2 text-sm">
         <input

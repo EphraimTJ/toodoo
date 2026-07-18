@@ -50,6 +50,26 @@ Legend: ⬜ untested · ✅ pass · ❌ fail (file an issue)
   a corner resize grip, hover color swatches, and per-window position/size
   persistence — verify drag/resize/color survive a close + reopen.)
 
+### Close-to-tray (round 4 — new lifecycle default)
+- ⬜ Click the window **X** → the window hides, the app stays in the tray; a
+  one-time "Toodoo is still running in the tray" notice appears (Windows: with
+  a **Don't show again** button — click it once and verify it stays away after
+  a restart).
+- ⬜ While hidden: a due reminder still fires (native + in-app on restore);
+  clicking the toast **body** restores the hidden window on that task; the
+  global quick-add hotkey still works.
+- ⬜ Open a focus/sticky pill, then close the main window → the pill stays
+  alive and usable.
+- ⬜ **Tray left-click** restores + focuses the window (menu is on
+  right-click); tray **Quit always fully exits**, setting on or off.
+- ⬜ With Toodoo running (hidden or shown), double-click the exe/shortcut →
+  no second instance; the running window is focused/restored.
+- ⬜ Settings → Desktop → turn "Keep running in the tray" **OFF** → X now
+  quits the app fully (pop-out pills close too).
+- ⬜ With **Launch at login** + **Start minimized to the tray** ON (re-toggle
+  launch-at-login once so the registration carries `--autostart`), reboot →
+  Toodoo is in the tray with **no window flash**; left-click shows it.
+
 ### Launch at login
 - ✅ Toggling **Launch Toodoo at login** on, then rebooting, starts Toodoo
   automatically. Toggling off stops it. 

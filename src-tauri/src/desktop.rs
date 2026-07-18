@@ -32,6 +32,13 @@ pub const KEY_NOTIF_SNOOZE: &str = "notif.snoozeMin";
 /// "Use simple in-app pop-outs": render focus/sticky pop-outs as in-app
 /// floating panels instead of native windows (the webview-load fallback).
 pub const KEY_SIMPLE_POPOUTS: &str = "popout.simple";
+/// Close button hides to the tray instead of quitting (ON by default — the
+/// scheduler/reminders keep running).
+pub const KEY_CLOSE_TO_TRAY: &str = "tray.closeToTray";
+/// Autostart launches start hidden in the tray (sub-setting of launch-at-login).
+pub const KEY_START_MINIMIZED: &str = "tray.startMinimized";
+/// "Don't show again" was clicked on the still-running-in-tray notice.
+pub const KEY_TRAY_NOTICE: &str = "tray.noticeShown";
 /// Native pop-out chrome: "pill" | "solid" | "windowed" (style_from_setting).
 pub const KEY_POPOUT_STYLE: &str = "popout.style";
 pub const DEFAULT_HOTKEY: &str = "CmdOrCtrl+Shift+A";
@@ -45,6 +52,8 @@ pub struct DesktopConfig {
     pub notif_snooze_min: i64,
     pub simple_popouts: bool,
     pub popout_style: String,
+    pub close_to_tray: bool,
+    pub start_minimized: bool,
 }
 
 /// Modifier tokens accepted in an accelerator (Tauri's `CmdOrCtrl` convention).
@@ -89,7 +98,55 @@ pub async fn config(pool: &SqlitePool) -> Result<DesktopConfig> {
             .await?
             .and_then(|v| v.as_str().map(String::from))
             .unwrap_or_else(|| "pill".to_string()),
+        close_to_tray: get_setting(pool, KEY_CLOSE_TO_TRAY)
+            .await?
+            .and_then(|v| v.as_bool())
+            .unwrap_or(true),
+        start_minimized: get_setting(pool, KEY_START_MINIMIZED)
+            .await?
+            .and_then(|v| v.as_bool())
+            .unwrap_or(true),
     })
+}
+
+pub async fn set_close_to_tray(pool: &SqlitePool, bus: &EventBus, on: bool) -> Result<DesktopConfig> {
+    set_setting(pool, bus, KEY_CLOSE_TO_TRAY, serde_json::json!(on)).await?;
+    config(pool).await
+}
+
+pub async fn set_start_minimized(pool: &SqlitePool, bus: &EventBus, on: bool) -> Result<DesktopConfig> {
+    set_setting(pool, bus, KEY_START_MINIMIZED, serde_json::json!(on)).await?;
+    config(pool).await
+}
+
+// ---- Close-to-tray decision logic (pure, unit-tested) -----------------------
+
+/// What the main window's close button should do.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum CloseDecision {
+    /// Intercept the close: hide to the tray; optionally show the one-time
+    /// "still running" notice.
+    HideToTray { first_time_notice: bool },
+    /// Let the close quit the whole app.
+    Exit,
+}
+
+/// Decide the close behavior. `notice_pending` = the notice has neither been
+/// permanently dismissed (persisted `tray.noticeShown`) nor already shown this
+/// run — the notice appears at most once per run until "Don't show again".
+pub fn close_decision(close_to_tray: bool, notice_pending: bool) -> CloseDecision {
+    if close_to_tray {
+        CloseDecision::HideToTray { first_time_notice: notice_pending }
+    } else {
+        CloseDecision::Exit
+    }
+}
+
+/// Whether this launch should start hidden in the tray: only an autostart
+/// launch (`--autostart`, passed by the login registration) with the
+/// start-minimized setting on. A normal double-click always shows the window.
+pub fn launched_hidden(args: &[String], start_minimized: bool) -> bool {
+    start_minimized && args.iter().any(|a| a == "--autostart")
 }
 
 pub async fn set_simple_popouts(pool: &SqlitePool, bus: &EventBus, on: bool) -> Result<DesktopConfig> {
@@ -387,7 +444,7 @@ pub fn open_or_focus(
 
 #[cfg(test)]
 mod tests {
-    use super::{popout_kind, valid_accelerator, WatchState};
+    use super::{close_decision, launched_hidden, popout_kind, valid_accelerator, CloseDecision, WatchState};
 
     #[test]
     fn watchdog_booted_window_never_expires() {
@@ -454,5 +511,30 @@ mod tests {
         assert!(!valid_accelerator("Shift+")); // no key
         assert!(!valid_accelerator("Ctrl+Alt")); // key slot is a modifier
         assert!(!valid_accelerator("  ")); // whitespace only
+    }
+
+    #[test]
+    fn close_hides_to_tray_with_notice_only_while_pending() {
+        assert_eq!(close_decision(true, true), CloseDecision::HideToTray { first_time_notice: true });
+        assert_eq!(
+            close_decision(true, false),
+            CloseDecision::HideToTray { first_time_notice: false }
+        );
+    }
+
+    #[test]
+    fn close_exits_when_the_setting_is_off_regardless_of_notice() {
+        assert_eq!(close_decision(false, true), CloseDecision::Exit);
+        assert_eq!(close_decision(false, false), CloseDecision::Exit);
+    }
+
+    #[test]
+    fn only_an_autostart_launch_with_the_setting_starts_hidden() {
+        let auto = |s: &str| s.to_string();
+        assert!(launched_hidden(&[auto("toodoo.exe"), auto("--autostart")], true));
+        assert!(!launched_hidden(&[auto("toodoo.exe"), auto("--autostart")], false));
+        assert!(!launched_hidden(&[auto("toodoo.exe")], true), "double-click always shows");
+        assert!(!launched_hidden(&[], true));
+        assert!(!launched_hidden(&[auto("--autostart-ish")], true), "exact flag only");
     }
 }

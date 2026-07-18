@@ -12,8 +12,10 @@ pub enum ToastAction {
     /// label promised at show time.
     Snooze { reminder_id: String, minutes: i64 },
     /// Body click (no argument) or an unrecognized argument: open the app on
-    /// the toast's task.
+    /// the toast's task (an empty id just focuses the app).
     OpenTask { task_id: String },
+    /// "Don't show again" on the close-to-tray notice: persist the dismissal.
+    AckTrayNotice,
 }
 
 pub fn encode(action: &ToastAction) -> String {
@@ -23,6 +25,7 @@ pub fn encode(action: &ToastAction) -> String {
         }
         ToastAction::Snooze { reminder_id, minutes } => format!("snooze|{reminder_id}|{minutes}"),
         ToastAction::OpenTask { task_id } => format!("open|{task_id}"),
+        ToastAction::AckTrayNotice => "traynotice|ack".to_string(),
     }
 }
 
@@ -46,6 +49,7 @@ pub fn parse(arg: Option<&str>, toast_task_id: &str) -> ToastAction {
         (Some("open"), Some(task_id), _) if !task_id.is_empty() => {
             ToastAction::OpenTask { task_id: task_id.to_string() }
         }
+        (Some("traynotice"), Some("ack"), _) => ToastAction::AckTrayNotice,
         _ => open(),
     }
 }
@@ -94,5 +98,10 @@ mod tests {
     fn open_round_trips() {
         let a = ToastAction::OpenTask { task_id: "t-7".into() };
         assert_eq!(parse(Some(&encode(&a)), "x"), a);
+    }
+
+    #[test]
+    fn tray_notice_ack_round_trips() {
+        assert_eq!(parse(Some(&encode(&ToastAction::AckTrayNotice)), ""), ToastAction::AckTrayNotice);
     }
 }

@@ -5,6 +5,39 @@ ambiguity we resolved by judgment call), with the reasoning. Newest entries at
 the top. Never rewrite history — if a decision is reversed, add a new entry
 that supersedes the old one.
 
+## 2026-07-18 — Close-to-tray by default (app lifecycle change) + single instance
+
+TickTick-style lifecycle: **the main window's X hides to the system tray**
+(`tray.closeToTray`, ON by default) instead of quitting — the scheduler,
+reminders, and toasts keep running, which is also what makes toast action
+buttons dependable (their activation delegate only lives while the app runs).
+
+- **Decision logic is pure and unit-tested** (`desktop::close_decision`,
+  `desktop::launched_hidden` — tray/window wiring itself is manual-checklist
+  territory, per the 2026-07-14 E2E decision). The CloseRequested handler
+  reads an `AtomicBool` mirror of the setting so it never blocks on the DB.
+- **Quit always exits:** the tray menu's Quit calls `app.exit(0)`, which does
+  not route through CloseRequested — no setting can trap the user in the
+  tray. With close-to-tray OFF, X calls `app.exit(0)` too (an explicit exit
+  also tears down pop-out pills, which are independent top-level windows and
+  otherwise survive the main window).
+- **First-hide notice:** a native toast "Toodoo is still running in the tray —
+  reminders keep working", shown at most once per run, with a Windows
+  **Don't show again** button (persists `tray.noticeShown` via the
+  toast-action path); non-Windows falls back to a plain notification.
+- **Tray left-click** now restores + focuses the window (menu moved to
+  right-click); Show/Hide and Open Today behave as before.
+- **Single instance** (`tauri-plugin-single-instance`, registered first, with
+  deep-link forwarding): re-launching the exe focuses the running — possibly
+  hidden — instance instead of starting a second process.
+- **Autostart starts hidden:** the login registration now passes
+  `--autostart`; with the `tray.startMinimized` sub-setting (ON by default) a
+  login launch stays in the tray, while a normal double-click always shows
+  the window. The main window is configured `visible: false` and shown
+  explicitly at setup, so a hidden launch never flashes. **Note:** an
+  autostart registration created before this change predates the flag —
+  toggling launch-at-login off/on refreshes it.
+
 ## 2026-07-18 — Windows toast action buttons via WinRT (supersedes the 12D "action buttons not wired" posture)
 
 The 12D decision left OS notification action buttons unwired because

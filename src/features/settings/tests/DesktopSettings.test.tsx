@@ -30,4 +30,26 @@ describe("DesktopSettings", () => {
     await user.tab(); // blur commits
     await waitFor(async () => expect((await api.desktopConfig()).quickAddHotkey).toBe("CmdOrCtrl+Shift+Q"));
   });
+
+  it("close-to-tray defaults on and toggles; start-minimized shows with autostart", async () => {
+    const user = userEvent.setup();
+    renderPanel();
+
+    const closeToTray = (await screen.findByTestId("close-to-tray-toggle")) as HTMLInputElement;
+    expect(closeToTray.checked).toBe(true); // ON by default
+    await user.click(closeToTray);
+    await waitFor(async () => expect((await api.desktopConfig()).closeToTray).toBe(false));
+    await user.click(closeToTray);
+    await waitFor(async () => expect((await api.desktopConfig()).closeToTray).toBe(true));
+
+    // The start-minimized sub-setting only shows once autostart is on.
+    if (!(await api.desktopConfig()).autostart) {
+      expect(screen.queryByTestId("start-minimized-toggle")).toBeNull();
+      await user.click(screen.getByTestId("autostart-toggle"));
+    }
+    const startMin = (await screen.findByTestId("start-minimized-toggle")) as HTMLInputElement;
+    expect(startMin.checked).toBe(true); // ON by default
+    await user.click(startMin);
+    await waitFor(async () => expect((await api.desktopConfig()).startMinimized).toBe(false));
+  });
 });
