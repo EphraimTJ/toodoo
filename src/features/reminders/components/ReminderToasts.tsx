@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { api } from "../../../lib/api";
+import { playChirp, useNotifSound } from "../hooks/useNotifSound";
 
 interface Fired {
   taskId: string;
@@ -17,6 +18,17 @@ interface Fired {
 export function ReminderToasts() {
   const queryClient = useQueryClient();
   const [items, setItems] = useState<Fired[]>([]);
+  const { sound } = useNotifSound();
+
+  // The "toodoo" chirp plays once per newly-appended toast (in-app path only;
+  // native toasts keep the OS sound — docs/decisions.md).
+  const prevCount = useRef(0);
+  const soundRef = useRef(sound);
+  soundRef.current = sound;
+  useEffect(() => {
+    if (items.length > prevCount.current) playChirp(soundRef.current);
+    prevCount.current = items.length;
+  }, [items.length]);
 
   useEffect(() => {
     const onCustom = (e: Event) => setItems((prev) => [...prev, (e as CustomEvent<Fired>).detail]);

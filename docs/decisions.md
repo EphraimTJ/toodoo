@@ -5,6 +5,19 @@ ambiguity we resolved by judgment call), with the reasoning. Newest entries at
 the top. Never rewrite history — if a decision is reversed, add a new entry
 that supersedes the old one.
 
+## 2026-07-17 — Notification sound: synthesized "toodoo" chirp, in-app only
+
+A signature two-note descending birdlike **"too-doo" motif (~0.5 s)** is
+procedurally synthesized (`scripts/gen-chirp.mjs`, same original/license-free
+approach as the ambient loops) in three variants; the variant, volume, and
+on/off live in the `notif.sound` setting (Settings → Desktop, with Preview).
+**Split:** the chirp plays on the **in-app reminder toast** (HTMLAudio);
+**native Windows toasts keep the system default sound** — custom loose-file
+toast audio is unreliable for non-MSIX (NSIS) apps, so it is not attempted for
+v1.0. The asset URLs are swappable in `useNotifSound.ts` for a real recording
+later. The give-up/log-only reminder path emits no toast and therefore no
+sound.
+
 ## 2026-07-17 — Sample data: guarded, feature-complete, repo-driven
 
 A packaged build now ships a **"Load sample data"** flow so manual testing is
