@@ -19,7 +19,7 @@ const SMART_META: Record<SmartView, { label: string; countKey?: "today" | "tomor
   trash: { label: "Trash" },
 };
 
-export function Sidebar() {
+export function Sidebar({ width }: { width?: number } = {}) {
   const { t } = useTranslation();
   const { view, setView } = useUiStore();
   const { data: counts } = useSmartCounts();
@@ -28,7 +28,8 @@ export function Sidebar() {
   return (
     <aside
       aria-label="Sidebar"
-      className="flex w-60 shrink-0 flex-col border-r border-border bg-surface"
+      className="flex shrink-0 flex-col border-r border-border bg-surface"
+      style={{ width: width ?? 240 }}
     >
       <div className="flex items-center justify-between px-4 py-3">
         <h1 className="text-lg font-semibold text-accent">Toodoo</h1>

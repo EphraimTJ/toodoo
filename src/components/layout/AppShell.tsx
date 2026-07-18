@@ -8,6 +8,8 @@ import { SystemToasts } from "./SystemToasts";
 import { SampleDataPrompt } from "./SampleDataPrompt";
 import { PanelHost } from "./PanelHost";
 import { FocusProvider } from "../../features/focus/FocusProvider";
+import { PaneDivider } from "./PaneDivider";
+import { PANE_LIMITS, usePaneWidths } from "./usePaneWidths";
 import { ShortcutCheatsheet } from "../../features/shortcuts/components/ShortcutCheatsheet";
 import { useShortcuts } from "../../features/shortcuts/useShortcuts";
 import { api } from "../../lib/api";
@@ -48,12 +50,32 @@ export function AppShell() {
     };
   }, []);
 
+  const { widths, setPane, resetPane } = usePaneWidths();
+
   return (
     <FocusProvider>
       <div className="flex h-full">
-        <Sidebar />
+        <Sidebar width={widths.sidebar} />
+        <PaneDivider
+          label="Resize sidebar"
+          value={widths.sidebar}
+          min={PANE_LIMITS.sidebar.min}
+          max={PANE_LIMITS.sidebar.max}
+          direction={1}
+          onResize={(w) => setPane("sidebar", w)}
+          onReset={() => resetPane("sidebar")}
+        />
         <ListPane />
-        <DetailPane />
+        <PaneDivider
+          label="Resize detail pane"
+          value={widths.detail}
+          min={PANE_LIMITS.detail.min}
+          max={PANE_LIMITS.detail.max}
+          direction={-1}
+          onResize={(w) => setPane("detail", w)}
+          onReset={() => resetPane("detail")}
+        />
+        <DetailPane width={widths.detail} />
         <CommandPalette />
         <ReminderToasts />
         <SystemToasts />

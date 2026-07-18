@@ -1,10 +1,11 @@
 import { TaskDetail } from "../../features/tasks/components/detail/TaskDetail";
 
-export function DetailPane() {
+export function DetailPane({ width }: { width?: number }) {
   return (
     <aside
       aria-label="Task detail"
-      className="flex w-80 shrink-0 flex-col border-l border-border bg-surface"
+      className="flex shrink-0 flex-col border-l border-border bg-surface"
+      style={{ width: width ?? 320 }}
     >
       <TaskDetail />
     </aside>
