@@ -5,6 +5,7 @@ import type { Tag, Task } from "../../../lib/api";
 import { useUiStore } from "../../../lib/uiStore";
 import { useTaskMutations } from "../hooks/useTasks";
 import { dueChip } from "../lib/sortGroup";
+import { describeRrule } from "../lib/rrule";
 
 const PRIORITY_COLOR: Record<number, string> = {
   5: "border-red-500 text-red-500",
@@ -46,7 +47,7 @@ export function TaskRow({ task, depth, tags, draggable, inTrash }: Props) {
       // Let the fill/strike animation play before the row moves away.
       setCompleting(true);
       window.setTimeout(() => {
-        completeTask.mutate(task.id);
+        completeTask.mutate(task);
         setCompleting(false);
       }, 350);
     }
@@ -135,6 +136,20 @@ export function TaskRow({ task, depth, tags, draggable, inTrash }: Props) {
         </span>
       )}
 
+      {task.pinned && (
+        <span aria-label="Pinned" title="Pinned" className="text-xs text-accent">
+          📌
+        </span>
+      )}
+      {task.rrule && (
+        <span
+          aria-label="Repeats"
+          title={describeRrule(task.rrule) ?? "Repeats"}
+          className="text-xs text-text-muted"
+        >
+          ↻
+        </span>
+      )}
       {rowTags.map((tag) => (
         <span
           key={tag.id}

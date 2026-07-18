@@ -13,6 +13,15 @@ export function useViewTasks(view: ViewSelection) {
           return api.listTagTasks(view.tagId);
         case "smart":
           return api.listSmart(view.view);
+        case "filter":
+          return api.listFilterTasks(view.filterId);
+        case "matrix":
+        case "calendar":
+        case "focus":
+        case "habits":
+        case "countdown":
+        case "sticky":
+          return Promise.resolve([]);
       }
     },
   });
@@ -31,6 +40,10 @@ export function useTaskMutations() {
   const invalidate = () => {
     void queryClient.invalidateQueries({ queryKey: ["tasks"] });
     void queryClient.invalidateQueries({ queryKey: ["smartCounts"] });
+    // Completing/reopening a task moves the achievement score and summary.
+    void queryClient.invalidateQueries({ queryKey: ["stats"] });
+    // Edited/completed/trashed tasks change what search returns.
+    void queryClient.invalidateQueries({ queryKey: ["search"] });
   };
 
   const createTask = useMutation({
@@ -42,7 +55,12 @@ export function useTaskMutations() {
     onSuccess: invalidate,
   });
   const completeTask = useMutation({
-    mutationFn: (id: string) => api.completeTask(id),
+    // Pass the task the caller rendered so the backend can treat a stale retry
+    // of a recurring completion as a no-op (a bare id sends no occurrence key).
+    mutationFn: (t: string | Pick<Task, "id" | "dueAt" | "startAt">) =>
+      typeof t === "string"
+        ? api.completeTask(t)
+        : api.completeTask(t.id, t.dueAt ?? t.startAt ?? undefined),
     onSuccess: invalidate,
   });
   const reopenTask = useMutation({
@@ -71,6 +89,10 @@ export function useTaskMutations() {
       api.reorderTask(id, afterId),
     onSuccess: invalidate,
   });
+  const setPinned = useMutation({
+    mutationFn: ({ id, pinned }: { id: string; pinned: boolean }) => api.setTaskPinned(id, pinned),
+    onSuccess: invalidate,
+  });
 
   return {
     createTask,
@@ -82,6 +104,7 @@ export function useTaskMutations() {
     deleteTaskForever,
     moveTask,
     reorderTask,
+    setPinned,
   };
 }
 
@@ -91,6 +114,8 @@ export function useBatchMutations() {
   const invalidate = () => {
     void queryClient.invalidateQueries({ queryKey: ["tasks"] });
     void queryClient.invalidateQueries({ queryKey: ["smartCounts"] });
+    void queryClient.invalidateQueries({ queryKey: ["stats"] });
+    void queryClient.invalidateQueries({ queryKey: ["search"] });
   };
 
   return useMutation({

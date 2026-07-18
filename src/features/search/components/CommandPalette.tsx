@@ -53,6 +53,16 @@ export function CommandPalette() {
           No results.
         </Command.Empty>
 
+        {query.trim() !== "" && (
+          <Command.Item
+            value={`__search__${query}`}
+            onSelect={() => useUiStore.getState().openSearch(query)}
+            className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm font-normal normal-case tracking-normal text-text data-[selected=true]:bg-accent/10"
+          >
+            🔍 <span className="truncate">Search everything for “{query}”</span>
+          </Command.Item>
+        )}
+
         {(results ?? []).length > 0 && (
           <Command.Group
             heading="Tasks"

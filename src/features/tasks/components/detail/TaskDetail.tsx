@@ -1,12 +1,20 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { DropdownMenu, Popover } from "radix-ui";
 import { api, type Priority, type Task } from "../../../../lib/api";
+import { downloadText } from "../../../../lib/download";
+import { taskToMarkdown, taskToText } from "../../../share/lib/shareText";
+import { downloadTaskImage } from "../../../share/lib/shareImage";
 import { useUiStore } from "../../../../lib/uiStore";
 import { useTags, useTagMutations } from "../../../tags/hooks/useTags";
 import { useTaskMutations } from "../../hooks/useTasks";
+import { TaskFocusInfo } from "../../../focus/components/TaskFocusInfo";
+import { ActivityLog } from "./ActivityLog";
+import { Comments } from "./Comments";
 import { DatePicker } from "./DatePicker";
 import { DescriptionEditor } from "./DescriptionEditor";
+import { Reminders } from "./Reminders";
+import { RepeatPicker } from "./RepeatPicker";
 
 const PRIORITIES: [Priority, string, string][] = [
   [5, "High", "text-red-500"],
@@ -16,11 +24,17 @@ const PRIORITIES: [Priority, string, string][] = [
 ];
 
 function CheckItems({ task }: { task: Task }) {
+  const queryClient = useQueryClient();
   const { data: items } = useQuery({
     queryKey: ["checkItems", task.id],
     queryFn: () => api.listCheckItems(task.id),
   });
   const [draft, setDraft] = useState("");
+  const promote = async (itemId: string) => {
+    await api.checkItemToSubtask(itemId);
+    void queryClient.invalidateQueries({ queryKey: ["checkItems", task.id] });
+    void queryClient.invalidateQueries({ queryKey: ["tasks"] });
+  };
   const add = async () => {
     const title = draft.trim();
     if (!title) return;
@@ -44,8 +58,17 @@ function CheckItems({ task }: { task: Task }) {
             <span className={item.done ? "text-text-muted line-through" : ""}>{item.title}</span>
             <button
               type="button"
+              aria-label={`Convert ${item.title} to subtask`}
+              title="Promote to subtask"
+              className="ml-auto text-xs text-text-muted opacity-0 hover:text-accent group-hover:opacity-100"
+              onClick={() => void promote(item.id)}
+            >
+              ↥
+            </button>
+            <button
+              type="button"
               aria-label={`Delete ${item.title}`}
-              className="ml-auto text-xs text-text-muted opacity-0 hover:text-red-500 group-hover:opacity-100"
+              className="text-xs text-text-muted opacity-0 hover:text-red-500 group-hover:opacity-100"
               onClick={() => void api.deleteCheckItem(item.id)}
             >
               ✕
@@ -95,7 +118,7 @@ function Subtasks({ task }: { task: Task }) {
               checked={child.status === "COMPLETED"}
               aria-label={child.title}
               onChange={(e) =>
-                e.target.checked ? completeTask.mutate(child.id) : reopenTask.mutate(child.id)
+                e.target.checked ? completeTask.mutate(child) : reopenTask.mutate(child.id)
               }
               className="h-3.5 w-3.5 accent-(--color-accent)"
             />
@@ -228,7 +251,20 @@ function TagPicker({ task }: { task: Task }) {
 
 export function TaskDetail() {
   const { selectedTaskId, selectTask } = useUiStore();
-  const { updateTask, trashTask, restoreTask, completeTask, reopenTask } = useTaskMutations();
+  const queryClient = useQueryClient();
+  const { updateTask, trashTask, restoreTask, completeTask, reopenTask, setPinned } =
+    useTaskMutations();
+  const [copiedLink, setCopiedLink] = useState<string | null>(null);
+
+  const copyLink = async (id: string) => {
+    const link = await api.copyTaskLink(id);
+    setCopiedLink(link);
+    try {
+      await navigator.clipboard.writeText(link);
+    } catch {
+      /* clipboard unavailable — the link is still shown for manual copy */
+    }
+  };
 
   const { data: task } = useQuery({
     queryKey: ["tasks", "detail", selectedTaskId],
@@ -257,7 +293,7 @@ export function TaskDetail() {
           disabled={trashed}
           aria-label={done ? "Reopen task" : "Complete task"}
           onChange={(e) =>
-            e.target.checked ? completeTask.mutate(task.id) : reopenTask.mutate(task.id)
+            e.target.checked ? completeTask.mutate(task) : reopenTask.mutate(task.id)
           }
           className="h-4 w-4 accent-(--color-accent)"
         />
@@ -271,11 +307,54 @@ export function TaskDetail() {
           value={task.dueAt}
           onChange={(dueAt) => updateTask.mutate({ id: task.id, patch: { dueAt } })}
         />
+        <label className="flex items-center gap-1 text-xs text-text-muted" title="All-day vs. timed">
+          <input
+            type="checkbox"
+            aria-label="All day"
+            checked={task.isAllDay}
+            onChange={(e) => updateTask.mutate({ id: task.id, patch: { isAllDay: e.target.checked } })}
+            className="h-3.5 w-3.5 accent-(--color-accent)"
+          />
+          All day
+        </label>
+        {!task.isAllDay && (
+          <label className="flex items-center gap-1 text-xs text-text-muted" title="Duration in minutes">
+            <input
+              type="number"
+              min={0}
+              step={5}
+              aria-label="Duration minutes"
+              value={task.durationMin ?? ""}
+              placeholder="dur"
+              onChange={(e) =>
+                updateTask.mutate({
+                  id: task.id,
+                  patch: { durationMin: e.target.value === "" ? null : Math.max(0, Number(e.target.value)) },
+                })
+              }
+              className="w-14 rounded border border-border bg-bg px-1 py-0.5 outline-none focus:border-accent"
+            />
+            min
+          </label>
+        )}
+        <RepeatPicker task={task} />
+        <button
+          type="button"
+          aria-label={task.pinned ? "Unpin task" : "Pin task"}
+          aria-pressed={task.pinned}
+          disabled={trashed}
+          onClick={() => setPinned.mutate({ id: task.id, pinned: !task.pinned })}
+          className={`ml-auto rounded-md border border-border px-2 py-1 text-xs ${
+            task.pinned ? "border-accent text-accent" : "text-text-muted hover:text-text"
+          }`}
+        >
+          📌
+        </button>
         <DropdownMenu.Root>
           <DropdownMenu.Trigger asChild>
             <button
               type="button"
-              className={`ml-auto rounded-md border border-border px-2 py-1 text-xs ${priority[2]}`}
+              className={`rounded-md border border-border px-2 py-1 text-xs ${priority[2]}`}
             >
               ⚑ {priority[1]}
             </button>
@@ -315,32 +394,167 @@ export function TaskDetail() {
 
       <TagPicker task={task} />
       <DescriptionEditor task={task} />
+      <Reminders task={task} />
       <CheckItems task={task} />
       <Subtasks task={task} />
+      <TaskFocusInfo task={task} />
+      <Comments task={task} />
+      <ActivityLog task={task} />
 
-      <div className="mt-auto flex justify-end gap-2 pt-4">
-        {trashed ? (
+      <div className="mt-auto flex items-center gap-2 pt-4">
+        <button
+          type="button"
+          className="rounded-md border border-border px-2 py-1 text-xs text-text-muted hover:text-text"
+          onClick={() =>
+            void api.setTaskKind(task.id, task.kind === "NOTE" ? "TASK" : "NOTE").then(() => {
+              void queryClient.invalidateQueries({ queryKey: ["tasks"] });
+            })
+          }
+        >
+          {task.kind === "NOTE" ? "Convert to task" : "Convert to note"}
+        </button>
+        <button
+          type="button"
+          className="rounded-md border border-border px-2 py-1 text-xs text-text-muted hover:text-accent"
+          onClick={() => void api.stickyFromTask(task.id)}
+        >
+          📌 Pop out
+        </button>
+        <button
+          type="button"
+          aria-label="Copy task link"
+          className="rounded-md border border-border px-2 py-1 text-xs text-text-muted hover:text-accent"
+          onClick={() => void copyLink(task.id)}
+        >
+          🔗 Copy link
+        </button>
+        <DropdownMenu.Root>
+          <DropdownMenu.Trigger asChild>
+            <button
+              type="button"
+              aria-label="Share task"
+              className="rounded-md border border-border px-2 py-1 text-xs text-text-muted hover:text-accent"
+            >
+              ↗ Share
+            </button>
+          </DropdownMenu.Trigger>
+          <DropdownMenu.Portal>
+            <DropdownMenu.Content
+              sideOffset={6}
+              className="z-50 min-w-40 rounded-md border border-border bg-surface p-1 text-sm shadow-lg"
+            >
+              <DropdownMenu.Item
+                className="cursor-pointer select-none rounded px-2 py-1 outline-none hover:bg-bg data-[highlighted]:bg-bg"
+                onSelect={() => void navigator.clipboard.writeText(taskToText(task)).catch(() => {})}
+              >
+                Copy as text
+              </DropdownMenu.Item>
+              <DropdownMenu.Item
+                className="cursor-pointer select-none rounded px-2 py-1 outline-none hover:bg-bg data-[highlighted]:bg-bg"
+                onSelect={() => downloadText(`${task.title || "task"}.md`, taskToMarkdown(task), "text/markdown")}
+              >
+                Download markdown
+              </DropdownMenu.Item>
+              <DropdownMenu.Item
+                className="cursor-pointer select-none rounded px-2 py-1 outline-none hover:bg-bg data-[highlighted]:bg-bg"
+                onSelect={() => void downloadTaskImage(task)}
+              >
+                Download image
+              </DropdownMenu.Item>
+            </DropdownMenu.Content>
+          </DropdownMenu.Portal>
+        </DropdownMenu.Root>
+        <button
+          type="button"
+          className="rounded-md border border-border px-2 py-1 text-xs text-text-muted hover:text-accent"
+          onClick={() =>
+            void api.duplicateTask(task.id).then(() => {
+              void queryClient.invalidateQueries({ queryKey: ["tasks"] });
+            })
+          }
+        >
+          ⧉ Duplicate
+        </button>
+        <button
+          type="button"
+          className="rounded-md border border-border px-2 py-1 text-xs text-text-muted hover:text-accent"
+          onClick={() => {
+            const name = window.prompt("Template name", task.title);
+            if (name?.trim())
+              void api.saveTaskAsTemplate(task.id, name.trim()).then(() => {
+                void queryClient.invalidateQueries({ queryKey: ["templates"] });
+              });
+          }}
+        >
+          ⧉ Save as template
+        </button>
+        {task.parentId && (
           <button
             type="button"
-            className="rounded-md border border-border px-2 py-1 text-xs text-accent hover:bg-accent/10"
-            onClick={() => restoreTask.mutate(task.id)}
-          >
-            Restore
-          </button>
-        ) : (
-          <button
-            type="button"
-            aria-label="Move task to trash"
-            className="rounded-md border border-border px-2 py-1 text-xs text-text-muted hover:text-red-500"
+            className="rounded-md border border-border px-2 py-1 text-xs text-text-muted hover:text-accent"
             onClick={() => {
-              trashTask.mutate(task.id);
-              selectTask(null);
+              const lossy =
+                (task.tagIds?.length ?? 0) > 0 ||
+                task.priority !== 0 ||
+                task.dueAt !== null ||
+                task.startAt !== null;
+              if (lossy && !window.confirm("Converting to a check item drops its tags, priority, dates, and any subtasks. Continue?"))
+                return;
+              void api.subtaskToCheckItem(task.id).then(() => {
+                selectTask(null);
+                void queryClient.invalidateQueries({ queryKey: ["tasks"] });
+                void queryClient.invalidateQueries({ queryKey: ["checkItems"] });
+              });
             }}
           >
-            🗑 Trash
+            ✓ To check item
           </button>
         )}
+        <div className="ml-auto flex gap-2">
+          {!done && !trashed && (
+            <button
+              type="button"
+              aria-label="Mark won't do"
+              className="rounded-md border border-border px-2 py-1 text-xs text-text-muted hover:text-text"
+              onClick={() =>
+                void api.setWontDo(task.id).then(() => {
+                  void queryClient.invalidateQueries({ queryKey: ["tasks"] });
+                  void queryClient.invalidateQueries({ queryKey: ["smartCounts"] });
+                })
+              }
+            >
+              Won't do
+            </button>
+          )}
+          {trashed ? (
+            <button
+              type="button"
+              className="rounded-md border border-border px-2 py-1 text-xs text-accent hover:bg-accent/10"
+              onClick={() => restoreTask.mutate(task.id)}
+            >
+              Restore
+            </button>
+          ) : (
+            <button
+              type="button"
+              aria-label="Move task to trash"
+              className="rounded-md border border-border px-2 py-1 text-xs text-text-muted hover:text-red-500"
+              onClick={() => {
+                trashTask.mutate(task.id);
+                selectTask(null);
+              }}
+            >
+              🗑 Trash
+            </button>
+          )}
+        </div>
       </div>
+
+      {copiedLink && (
+        <p className="pt-2 text-xs text-text-muted" aria-live="polite" data-testid="task-link">
+          Copied <code>{copiedLink}</code>
+        </p>
+      )}
     </div>
   );
 }

@@ -41,15 +41,29 @@ const COLUMNS: &str =
      created_at, updated_at";
 
 pub async fn create_project(pool: &SqlitePool, bus: &EventBus, input: NewProject) -> Result<Project> {
+    let mut tx = pool.begin().await?;
+    let id = create_project_core(&mut tx, &input).await?;
+    tx.commit().await?;
+
+    bus.emit(DomainEvent::ProjectCreated { id: id.clone() });
+    get_project(pool, &id).await
+}
+
+/// Insert + changelog for a new project, inside the caller's transaction
+/// (shared by `create_project` and the atomic CSV import). Returns the new
+/// id; the caller emits `ProjectCreated` after its commit.
+pub(crate) async fn create_project_core(
+    conn: &mut sqlx::SqliteConnection,
+    input: &NewProject,
+) -> Result<String> {
     let id = new_id();
     let ts = now();
-    let kind = input.kind.unwrap_or_else(|| "TASK".to_string());
+    let kind = input.kind.clone().unwrap_or_else(|| "TASK".to_string());
 
-    let mut tx = pool.begin().await?;
     let next_order: i64 = sqlx::query_scalar(
         "SELECT COALESCE(MAX(sort_order) + 1, 0) FROM projects WHERE deleted_at IS NULL",
     )
-    .fetch_one(&mut *tx)
+    .fetch_one(&mut *conn)
     .await?;
 
     sqlx::query(
@@ -65,15 +79,12 @@ pub async fn create_project(pool: &SqlitePool, bus: &EventBus, input: NewProject
     .bind(next_order)
     .bind(&ts)
     .bind(&ts)
-    .execute(&mut *tx)
+    .execute(&mut *conn)
     .await?;
 
     let payload = serde_json::json!({ "name": input.name, "kind": kind });
-    append_changelog(&mut tx, "project", &id, ChangeOp::Insert, &payload).await?;
-    tx.commit().await?;
-
-    bus.emit(DomainEvent::ProjectCreated { id: id.clone() });
-    get_project(pool, &id).await
+    append_changelog(conn, "project", &id, ChangeOp::Insert, &payload).await?;
+    Ok(id)
 }
 
 pub async fn get_project(pool: &SqlitePool, id: &str) -> Result<Project> {

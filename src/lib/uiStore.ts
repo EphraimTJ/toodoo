@@ -4,7 +4,16 @@ import type { SmartView } from "./api";
 export type ViewSelection =
   | { kind: "project"; projectId: string }
   | { kind: "smart"; view: SmartView }
-  | { kind: "tag"; tagId: string };
+  | { kind: "tag"; tagId: string }
+  | { kind: "filter"; filterId: string }
+  | { kind: "matrix" }
+  | { kind: "calendar" }
+  | { kind: "focus" }
+  | { kind: "habits" }
+  | { kind: "countdown" }
+  | { kind: "sticky" }
+  | { kind: "stats" }
+  | { kind: "search" };
 
 export function viewKey(view: ViewSelection): string {
   switch (view.kind) {
@@ -14,7 +23,33 @@ export function viewKey(view: ViewSelection): string {
       return `smart:${view.view}`;
     case "tag":
       return `tag:${view.tagId}`;
+    case "filter":
+      return `filter:${view.filterId}`;
+    case "matrix":
+      return "matrix";
+    case "calendar":
+      return "calendar";
+    case "focus":
+      return "focus";
+    case "habits":
+      return "habits";
+    case "countdown":
+      return "countdown";
+    case "sticky":
+      return "sticky";
+    case "stats":
+      return "stats";
+    case "search":
+      return "search";
   }
+}
+
+/** An in-app floating pop-out panel (the fallback when native pop-out windows
+ *  are disabled or failing — see src/lib/popout.ts). */
+export type PopoutPanel = { kind: "focus" } | { kind: "sticky"; id: string };
+
+export function panelKey(p: PopoutPanel): string {
+  return p.kind === "focus" ? "focus" : `sticky-${p.id}`;
 }
 
 interface UiState {
@@ -22,12 +57,22 @@ interface UiState {
   selectedTaskId: string | null;
   multiSelect: ReadonlySet<string>;
   paletteOpen: boolean;
+  focusTaskId: string | null;
+  /** Query to seed the Search view when it opens (consumed on mount). */
+  searchSeed: string;
+  shortcutsOpen: boolean;
+  panels: PopoutPanel[];
 
   setView(view: ViewSelection): void;
   selectTask(id: string | null): void;
   toggleMultiSelect(id: string): void;
   clearMultiSelect(): void;
   setPaletteOpen(open: boolean): void;
+  openFocus(taskId?: string | null): void;
+  openSearch(query?: string): void;
+  setShortcutsOpen(open: boolean): void;
+  openPanel(panel: PopoutPanel): void;
+  closePanel(key: string): void;
 }
 
 export const useUiStore = create<UiState>((set) => ({
@@ -35,8 +80,15 @@ export const useUiStore = create<UiState>((set) => ({
   selectedTaskId: null,
   multiSelect: new Set<string>(),
   paletteOpen: false,
+  focusTaskId: null,
+  searchSeed: "",
+  shortcutsOpen: false,
+  panels: [],
 
   setView: (view) => set({ view, selectedTaskId: null, multiSelect: new Set() }),
+  openFocus: (taskId = null) => set({ view: { kind: "focus" }, focusTaskId: taskId }),
+  openSearch: (query = "") =>
+    set({ view: { kind: "search" }, searchSeed: query, selectedTaskId: null, paletteOpen: false }),
   selectTask: (selectedTaskId) => set({ selectedTaskId }),
   toggleMultiSelect: (id) =>
     set((s) => {
@@ -47,4 +99,12 @@ export const useUiStore = create<UiState>((set) => ({
     }),
   clearMultiSelect: () => set({ multiSelect: new Set() }),
   setPaletteOpen: (paletteOpen) => set({ paletteOpen }),
+  setShortcutsOpen: (shortcutsOpen) => set({ shortcutsOpen }),
+  openPanel: (panel) =>
+    set((s) =>
+      s.panels.some((p) => panelKey(p) === panelKey(panel))
+        ? s
+        : { panels: [...s.panels, panel] },
+    ),
+  closePanel: (key) => set((s) => ({ panels: s.panels.filter((p) => panelKey(p) !== key) })),
 }));

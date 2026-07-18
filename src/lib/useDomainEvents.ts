@@ -24,10 +24,51 @@ export function useDomainEvents(): void {
           case "seed":
             void queryClient.invalidateQueries({ queryKey: ["tasks"] });
             void queryClient.invalidateQueries({ queryKey: ["checkItems"] });
+            void queryClient.invalidateQueries({ queryKey: ["activity"] });
             void queryClient.invalidateQueries({ queryKey: ["smartCounts"] });
+            void queryClient.invalidateQueries({ queryKey: ["stats"] });
             if (entity === "seed") {
               void queryClient.invalidateQueries({ queryKey: ["projects"] });
             }
+            break;
+          case "reminder":
+            void queryClient.invalidateQueries({ queryKey: ["reminders"] });
+            break;
+          case "template":
+            void queryClient.invalidateQueries({ queryKey: ["templates"] });
+            break;
+          case "section":
+            void queryClient.invalidateQueries({ queryKey: ["sections"] });
+            void queryClient.invalidateQueries({ queryKey: ["tasks"] });
+            break;
+          case "filter":
+            void queryClient.invalidateQueries({ queryKey: ["filters"] });
+            void queryClient.invalidateQueries({ queryKey: ["tasks"] });
+            break;
+          case "matrix":
+            void queryClient.invalidateQueries({ queryKey: ["matrix"] });
+            void queryClient.invalidateQueries({ queryKey: ["tasks"] });
+            break;
+          case "calendar":
+            void queryClient.invalidateQueries({ queryKey: ["calendar"] });
+            void queryClient.invalidateQueries({ queryKey: ["tasks"] });
+            break;
+          case "subscription":
+            void queryClient.invalidateQueries({ queryKey: ["subscriptions"] });
+            void queryClient.invalidateQueries({ queryKey: ["calendar"] });
+            break;
+          case "focus":
+            void queryClient.invalidateQueries({ queryKey: ["focus"] });
+            break;
+          case "habit":
+            void queryClient.invalidateQueries({ queryKey: ["habits"] });
+            break;
+          case "countdown":
+            void queryClient.invalidateQueries({ queryKey: ["countdowns"] });
+            break;
+          case "sticky":
+            void queryClient.invalidateQueries({ queryKey: ["stickies"] });
+            void queryClient.invalidateQueries({ queryKey: ["tasks"] });
             break;
           case "project":
           case "folder":
@@ -42,6 +83,12 @@ export function useDomainEvents(): void {
             break;
           case "setting":
             void queryClient.invalidateQueries({ queryKey: ["setting"] });
+            break;
+          case "savedsearch":
+            void queryClient.invalidateQueries({ queryKey: ["savedSearches"] });
+            break;
+          case "comment":
+            void queryClient.invalidateQueries({ queryKey: ["comments"] });
             break;
         }
       }).then((fn) => {

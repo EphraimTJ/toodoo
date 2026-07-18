@@ -10,9 +10,12 @@ import { useTags } from "../../tags/hooks/useTags";
 import { flattenTree, useTaskMutations, useViewTasks, type TreeRow } from "../hooks/useTasks";
 import { useViewOptions, type GroupMode, type SortMode } from "../hooks/useViewOptions";
 import { completedDateLabel, organizeTasks } from "../lib/sortGroup";
+import { downloadText } from "../../../lib/download";
+import { listToMarkdown } from "../../share/lib/shareText";
 import { BatchToolbar } from "./BatchToolbar";
 import { TaskAddBar } from "./TaskAddBar";
 import { TaskRow } from "./TaskRow";
+import { ViewModeToggle } from "./ViewModeToggle";
 
 const SMART_TITLES: Record<SmartView, string> = {
   today: "Today",
@@ -20,6 +23,7 @@ const SMART_TITLES: Record<SmartView, string> = {
   next7Days: "Next 7 Days",
   all: "All",
   completed: "Completed",
+  wontDo: "Won't Do",
   trash: "Trash",
 };
 
@@ -50,7 +54,8 @@ export function TaskListView({ view }: { view: ViewSelection }) {
 
   const isTrash = view.kind === "smart" && view.view === "trash";
   const isCompletedView = view.kind === "smart" && view.view === "completed";
-  const flatView = isTrash || isCompletedView;
+  const isWontDo = view.kind === "smart" && view.view === "wontDo";
+  const flatView = isTrash || isCompletedView || isWontDo;
 
   const groupChoices: [GroupMode, string][] =
     view.kind !== "project"
@@ -73,7 +78,9 @@ export function TaskListView({ view }: { view: ViewSelection }) {
       ? SMART_TITLES[view.view]
       : view.kind === "tag"
         ? `#${(tags ?? []).find((t) => t.id === view.tagId)?.name ?? "…"}`
-        : ((projects ?? []).find((p) => p.id === view.projectId)?.name ?? "…");
+        : view.kind === "project"
+          ? ((projects ?? []).find((p) => p.id === view.projectId)?.name ?? "…")
+          : "";
 
   const dragEnabled =
     view.kind === "project" && options.sort === "custom" && options.group === "none";
@@ -98,8 +105,10 @@ export function TaskListView({ view }: { view: ViewSelection }) {
     } else if (flatView) {
       for (const row of flattenTree(all)) out.push({ kind: "task", row });
     } else {
-      const active = all.filter((t) => t.status === "ACTIVE");
-      const completed = all.filter((t) => t.status === "COMPLETED");
+      // Note-kind items live in note lists / the sticky board, not task views.
+      const shown = all.filter((t) => t.kind !== "NOTE");
+      const active = shown.filter((t) => t.status === "ACTIVE");
+      const completed = shown.filter((t) => t.status === "COMPLETED");
       const groups = organizeTasks(active, options.sort, options.group, tags ?? [], projects ?? []);
       for (const group of groups) {
         if (group.label) out.push({ kind: "group", label: group.label });
@@ -142,7 +151,7 @@ export function TaskListView({ view }: { view: ViewSelection }) {
   };
 
   const list = (
-    <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto px-3 pb-16">
+    <div ref={scrollRef} data-testid="task-scroller" className="min-h-0 flex-1 overflow-y-auto px-3 pb-16">
       <div style={{ height: virtualizer.getTotalSize(), position: "relative" }}>
         {virtualizer.getVirtualItems().map((virtualRow) => {
           const item = items[virtualRow.index];
@@ -202,6 +211,21 @@ export function TaskListView({ view }: { view: ViewSelection }) {
         <h2 className="text-base font-semibold">{title}</h2>
         {!flatView && (
           <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+            {view.kind === "project" &&
+              (() => {
+                const project = (projects ?? []).find((p) => p.id === view.projectId);
+                return project ? <ViewModeToggle project={project} /> : null;
+              })()}
+            <button
+              type="button"
+              aria-label="Share list as markdown"
+              className="rounded-md px-2 py-1 text-xs text-text-muted hover:bg-surface"
+              onClick={() =>
+                downloadText(`${title}.md`, listToMarkdown(title, tasks ?? []), "text/markdown")
+              }
+            >
+              ↗
+            </button>
             <DropdownMenu.Root>
               <DropdownMenu.Trigger asChild>
                 <button
@@ -253,6 +277,16 @@ export function TaskListView({ view }: { view: ViewSelection }) {
                     </DropdownMenu.Item>
                   ))}
                   <DropdownMenu.Separator className="my-1 h-px bg-border" />
+                  {(["compact", "default", "detailed"] as const).map((d) => (
+                    <DropdownMenu.Item
+                      key={d}
+                      className={menuItem}
+                      onSelect={() => setOptions({ density: d })}
+                    >
+                      <span className="capitalize">{d}</span> density {options.density === d && "✓"}
+                    </DropdownMenu.Item>
+                  ))}
+                  <DropdownMenu.Separator className="my-1 h-px bg-border" />
                   <DropdownMenu.Item
                     className={menuItem}
                     onSelect={() => setOptions({ showCompleted: !options.showCompleted })}
@@ -268,11 +302,23 @@ export function TaskListView({ view }: { view: ViewSelection }) {
 
       {!flatView && <TaskAddBar />}
 
-      <DndContext sensors={sensors} onDragEnd={onDragEnd}>
-        <SortableContext items={activeIds} strategy={verticalListSortingStrategy}>
-          {list}
-        </SortableContext>
-      </DndContext>
+      <div
+        data-testid="task-list"
+        data-density={options.density}
+        className={`flex min-h-0 flex-1 flex-col ${
+          options.density === "compact"
+            ? "[&_[data-testid=task-row]]:py-0.5"
+            : options.density === "detailed"
+              ? "[&_[data-testid=task-row]]:py-2.5"
+              : ""
+        }`}
+      >
+        <DndContext sensors={sensors} onDragEnd={onDragEnd}>
+          <SortableContext items={activeIds} strategy={verticalListSortingStrategy}>
+            {list}
+          </SortableContext>
+        </DndContext>
+      </div>
 
       <BatchToolbar />
     </div>

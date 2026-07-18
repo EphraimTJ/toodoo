@@ -2,15 +2,19 @@ import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { AppearanceProvider } from "../components/AppearanceProvider";
 import { ThemeToggle } from "../components/ThemeToggle";
 
+// The toggle now writes the theme mode; AppearanceProvider applies `.dark`.
 function renderToggle() {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
   return render(
     <QueryClientProvider client={queryClient}>
-      <ThemeToggle />
+      <AppearanceProvider>
+        <ThemeToggle />
+      </AppearanceProvider>
     </QueryClientProvider>,
   );
 }

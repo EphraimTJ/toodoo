@@ -1,6 +1,6 @@
 [package]
 name = "toodoo"
-version = "0.1.0"
+version = "1.0.0"
 description = "Toodoo — local-first TickTick Pro clone"
 authors = ["Toodoo"]
 edition = "2021"
@@ -18,12 +18,29 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 tauri-build = { version = "2", features = [] }
 
 [dependencies]
-tauri = { version = "2", features = [] }
+tauri = { version = "2", features = ["tray-icon"] }
 tauri-plugin-opener = "2"
+tauri-plugin-notification = "2"
+tauri-plugin-global-shortcut = "2"
+tauri-plugin-deep-link = "2"
+tauri-plugin-autostart = "2"
+tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
+tauri-plugin-log = "2"
+log = "0.4"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 sqlx = { version = "0.8", default-features = false, features = ["runtime-tokio", "sqlite", "macros", "migrate", "chrono", "uuid"] }
-tokio = { version = "1", features = ["sync", "macros", "rt-multi-thread"] }
+tokio = { version = "1", features = ["sync", "macros", "rt-multi-thread", "time"] }
 uuid = { version = "1", features = ["v4", "serde"] }
 chrono = { version = "0.4", features = ["serde"] }
+chrono-tz = "0.10"
+rrule = "0.14"
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
+axum = "0.7"
+csv = "1"
 thiserror = "2"
+
+[target."cfg(windows)".dependencies]
+# Windows toast action buttons (Complete/Snooze). Already in the tree as
+# notify-rust's Windows backend — this direct dep adds nothing transitive.
+tauri-winrt-notification = "0.7"

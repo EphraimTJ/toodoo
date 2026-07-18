@@ -43,10 +43,42 @@ pub enum DomainEvent {
     TagDeleted { id: String },
     #[serde(rename = "task.tags_changed")]
     TaskTagsChanged { task_id: String },
+    #[serde(rename = "task.pinned")]
+    TaskPinned { id: String },
+    #[serde(rename = "reminder.changed")]
+    ReminderChanged { task_id: String },
+    #[serde(rename = "reminder.fired")]
+    ReminderFired { task_id: String, reminder_id: String },
+    #[serde(rename = "template.changed")]
+    TemplateChanged,
+    #[serde(rename = "section.changed")]
+    SectionChanged { project_id: String },
+    #[serde(rename = "filter.changed")]
+    FilterChanged,
+    #[serde(rename = "matrix.changed")]
+    MatrixChanged,
+    #[serde(rename = "calendar.changed")]
+    CalendarChanged,
+    #[serde(rename = "subscription.changed")]
+    SubscriptionChanged,
+    #[serde(rename = "focus.changed")]
+    FocusChanged,
+    #[serde(rename = "habit.changed")]
+    HabitChanged,
+    #[serde(rename = "habit.checkin_changed")]
+    HabitCheckinChanged { habit_id: String },
+    #[serde(rename = "countdown.changed")]
+    CountdownChanged,
+    #[serde(rename = "sticky.changed")]
+    StickyChanged,
     #[serde(rename = "seed.completed")]
     SeedCompleted,
     #[serde(rename = "setting.changed")]
     SettingChanged { key: String },
+    #[serde(rename = "savedsearch.changed")]
+    SavedSearchChanged,
+    #[serde(rename = "comment.changed")]
+    CommentChanged { task_id: String },
 }
 
 #[derive(Clone)]

@@ -2,15 +2,37 @@
 //! through Tauri commands (and later the local REST API). Every mutation
 //! appends to `changelog` and emits a `DomainEvent` on the bus.
 
+pub mod activity;
+pub mod backup;
+pub mod cal_subscriptions;
+pub mod calendar;
 pub mod check_items;
+pub mod comments;
+pub mod countdowns;
 pub mod db;
+pub mod exporters;
+pub mod filter_rule;
+pub mod filters;
+pub mod focus;
 pub mod folders;
+pub mod habits;
+pub mod ics;
+pub mod importers;
+pub mod matrix;
 pub mod projects;
+pub mod query;
+pub mod recurrence;
+pub mod reminders;
+pub mod saved_searches;
 pub mod search;
+pub mod sections;
 pub mod seed;
+pub mod stats;
+pub mod sticky_notes;
 pub mod settings;
 pub mod tags;
 pub mod tasks;
+pub mod templates;
 
 use chrono::{SecondsFormat, Utc};
 use sqlx::SqliteConnection;
