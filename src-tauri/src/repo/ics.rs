@@ -100,6 +100,14 @@ fn parse_dt(value: &str, params: &[(String, String)]) -> Option<(String, bool)> 
 }
 
 /// Parse an ICS document into its VEVENTs. Malformed events are skipped.
+/// Whether `text` is structurally an iCalendar document (has a
+/// `BEGIN:VCALENDAR` line after unfolding). Gate for the subscription-refresh
+/// path: an HTML error page or truncated response parses to zero events, which
+/// must not be mistaken for a legitimately empty calendar.
+pub fn is_calendar(text: &str) -> bool {
+    unfold(text).iter().any(|l| l.trim().eq_ignore_ascii_case("BEGIN:VCALENDAR"))
+}
+
 pub fn parse(text: &str) -> Vec<IcsEvent> {
     let mut events = Vec::new();
     let mut current: Option<IcsEvent> = None;
@@ -239,6 +247,15 @@ pub fn generate(events: &[IcsEvent]) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn is_calendar_accepts_ics_and_rejects_non_ics() {
+        assert!(is_calendar("BEGIN:VCALENDAR\r\nEND:VCALENDAR\r\n")); // empty but valid
+        assert!(is_calendar("begin:vcalendar\nend:vcalendar\n")); // case-insensitive
+        assert!(!is_calendar("<html><body><h1>404 Not Found</h1></body></html>"));
+        assert!(!is_calendar(""));
+        assert!(!is_calendar("BEGIN:VEVENT\r\nSUMMARY:orphan\r\nEND:VEVENT\r\n")); // truncated fragment
+    }
 
     #[test]
     fn parses_a_timed_event_with_uid_and_fields() {

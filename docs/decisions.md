@@ -5,6 +5,32 @@ ambiguity we resolved by judgment call), with the reasoning. Newest entries at
 the top. Never rewrite history — if a decision is reversed, add a new entry
 that supersedes the old one.
 
+## 2026-07-18 — Calendar-feed refresh is validate-before-replace (failures keep the cache)
+
+Adversarial-review follow-up (round 2, [medium]): a subscription refresh
+deleted every cached event, inserted whatever `ics::parse` produced, and
+stamped `last_fetch` — and the fetch never checked HTTP status. A 404/500
+HTML page parses to zero events, so a transient feed outage silently erased
+the user's subscribed calendar while recording a "successful" refresh. Now:
+
+- **HTTP status is enforced** (`error_for_status`) — a non-2xx response is a
+  refresh error, never fed to the parser.
+- **Structural validation before replacement:** `store_subscription_events`
+  rejects any text without a `BEGIN:VCALENDAR` line (pure `ics::is_calendar`)
+  *before* deleting anything — the cache and `last_fetch` survive untouched.
+  A valid calendar with **zero VEVENTs is a legitimate empty feed** and still
+  replaces the cache (deliberate: an intentionally cleared feed must clear).
+- **Failures are logged, not swallowed:** the scheduler's `refresh_due` logs
+  `[calendar] refresh … failed (cache kept)` to the rotating toodoo.log.
+- `last_fetch` keeps meaning "last **successful** fetch" (no schema change);
+  a failing feed retries on the normal due cycle, same as a network error
+  always has — no new retry storm.
+
+Covered by `invalid_feed_response_preserves_cache_and_last_fetch` (HTML,
+truncated, and legit-empty bodies) and
+`refresh_rejects_http_error_status_and_keeps_cache` (real HTTP 500 via a
+spawned local server).
+
 ## 2026-07-18 — REST recurring completion requires an occurrence key (supersedes the 2026-07-17 "REST complete endpoint stays keyless" limitation)
 
 Adversarial-review follow-up (round 2, [high]): the documented limitation — a

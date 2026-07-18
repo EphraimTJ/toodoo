@@ -166,12 +166,23 @@ async fn insert_event(
 
 /// Replace a subscription's cached events with the events parsed from `ics_text`
 /// and stamp `last_fetch`. Pure of the network so it can be tested with fixtures.
+///
+/// A response that is not structurally a VCALENDAR (HTML error page, truncated
+/// body) is rejected before anything is deleted — the previous cache and
+/// `last_fetch` survive, so a transient feed failure can't erase the user's
+/// calendar. A valid calendar with zero events is a legitimate empty feed and
+/// still replaces the cache.
 pub async fn store_subscription_events(
     pool: &SqlitePool,
     bus: &EventBus,
     subscription_id: &str,
     ics_text: &str,
 ) -> Result<usize> {
+    if !ics::is_calendar(ics_text) {
+        return Err(RepoError::Invalid(
+            "feed response is not an ICS calendar (kept the previously cached events)".into(),
+        ));
+    }
     let events = ics::parse(ics_text);
     let ts = now();
     let mut tx = pool.begin().await?;
@@ -204,6 +215,8 @@ pub async fn refresh_subscription(pool: &SqlitePool, bus: &EventBus, id: &str) -
     let text = reqwest::get(&url)
         .await
         .map_err(|e| RepoError::Invalid(format!("fetch {url} failed: {e}")))?
+        .error_for_status()
+        .map_err(|e| RepoError::Invalid(format!("fetch {url} failed: {e}")))?
         .text()
         .await
         .map_err(|e| RepoError::Invalid(format!("read {url} failed: {e}")))?;
@@ -211,8 +224,8 @@ pub async fn refresh_subscription(pool: &SqlitePool, bus: &EventBus, id: &str) -
 }
 
 /// Refresh every subscription whose interval has elapsed. Individual failures
-/// are swallowed so one bad feed doesn't stall the others (called by the
-/// scheduler).
+/// are logged but don't stall the others (called by the scheduler); a failed
+/// feed keeps its cache and, with `last_fetch` unstamped, retries next pass.
 pub async fn refresh_due(pool: &SqlitePool, bus: &EventBus) -> Result<()> {
     let subs: Vec<(String, Option<String>, i64)> = sqlx::query_as(
         "SELECT id, last_fetch, refresh_min FROM cal_subscriptions
@@ -229,7 +242,9 @@ pub async fn refresh_due(pool: &SqlitePool, bus: &EventBus) -> Result<()> {
                 .unwrap_or(true),
         };
         if due {
-            let _ = refresh_subscription(pool, bus, &id).await;
+            if let Err(e) = refresh_subscription(pool, bus, &id).await {
+                log::warn!("[calendar] refresh of subscription {id} failed (cache kept): {e}");
+            }
         }
     }
     Ok(())
@@ -339,6 +354,81 @@ mod tests {
         let feed: Vec<_> = items.iter().filter(|i| i.kind == "EVENT").collect();
         assert_eq!(feed.len(), 2);
         assert!(feed.iter().all(|i| !i.editable));
+    }
+
+    #[tokio::test]
+    async fn invalid_feed_response_preserves_cache_and_last_fetch() {
+        let pool = connect_in_memory().await.unwrap();
+        let bus = EventBus::new();
+        let sub = add_subscription(&pool, &bus, "https://x/f.ics", "Work", None, Some(30))
+            .await
+            .unwrap();
+        store_subscription_events(&pool, &bus, &sub.id, FIXTURE).await.unwrap();
+        let last_fetch = list_subscriptions(&pool).await.unwrap()[0].last_fetch.clone();
+        assert!(last_fetch.is_some());
+
+        let cached = |pool: &SqlitePool| {
+            let pool = pool.clone();
+            let id = sub.id.clone();
+            async move {
+                sqlx::query_scalar::<_, i64>(
+                    "SELECT COUNT(*) FROM cal_events WHERE subscription_id = ?",
+                )
+                .bind(&id)
+                .fetch_one(&pool)
+                .await
+                .unwrap()
+            }
+        };
+
+        // An HTML error page (what a 404/500 body looks like) is rejected …
+        let html = "<html><body><h1>503 Service Unavailable</h1></body></html>";
+        assert!(store_subscription_events(&pool, &bus, &sub.id, html).await.is_err());
+        // … as is a truncated non-calendar fragment …
+        assert!(store_subscription_events(&pool, &bus, &sub.id, "BEGIN:VEV").await.is_err());
+        // … and neither touched the cache or the last-success stamp.
+        assert_eq!(cached(&pool).await, 2);
+        assert_eq!(list_subscriptions(&pool).await.unwrap()[0].last_fetch, last_fetch);
+
+        // A structurally valid but EMPTY calendar is a legitimate feed state
+        // and does replace the cache.
+        let empty = "BEGIN:VCALENDAR\r\nVERSION:2.0\r\nEND:VCALENDAR\r\n";
+        assert_eq!(store_subscription_events(&pool, &bus, &sub.id, empty).await.unwrap(), 0);
+        assert_eq!(cached(&pool).await, 0);
+    }
+
+    #[tokio::test]
+    async fn refresh_rejects_http_error_status_and_keeps_cache() {
+        // Serve a 500 (with an HTML body) the way a broken feed host would.
+        let app = axum::Router::new().route(
+            "/feed.ics",
+            axum::routing::get(|| async {
+                (
+                    axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                    "<html><body>boom</body></html>",
+                )
+            }),
+        );
+        let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
+        let addr = listener.local_addr().unwrap();
+        tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+
+        let pool = connect_in_memory().await.unwrap();
+        let bus = EventBus::new();
+        let sub = add_subscription(&pool, &bus, &format!("http://{addr}/feed.ics"), "Bad", None, None)
+            .await
+            .unwrap();
+        store_subscription_events(&pool, &bus, &sub.id, FIXTURE).await.unwrap();
+
+        let err = refresh_subscription(&pool, &bus, &sub.id).await;
+        assert!(err.is_err(), "HTTP 500 must be a refresh error, got {err:?}");
+        let count: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM cal_events WHERE subscription_id = ?")
+                .bind(&sub.id)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(count, 2, "cache must survive a failed refresh");
     }
 
     #[tokio::test]
