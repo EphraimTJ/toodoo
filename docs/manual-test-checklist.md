@@ -58,9 +58,20 @@ Legend: ⬜ untested · ✅ pass · ❌ fail (file an issue)
 - ✅ When a reminder fires, a native notification appears. (Round 3 PASS on the
   installed build: log shows notification.show() ok for both seeded
   reminders; test-notification button works.)
-- ⬜ **Where the OS supports action buttons** (record which): Complete and Snooze
-  buttons act correctly. (Unblocked now — record the observed Windows
-  behavior in decisions.md either way.)
+- ⬜ **Windows toast action buttons (now wired via WinRT — round 4):**
+  - ⬜ A reminder toast shows **Complete** and **Snooze Nm** buttons (N = the
+    Settings → Notifications snooze duration). Press **Complete** on the live
+    toast → the task completes (recurring: advances one occurrence only), log
+    shows `[notify-action]`.
+  - ⬜ Let a toast slide into the **notification center (Action Center)**;
+    ~2 min later press **Snooze** there → the reminder re-fires after the
+    configured minutes. (Only works while Toodoo is running — by design; see
+    the 2026-07-18 decisions.md entry.)
+  - ⬜ **Body click** (not a button) → main window opens/focuses on that task.
+  - ⬜ Toggle "Complete / Snooze buttons" OFF → the next toast has no buttons
+    (plain notification).
+  - ⬜ Change **Snooze duration** to 30 → both the native button label and the
+    in-app toast button read "Snooze 30m" and reschedule by 30 min.
 - ✅ **Everywhere**: an in-app Complete / Snooze toast also appears — Complete
   closes the task, Snooze 10m reschedules it. (Round 3 PASS: in-app toasts
   fire reliably. New: the "toodoo" chirp plays on the in-app toast —
@@ -138,40 +149,3 @@ Legend: ⬜ untested · ✅ pass · ❌ fail (file an issue)
 - ⬜ OS toast action buttons: record observed Windows behavior (buttons or
   not) — either result gets a decisions.md entry.
 - ⬜ Perf audit + signing decision (see Release polish above).
-
-## Prompt for the next session (copy-paste this to a fresh Claude session)
-
-```
-Read CLAUDE.md, docs/pre-launch.md, docs/manual-test-checklist.md, and
-docs/decisions.md (the 2026-07-17/18 entries are the recent state). Branch:
-v1.0-fixes. Do NOT tag v1.0.0 without my explicit go-ahead.
-
-Where things stand (short version — the docs above are authoritative):
-- All 5 adversarial-review findings are fixed and tested (restore safety,
-  completion idempotency, reminder claim/ack, atomic import, imported tags).
-- Reminders + in-app toasts work on my installed build; there is a
-  test-notification button and a "toodoo" chirp (3 variants, Settings →
-  Desktop) — I owe a default-variant choice in the checklist.
-- The long white-pop-out saga is CLOSED: intermittent WebView2 build() hang,
-  pill default confirmed working on my machine, protected by a pre-armed
-  watchdog (unit-tested), auto-fallback to in-app panels after 2 failures,
-  and a Pill/Solid/Windowed style setting. Diag hooks:
-  TOODOO_DIAG_WINDOWS=1|watchdog|styles, TOODOO_DIAG_NOTIFY=1. Rotating log:
-  %LOCALAPPDATA%\com.toodoo.app\logs\toodoo.log (Settings → Advanced opens it).
-- New since phase-12E: TickTick-style focus/sticky pill windows (FocusProvider
-  owns the single timer; focus-state/focus-cmd events), resizable panes
-  (layout:panes), pomodoro idle-clock fix + quick duration picker, sample-data
-  seed (first-run card + Settings → Advanced), always-on file logging.
-- Suites at HEAD: cargo 205+1 ignored (clippy clean), vitest 146,
-  playwright 19, tsc/build clean. Verify everything against the INSTALLED
-  NSIS build (dev mode has repeatedly lied on this machine); rebuild with
-  `npm run tauri build`, silent-install with `/S`.
-
-My job this session: I will run the "Round-3b final re-test (2026-07-18)"
-section of docs/manual-test-checklist.md and report results (with toodoo.log
-for any failure). Your job: fix whatever I report (plan mode first, one
-commit per fix, packaged-build verification), set my chosen chirp variant as
-the default, then walk the release procedure in docs/pre-launch.md §5
-(inventory audit, suites, gates, README, signing decision) and prepare —
-but do not create — the v1.0.0 tag and the merge plan to main.
-```

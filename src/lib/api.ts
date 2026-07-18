@@ -334,6 +334,8 @@ export interface DesktopConfig {
   quickAddHotkey: string;
   autostart: boolean;
   notifActions: boolean;
+  /** Minutes the notification Snooze button reschedules by (5/10/30/60). */
+  notifSnoozeMin: number;
   /** Render focus/sticky pop-outs as in-app floating panels (webview fallback). */
   simplePopouts: boolean;
   /** Native pop-out chrome: "pill" | "solid" (frameless opaque) | "windowed". */
@@ -720,6 +722,7 @@ export interface Api {
   desktopConfig(): Promise<DesktopConfig>;
   setQuickAddHotkey(accel: string): Promise<DesktopConfig>;
   setNotifActions(on: boolean): Promise<DesktopConfig>;
+  setNotifSnoozeMin(minutes: number): Promise<DesktopConfig>;
   setSimplePopouts(on: boolean): Promise<DesktopConfig>;
   setPopoutStyle(style: string): Promise<DesktopConfig>;
   setAutostart(on: boolean): Promise<DesktopConfig>;
@@ -987,6 +990,7 @@ const tauriApi: Api = {
   desktopConfig: () => invoke("desktop_config"),
   setQuickAddHotkey: (accel) => invoke("set_quick_add_hotkey", { accel }),
   setNotifActions: (on) => invoke("set_notif_actions", { on }),
+  setNotifSnoozeMin: (minutes) => invoke("set_notif_snooze_min", { minutes }),
   setSimplePopouts: (on) => invoke("set_simple_popouts", { on }),
   setPopoutStyle: (style) => invoke("set_popout_style", { style }),
   setAutostart: (on) => invoke("set_autostart", { on }),
@@ -1105,6 +1109,7 @@ function browserStubApi(): Api {
     quickAddHotkey: "CmdOrCtrl+Shift+A",
     autostart: false,
     notifActions: true,
+    notifSnoozeMin: 10,
     simplePopouts: false,
     popoutStyle: "pill",
   };
@@ -2399,6 +2404,10 @@ function browserStubApi(): Api {
     },
     setNotifActions: async (on) => {
       desktopCfg.notifActions = on;
+      return { ...desktopCfg };
+    },
+    setNotifSnoozeMin: async (minutes) => {
+      desktopCfg.notifSnoozeMin = Math.min(720, Math.max(1, minutes));
       return { ...desktopCfg };
     },
     setAutostart: async (on) => {

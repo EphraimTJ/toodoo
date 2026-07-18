@@ -38,3 +38,8 @@ reqwest = { version = "0.12", default-features = false, features = ["rustls-tls"
 axum = "0.7"
 csv = "1"
 thiserror = "2"
+
+[target."cfg(windows)".dependencies]
+# Windows toast action buttons (Complete/Snooze). Already in the tree as
+# notify-rust's Windows backend — this direct dep adds nothing transitive.
+tauri-winrt-notification = "0.7"

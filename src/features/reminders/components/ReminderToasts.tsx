@@ -2,11 +2,14 @@ import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { api } from "../../../lib/api";
 import { playChirp, useNotifSound } from "../hooks/useNotifSound";
+import { useDesktopConfig } from "../../settings/hooks/useDesktopConfig";
 
 interface Fired {
   taskId: string;
   reminderId: string;
   title: string;
+  /** The task's due-else-start at fire time — Complete's idempotency key. */
+  occurrence?: string | null;
 }
 
 /**
@@ -19,6 +22,7 @@ export function ReminderToasts() {
   const queryClient = useQueryClient();
   const [items, setItems] = useState<Fired[]>([]);
   const { sound } = useNotifSound();
+  const snoozeMin = useDesktopConfig().query.data?.notifSnoozeMin ?? 10;
 
   // The "toodoo" chirp plays once per newly-appended toast (in-app path only;
   // native toasts keep the OS sound — docs/decisions.md).
@@ -54,12 +58,12 @@ export function ReminderToasts() {
   const dismiss = (idx: number) => setItems((prev) => prev.filter((_, i) => i !== idx));
 
   const complete = async (f: Fired, idx: number) => {
-    await api.completeTask(f.taskId);
+    await api.completeTask(f.taskId, f.occurrence ?? undefined);
     void queryClient.invalidateQueries({ queryKey: ["tasks"] });
     dismiss(idx);
   };
   const snooze = async (f: Fired, idx: number) => {
-    await api.snoozeReminder(f.reminderId, new Date(Date.now() + 10 * 60_000).toISOString());
+    await api.snoozeReminder(f.reminderId, new Date(Date.now() + snoozeMin * 60_000).toISOString());
     dismiss(idx);
   };
 
@@ -102,7 +106,7 @@ export function ReminderToasts() {
                 className="rounded-md border border-border px-2.5 py-1 text-xs hover:bg-bg"
                 onClick={() => void snooze(f, idx)}
               >
-                Snooze 10m
+                Snooze {snoozeMin}m
               </button>
             </div>
           )}

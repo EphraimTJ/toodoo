@@ -39,6 +39,10 @@ pub struct DueReminder {
     pub fire_at: String,
     /// Delivery attempts already made for this fire time (0 = never tried).
     pub fire_attempts: i64,
+    /// The task's due-else-start as currently persisted — the occurrence key a
+    /// toast "Complete" action carries so the recurring idempotency guard
+    /// applies to notification clicks too.
+    pub occurrence: Option<String>,
 }
 
 // Row shape for the scheduler scan: reminder joined to its task.
@@ -159,6 +163,7 @@ pub async fn due_reminders(pool: &SqlitePool, now_instant: DateTime<Utc>) -> Res
             task_title: row.task_title.clone(),
             fire_at: fire.to_rfc3339_opts(chrono::SecondsFormat::Millis, true),
             fire_attempts: row.fire_attempts,
+            occurrence: row.due_at.clone().or_else(|| row.start_at.clone()),
         });
     }
     Ok(due)
@@ -215,11 +220,33 @@ async fn claim(
     Ok(Some(attempts))
 }
 
+/// Everything a native toast needs: identity for action buttons, display text,
+/// and the presentation config read once per dispatch pass. Built by
+/// `dispatch_due` so the backend impl stays sync and dumb.
+#[derive(Debug, Clone)]
+pub struct ToastRequest {
+    pub reminder_id: String,
+    pub task_id: String,
+    /// Toast title (the app name).
+    pub title: String,
+    /// Toast body (the task title).
+    pub body: String,
+    /// The task's due-else-start — carried by the Complete button.
+    pub occurrence: Option<String>,
+    /// Minutes the Snooze button reschedules by (`notif.snoozeMin` setting).
+    pub snooze_min: i64,
+    /// Whether action buttons should be attached (`notif.actions` setting).
+    pub actions: bool,
+}
+
 /// Native delivery hook, injectable so the claim/ack state machine is
 /// unit-testable without the OS notification API.
 pub trait NotificationBackend: Send + Sync {
-    fn show(&self, title: &str, body: &str) -> std::result::Result<(), String>;
+    fn show(&self, req: &ToastRequest) -> std::result::Result<(), String>;
 }
+
+/// Snooze minutes offered/used when `notif.snoozeMin` is unset or invalid.
+pub const DEFAULT_SNOOZE_MIN: i64 = 10;
 
 /// One reminder's dispatch result for this tick — the caller (the Tauri
 /// scheduler) emits the in-app toast/bus events from it.
@@ -246,6 +273,16 @@ pub async fn dispatch_due(
 ) -> Result<Vec<DispatchOutcome>> {
     let due = due_reminders(pool, now_instant).await?;
     log::info!("[reminders] poll @ {}: {} due", now_instant.to_rfc3339(), due.len());
+    // Presentation config, read once per pass (defaults match desktop::config).
+    let actions = super::settings::get_setting(pool, crate::desktop::KEY_NOTIF)
+        .await?
+        .and_then(|v| v.as_bool())
+        .unwrap_or(true);
+    let snooze_min = super::settings::get_setting(pool, crate::desktop::KEY_NOTIF_SNOOZE)
+        .await?
+        .and_then(|v| v.as_i64())
+        .filter(|m| (1..=720).contains(m))
+        .unwrap_or(DEFAULT_SNOOZE_MIN);
     let mut outcomes = Vec::new();
     for r in due {
         let Some(attempts) = claim(pool, &r.reminder_id, now_instant, r.fire_attempts).await? else {
@@ -255,7 +292,16 @@ pub async fn dispatch_due(
             "[reminders] dispatch notification (attempt {attempts}): reminder={} task={} title={:?}",
             r.reminder_id, r.task_id, r.task_title
         );
-        let (delivered, gave_up) = match backend.show("Toodoo", &r.task_title) {
+        let req = ToastRequest {
+            reminder_id: r.reminder_id.clone(),
+            task_id: r.task_id.clone(),
+            title: "Toodoo".to_string(),
+            body: r.task_title.clone(),
+            occurrence: r.occurrence.clone(),
+            snooze_min,
+            actions,
+        };
+        let (delivered, gave_up) = match backend.show(&req) {
             Ok(()) => {
                 log::info!("[reminders] notification.show() ok");
                 mark_fired(pool, &r.reminder_id, &r.fire_at).await?;
@@ -281,6 +327,46 @@ pub async fn dispatch_due(
         outcomes.push(DispatchOutcome { first_attempt: attempts == 1, reminder: r, delivered, gave_up });
     }
     Ok(outcomes)
+}
+
+/// Execute a toast action-button click. `Complete` flows through the normal
+/// completion path — including the recurring occurrence-key idempotency guard,
+/// via the occurrence the toast carried — and `Snooze` through the normal
+/// snooze path. `OpenTask` is UI-only (focus + navigate) and handled by the
+/// Tauri caller; here it just leaves the audit line.
+pub async fn dispatch_toast_action(
+    pool: &SqlitePool,
+    bus: &EventBus,
+    action: crate::toast_actions::ToastAction,
+    tz_off_min: i32,
+    now_instant: DateTime<Utc>,
+) -> Result<()> {
+    use crate::toast_actions::ToastAction;
+    match action {
+        ToastAction::Complete { task_id, expected_occurrence } => {
+            log::info!(
+                "[notify-action] Complete: task={task_id} expectedOccurrence={expected_occurrence:?}"
+            );
+            super::tasks::complete_task_with(
+                pool,
+                bus,
+                &task_id,
+                tz_off_min,
+                expected_occurrence.as_deref(),
+            )
+            .await?;
+        }
+        ToastAction::Snooze { reminder_id, minutes } => {
+            let until = (now_instant + Duration::minutes(minutes))
+                .to_rfc3339_opts(chrono::SecondsFormat::Millis, true);
+            log::info!("[notify-action] Snooze: reminder={reminder_id} until={until}");
+            snooze(pool, bus, &reminder_id, &until).await?;
+        }
+        ToastAction::OpenTask { task_id } => {
+            log::info!("[notify-action] OpenTask: task={task_id} (UI handled by caller)");
+        }
+    }
+    Ok(())
 }
 
 pub async fn list_reminders(pool: &SqlitePool, task_id: &str) -> Result<Vec<Reminder>> {
@@ -496,19 +582,30 @@ mod tests {
 
     // ---- Claim/ack dispatch state machine ----------------------------------
 
-    /// Scripted backend: pops one result per show() call; empty = always Ok.
-    struct Script(std::sync::Mutex<Vec<std::result::Result<(), String>>>);
+    /// Scripted backend: pops one result per show() call (empty = always Ok)
+    /// and captures every `ToastRequest` it was shown.
+    struct Script {
+        queue: std::sync::Mutex<Vec<std::result::Result<(), String>>>,
+        seen: std::sync::Mutex<Vec<ToastRequest>>,
+    }
     impl Script {
         fn failing_times(n: usize) -> Self {
-            Script(std::sync::Mutex::new(vec![Err("boom".to_string()); n]))
+            Script {
+                queue: std::sync::Mutex::new(vec![Err("boom".to_string()); n]),
+                seen: std::sync::Mutex::new(Vec::new()),
+            }
         }
         fn always_ok() -> Self {
-            Script(std::sync::Mutex::new(Vec::new()))
+            Script { queue: std::sync::Mutex::new(Vec::new()), seen: std::sync::Mutex::new(Vec::new()) }
+        }
+        fn requests(&self) -> Vec<ToastRequest> {
+            self.seen.lock().unwrap().clone()
         }
     }
     impl NotificationBackend for Script {
-        fn show(&self, _title: &str, _body: &str) -> std::result::Result<(), String> {
-            let mut queue = self.0.lock().unwrap();
+        fn show(&self, req: &ToastRequest) -> std::result::Result<(), String> {
+            self.seen.lock().unwrap().push(req.clone());
+            let mut queue = self.queue.lock().unwrap();
             if queue.is_empty() { Ok(()) } else { queue.remove(0) }
         }
     }
@@ -621,6 +718,110 @@ mod tests {
         let out = dispatch_due(&pool, &Script::always_ok(), t("2026-03-10T08:10:00Z")).await.unwrap();
         assert_eq!(out.len(), 1);
         assert!(out[0].first_attempt && out[0].delivered);
+    }
+
+    // ---- Toast action buttons ----------------------------------------------
+
+    #[tokio::test]
+    async fn toast_requests_carry_occurrence_and_configured_snooze() {
+        let (pool, bus) = setup().await;
+        let task = timed_task(&pool, &bus, "2026-03-10T17:00:00.000Z").await;
+        add_reminder(&pool, &bus, &task, "ABS", Some("2026-03-10T08:00:00.000Z"), None).await.unwrap();
+        crate::repo::settings::set_setting(&pool, &bus, "notif.snoozeMin", serde_json::json!(30))
+            .await
+            .unwrap();
+
+        let backend = Script::always_ok();
+        dispatch_due(&pool, &backend, t("2026-03-10T08:00:00Z")).await.unwrap();
+        let reqs = backend.requests();
+        assert_eq!(reqs.len(), 1);
+        assert_eq!(reqs[0].task_id, task);
+        assert_eq!(reqs[0].occurrence.as_deref(), Some("2026-03-10T17:00:00.000Z"));
+        assert_eq!(reqs[0].snooze_min, 30);
+        assert!(reqs[0].actions); // default on
+        assert_eq!(reqs[0].body, "meeting");
+    }
+
+    #[tokio::test]
+    async fn toast_complete_action_respects_the_recurring_idempotency_guard() {
+        use crate::toast_actions::ToastAction;
+        let (pool, bus) = setup().await;
+        let task = create_task(
+            &pool,
+            &bus,
+            NewTask {
+                due_at: Some("2026-03-10T00:00:00.000Z".into()),
+                rrule: Some("FREQ=DAILY".into()),
+                ..quick("inbox", "water plants")
+            },
+        )
+        .await
+        .unwrap();
+
+        // The action carries the occurrence the toast was rendered for.
+        let action = ToastAction::Complete {
+            task_id: task.id.clone(),
+            expected_occurrence: Some("2026-03-10T00:00:00.000Z".into()),
+        };
+        dispatch_toast_action(&pool, &bus, action.clone(), 0, t("2026-03-10T07:00:00Z"))
+            .await
+            .unwrap();
+        let advanced = crate::repo::tasks::get_task(&pool, &task.id).await.unwrap();
+        assert_eq!(advanced.due_at.as_deref(), Some("2026-03-11T00:00:00.000Z"));
+
+        // A second click on the same (now stale) toast is a safe no-op.
+        dispatch_toast_action(&pool, &bus, action, 0, t("2026-03-10T07:00:05Z")).await.unwrap();
+        let after = crate::repo::tasks::get_task(&pool, &task.id).await.unwrap();
+        assert_eq!(after.due_at.as_deref(), Some("2026-03-11T00:00:00.000Z"));
+        let completions: i64 =
+            sqlx::query_scalar("SELECT COUNT(*) FROM task_completions WHERE task_id = ?")
+                .bind(&task.id)
+                .fetch_one(&pool)
+                .await
+                .unwrap();
+        assert_eq!(completions, 1);
+    }
+
+    #[tokio::test]
+    async fn toast_snooze_action_reschedules_by_the_carried_minutes() {
+        use crate::toast_actions::ToastAction;
+        let (pool, bus) = setup().await;
+        let task = timed_task(&pool, &bus, "2026-03-10T17:00:00.000Z").await;
+        let r = add_reminder(&pool, &bus, &task, "ABS", Some("2026-03-10T08:00:00.000Z"), None)
+            .await
+            .unwrap();
+        let backend = Script::always_ok();
+        dispatch_due(&pool, &backend, t("2026-03-10T08:00:00Z")).await.unwrap();
+
+        dispatch_toast_action(
+            &pool,
+            &bus,
+            ToastAction::Snooze { reminder_id: r.id.clone(), minutes: 30 },
+            0,
+            t("2026-03-10T08:00:10Z"),
+        )
+        .await
+        .unwrap();
+
+        // Silent until now+30m, fires there as a fresh first attempt.
+        assert!(dispatch_due(&pool, &backend, t("2026-03-10T08:20:00Z")).await.unwrap().is_empty());
+        let out = dispatch_due(&pool, &backend, t("2026-03-10T08:30:10Z")).await.unwrap();
+        assert_eq!(out.len(), 1);
+        assert!(out[0].first_attempt && out[0].delivered);
+    }
+
+    #[tokio::test]
+    async fn toast_body_click_parses_to_open_task_and_is_a_repo_no_op() {
+        use crate::toast_actions::{parse, ToastAction};
+        let (pool, bus) = setup().await;
+        let task = timed_task(&pool, &bus, "2026-03-10T17:00:00.000Z").await;
+
+        let action = parse(None, &task);
+        assert_eq!(action, ToastAction::OpenTask { task_id: task.clone() });
+        // Repo-side it only logs; nothing about the task changes.
+        dispatch_toast_action(&pool, &bus, action, 0, t("2026-03-10T08:00:00Z")).await.unwrap();
+        let after = crate::repo::tasks::get_task(&pool, &task).await.unwrap();
+        assert_eq!(after.status, "ACTIVE");
     }
 
     #[tokio::test]

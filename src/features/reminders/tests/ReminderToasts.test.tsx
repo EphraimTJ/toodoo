@@ -22,6 +22,29 @@ function fireReminder(detail: { taskId: string; reminderId: string; title: strin
 }
 
 describe("ReminderToasts", () => {
+  it("snoozes by the configured duration, not a hardcoded 10m", async () => {
+    const { vi } = await import("vitest");
+    const user = userEvent.setup();
+    await api.setNotifSnoozeMin(30);
+    const spy = vi.spyOn(api, "snoozeReminder").mockResolvedValue(undefined);
+    try {
+      renderToasts();
+      fireReminder({ taskId: "t-x", reminderId: "r-snooze", title: "Snooze me" });
+
+      const btn = await screen.findByRole("button", { name: "Snooze 30m" });
+      const before = Date.now();
+      await user.click(btn);
+      await waitFor(() => expect(spy).toHaveBeenCalledTimes(1));
+      const until = new Date(spy.mock.calls[0][1]).getTime();
+      const minutes = (until - before) / 60_000;
+      expect(minutes).toBeGreaterThan(29);
+      expect(minutes).toBeLessThan(31);
+    } finally {
+      spy.mockRestore();
+      await api.setNotifSnoozeMin(10);
+    }
+  });
+
   it("shows a fired reminder and Complete resolves the task", async () => {
     const user = userEvent.setup();
     const task = await api.createTask({ projectId: "inbox", title: `remind ${Date.now()}` });

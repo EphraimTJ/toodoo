@@ -27,6 +27,8 @@ use crate::repo::settings::{get_setting, set_setting};
 pub const KEY_HOTKEY: &str = "hotkey.quickAdd";
 pub const KEY_AUTOSTART: &str = "autostart.enabled";
 pub const KEY_NOTIF: &str = "notif.actions";
+/// Minutes a notification's Snooze button reschedules by (5/10/30/60 in the UI).
+pub const KEY_NOTIF_SNOOZE: &str = "notif.snoozeMin";
 /// "Use simple in-app pop-outs": render focus/sticky pop-outs as in-app
 /// floating panels instead of native windows (the webview-load fallback).
 pub const KEY_SIMPLE_POPOUTS: &str = "popout.simple";
@@ -40,6 +42,7 @@ pub struct DesktopConfig {
     pub quick_add_hotkey: String,
     pub autostart: bool,
     pub notif_actions: bool,
+    pub notif_snooze_min: i64,
     pub simple_popouts: bool,
     pub popout_style: String,
 }
@@ -73,6 +76,11 @@ pub async fn config(pool: &SqlitePool) -> Result<DesktopConfig> {
         quick_add_hotkey: hotkey,
         autostart: get_setting(pool, KEY_AUTOSTART).await?.and_then(|v| v.as_bool()).unwrap_or(false),
         notif_actions: get_setting(pool, KEY_NOTIF).await?.and_then(|v| v.as_bool()).unwrap_or(true),
+        notif_snooze_min: get_setting(pool, KEY_NOTIF_SNOOZE)
+            .await?
+            .and_then(|v| v.as_i64())
+            .filter(|m| (1..=720).contains(m))
+            .unwrap_or(crate::repo::reminders::DEFAULT_SNOOZE_MIN),
         simple_popouts: get_setting(pool, KEY_SIMPLE_POPOUTS)
             .await?
             .and_then(|v| v.as_bool())
@@ -107,6 +115,12 @@ pub async fn set_hotkey(pool: &SqlitePool, bus: &EventBus, accel: &str) -> Resul
 
 pub async fn set_notif_actions(pool: &SqlitePool, bus: &EventBus, on: bool) -> Result<DesktopConfig> {
     set_setting(pool, bus, KEY_NOTIF, serde_json::json!(on)).await?;
+    config(pool).await
+}
+
+pub async fn set_notif_snooze_min(pool: &SqlitePool, bus: &EventBus, minutes: i64) -> Result<DesktopConfig> {
+    let minutes = minutes.clamp(1, 720);
+    set_setting(pool, bus, KEY_NOTIF_SNOOZE, serde_json::json!(minutes)).await?;
     config(pool).await
 }
 

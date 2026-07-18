@@ -5,6 +5,45 @@ ambiguity we resolved by judgment call), with the reasoning. Newest entries at
 the top. Never rewrite history — if a decision is reversed, add a new entry
 that supersedes the old one.
 
+## 2026-07-18 — Windows toast action buttons via WinRT (supersedes the 12D "action buttons not wired" posture)
+
+The 12D decision left OS notification action buttons unwired because
+`tauri-plugin-notification` can't do them: its **desktop** path drops
+`action_type_id` entirely (verified in the 2.3.3 source — only title/body/
+icon/sound reach the OS; `register_action_types` is mobile-only). Windows
+reminder toasts now get real **Complete / Snooze Nm** buttons via
+**`tauri-winrt-notification`** — the crate already in our tree as notify-rust's
+Windows backend (zero new transitive deps), which supports XML toast buttons
+and an in-process `on_activated` callback.
+
+- **Mechanism:** `dispatch_due` builds a `ToastRequest` (reminder/task ids, the
+  task's current due-else-start as the occurrence key, the configured snooze
+  minutes, and the `notif.actions` flag). On Windows with actions enabled, the
+  backend shows a WinRT toast whose buttons carry encoded arguments
+  (`toast_actions.rs`, pure + round-trip-tested); everywhere else the plugin
+  path is unchanged. The AUMID is the bundle identifier (dev builds borrow
+  PowerShell's, mirroring the plugin).
+- **Actions reuse the normal paths:** Complete →
+  `complete_task_with(..., expectedOccurrence)` — the recurring idempotency
+  guard applies to toast clicks; Snooze → the existing `snoozed_until` path
+  with the configured duration. Both log `[notify-action]`. A **body click**
+  (no argument) focuses the app on the task via the existing deep-link event.
+- **Snooze duration is configurable** (`notif.snoozeMin`, 5/10/30/60, default
+  10) in the new **Settings → Notifications** section (which also absorbed the
+  action-buttons toggle and chirp settings from Desktop). The in-app toast's
+  snooze button uses the same setting, and the in-app Complete now passes the
+  fired occurrence too (parity).
+- **Lifetime limitation (documented, not pretended away):** the activation
+  handler is an in-process WinRT delegate. It fires for clicks on the live
+  toast and from the Action Center **while Toodoo is running**. If the process
+  has exited, Windows just dismisses the toast — cold-start activation needs a
+  registered COM ToastActivator (MSIX or registry work), out of scope for
+  v1.0. The real mitigation is close-to-tray (same date's lifecycle decision):
+  the app normally *is* running.
+- Habit notifications and the test-notification button keep the plain plugin
+  path. Unit coverage: `toast_actions` round-trips, `ToastRequest` content,
+  and complete/snooze/body-click dispatch against the in-memory repo.
+
 ## 2026-07-18 — Calendar-feed refresh is validate-before-replace (failures keep the cache)
 
 Adversarial-review follow-up (round 2, [medium]): a subscription refresh

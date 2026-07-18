@@ -4,6 +4,7 @@ mod desktop;
 mod error;
 mod events;
 pub mod repo;
+mod toast_actions;
 
 use serde_json::Value;
 use sqlx::SqlitePool;
@@ -1261,6 +1262,14 @@ async fn set_notif_actions(state: State<'_, AppState>, on: bool) -> CmdResult<de
 }
 
 #[tauri::command]
+async fn set_notif_snooze_min(
+    state: State<'_, AppState>,
+    minutes: i64,
+) -> CmdResult<desktop::DesktopConfig> {
+    desktop::set_notif_snooze_min(&state.pool, &state.bus, minutes).await.map_err(err)
+}
+
+#[tauri::command]
 async fn set_simple_popouts(state: State<'_, AppState>, on: bool) -> CmdResult<desktop::DesktopConfig> {
     desktop::set_simple_popouts(&state.pool, &state.bus, on).await.map_err(err)
 }
@@ -1375,6 +1384,89 @@ fn open_logs_folder(app: tauri::AppHandle) -> CmdResult<()> {
     std::fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     tauri_plugin_opener::open_path(dir.to_string_lossy().into_owned(), None::<&str>)
         .map_err(|e| e.to_string())
+}
+
+/// AUMID for WinRT toasts: the bundle identifier for the installed app (the
+/// NSIS shortcut carries it), with the plugin's dev-mode fallback (a bare
+/// `target/debug|release` exe has no registered AUMID — borrow PowerShell's so
+/// dev toasts still render).
+#[cfg(windows)]
+fn toast_app_id(app: &tauri::AppHandle) -> String {
+    let sep = std::path::MAIN_SEPARATOR;
+    let exe_dir = std::env::current_exe()
+        .ok()
+        .and_then(|p| p.parent().map(|d| d.display().to_string()))
+        .unwrap_or_default();
+    if exe_dir.ends_with(&format!("{sep}target{sep}debug"))
+        || exe_dir.ends_with(&format!("{sep}target{sep}release"))
+    {
+        tauri_winrt_notification::Toast::POWERSHELL_APP_ID.to_string()
+    } else {
+        app.config().identifier.clone()
+    }
+}
+
+/// Reminder toast with Complete / Snooze buttons via WinRT (the notification
+/// plugin drops actions on desktop). The activation handler is an in-process
+/// delegate: it fires for clicks on the live toast AND from Action Center
+/// while the app runs; with the app gone, Windows just dismisses the toast
+/// (docs/decisions.md).
+#[cfg(windows)]
+fn show_windows_action_toast(
+    app: &tauri::AppHandle,
+    req: &repo::reminders::ToastRequest,
+) -> std::result::Result<(), String> {
+    use tauri_winrt_notification::Toast;
+    let complete_arg = toast_actions::encode(&toast_actions::ToastAction::Complete {
+        task_id: req.task_id.clone(),
+        expected_occurrence: req.occurrence.clone(),
+    });
+    let snooze_arg = toast_actions::encode(&toast_actions::ToastAction::Snooze {
+        reminder_id: req.reminder_id.clone(),
+        minutes: req.snooze_min,
+    });
+    let handle = app.clone();
+    let toast_task = req.task_id.clone();
+    Toast::new(&toast_app_id(app))
+        .title(&req.title)
+        .text1(&req.body)
+        .add_button("Complete", &complete_arg)
+        .add_button(&format!("Snooze {}m", req.snooze_min), &snooze_arg)
+        .on_activated(move |arg| {
+            handle_toast_activation(handle.clone(), arg, toast_task.clone());
+            Ok(())
+        })
+        .show()
+        .map_err(|e| format!("winrt toast show failed: {e}"))
+}
+
+/// Route a toast activation: buttons dispatch through the repo (normal
+/// complete/snooze paths, `[notify-action]` audit lines); a body click focuses
+/// the app on the toast's task via the existing deep-link event.
+#[cfg(windows)]
+fn handle_toast_activation(app: tauri::AppHandle, arg: Option<String>, toast_task_id: String) {
+    let action = toast_actions::parse(arg.as_deref(), &toast_task_id);
+    log::info!("[notify-action] toast activated: arg={arg:?} -> {action:?}");
+    match action {
+        toast_actions::ToastAction::OpenTask { task_id } => {
+            let _ = show_main_window(app.clone());
+            let _ = app.emit("deep-link", &deeplink::DeepLinkAction::OpenTask { id: task_id });
+        }
+        other => {
+            let state = app.state::<AppState>();
+            let pool = state.pool.clone();
+            let bus = state.bus.clone();
+            let tz = chrono::Local::now().offset().local_minus_utc() / 60;
+            tauri::async_runtime::spawn(async move {
+                if let Err(e) =
+                    repo::reminders::dispatch_toast_action(&pool, &bus, other, tz, chrono::Utc::now())
+                        .await
+                {
+                    log::error!("[notify-action] dispatch failed: {e}");
+                }
+            });
+        }
+    }
 }
 
 // Window-open commands are fire-and-forget: creation runs on the main thread
@@ -1658,12 +1750,20 @@ pub fn run() {
             // permanently lost reminder.
             struct TauriNotify(tauri::AppHandle);
             impl repo::reminders::NotificationBackend for TauriNotify {
-                fn show(&self, title: &str, body: &str) -> std::result::Result<(), String> {
+                fn show(&self, req: &repo::reminders::ToastRequest) -> std::result::Result<(), String> {
+                    // Windows + actions enabled: WinRT toast with Complete /
+                    // Snooze buttons (the notification plugin drops actions on
+                    // desktop — see docs/decisions.md). Everything else keeps
+                    // the plugin path.
+                    #[cfg(windows)]
+                    if req.actions {
+                        return show_windows_action_toast(&self.0, req);
+                    }
                     self.0
                         .notification()
                         .builder()
-                        .title(title)
-                        .body(body)
+                        .title(&req.title)
+                        .body(&req.body)
                         .show()
                         .map_err(|e| e.to_string())
                 }
@@ -1706,6 +1806,9 @@ pub fn run() {
                                 "taskId": o.reminder.task_id,
                                 "reminderId": o.reminder.reminder_id,
                                 "title": o.reminder.task_title,
+                                // Occurrence key so the in-app toast's Complete
+                                // gets the recurring idempotency guard too.
+                                "occurrence": o.reminder.occurrence,
                             }),
                         );
                         sched_bus.emit(events::DomainEvent::ReminderFired {
@@ -2044,6 +2147,7 @@ pub fn run() {
             desktop_config,
             set_quick_add_hotkey,
             set_notif_actions,
+            set_notif_snooze_min,
             set_simple_popouts,
             set_popout_style,
             set_autostart,

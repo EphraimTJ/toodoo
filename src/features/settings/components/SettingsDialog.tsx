@@ -6,6 +6,7 @@ import { AppearanceSettings } from "./AppearanceSettings";
 import { LanguageSettings } from "./LanguageSettings";
 import { DataSettings } from "./DataSettings";
 import { DesktopSettings } from "./DesktopSettings";
+import { NotificationSettings } from "./NotificationSettings";
 import { SmartListSettings } from "./SmartListSettings";
 
 /** Gear button in the sidebar header that opens the Settings modal. */
@@ -47,6 +48,12 @@ export function SettingsDialog() {
                 Desktop
               </h3>
               <DesktopSettings />
+            </section>
+            <section>
+              <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-text-muted">
+                Notifications
+              </h3>
+              <NotificationSettings />
             </section>
             <section>
               <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-text-muted">
