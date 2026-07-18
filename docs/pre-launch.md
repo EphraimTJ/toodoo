@@ -52,18 +52,46 @@
   whether `build()` returned and whether navigation started — send it; the
   panels keep everything usable meanwhile.
 
+## 2b. ROUND-3b — the owner's log after the round-3 build (evidence update)
+
+The round-3 defenses worked exactly as designed on the owner's machine:
+reminders PASS, the watchdog caught both pop-out failures (`[window-watchdog]
+… no window handle to destroy (creation likely hung inside build())`). The
+decisive differential: **quick-add (Decorated chrome) built and booted in the
+same session where the focus/sticky pills (frameless + transparent) hung
+inside `build()`** — same binary, same WebView2 150.0.4078.65 as the machine
+where pills work. Creation context is exonerated (all main-thread now); the
+**window style flags** are the culprit set, transparency the prime suspect
+(WebView2 composition init is GPU/driver-sensitive). Also fixed: the
+persisted failure counter was being overwritten with the per-launch in-memory
+streak (stuck at 1 across restarts), so the ≥2 auto-fallback never engaged —
+it now read-increment-writes and resets only on a successful boot.
+
+New tools shipped instead of a guess-fix:
+- **`TOODOO_DIAG_WINDOWS=styles`** opens 4 windows (a=decorated,
+  b=frameless-opaque, c=frameless-transparent, d=full pill) — the log then
+  names the exact flag that hangs. Windows self-clean after ~15 s.
+- **Settings → Desktop → Pop-out window style** (Pill / Solid / Windowed) —
+  switch to whatever the bisect proves works, no rebuild needed.
+
 ## 3. RE-TEST SCRIPT (owner, against the NEW installer)
 
 **Setup:** uninstall Toodoo → install the fresh
 `src-tauri/target/release/bundle/nsis/Toodoo_0.1.0_x64-setup.exe` → launch
 normally (file logging is always on).
 
-1. **Watchdog proof:** run once from a terminal:
-   `$env:TOODOO_DIAG_WINDOWS="watchdog"; & "$env:LOCALAPPDATA\Toodoo\Toodoo.exe"`
-   → within ~8 s of launch a small "Diag" window appears and **self-closes
-   ≤ ~5 s later**, an error toast appears bottom-left in the main window, and
-   toodoo.log gains a `[window-watchdog]` line. A stuck white window is now a
-   bug report with a log line, never a Task-Manager situation.
+1. **Style bisect (do this FIRST — it decides everything):** run once from a
+   terminal:
+   `$env:TOODOO_DIAG_WINDOWS="styles"; & "$env:LOCALAPPDATA\Toodoo\Toodoo.exe"`
+   → four small windows try to open (decorated / frameless / +transparent /
+   full pill); hung ones are watchdog-killed; all close within ~20 s. Then
+   **send toodoo.log** — it will name the exact chrome flag that hangs on
+   your machine. Meanwhile set **Settings → Desktop → Pop-out window style**
+   to the fanciest level that booted (likely **Solid** if transparency is the
+   culprit) and re-run the pop-out tests below with it.
+1b. **Watchdog proof** (optional, already proven by the bisect):
+   `$env:TOODOO_DIAG_WINDOWS="watchdog"` → the Diag window self-closes ≤ ~5 s
+   with an error toast and a `[window-watchdog]` log line.
 2. **Focus pill:** Focus view → **↗**. Expect a small dark rounded pill
    (ring + mm:ss). Hover → pause/…-menu controls expand. Drag it around;
    drag it to touch the **top screen edge** → it docks into a slim progress
