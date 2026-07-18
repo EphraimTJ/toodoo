@@ -29,43 +29,45 @@ Legend: ⬜ untested · ✅ pass · ❌ fail (file an issue)
 
 ### Mini focus window + tray countdown
 - ❌ **Start focus** opens an always-on-top mini window mirroring the running
-  timer; it stays on top of other apps. (Round 2, fresh v1.0-fixes installer:
-  still a pure white unresponsive window with no close control — Task Manager
-  only. NOT reproducible on a locally silent-installed identical build, where
-  the log shows page-load + boot beacons and the window renders. Since then:
-  windows are centered — they previously spawned mostly off-screen — carry
-  native decorations, Esc closes them, and a 5s watchdog destroys any window
-  whose content fails to load and raises a main-window error toast. Re-test;
-  if it recurs, send toodoo.log.)
+  timer; it stays on top of other apps. (Round 3, fresh installer: STILL white
+  on the owner's machine, and the log proved `build()` never returned — the
+  round-2 watchdog was armed after build and never fired. Since then: the
+  watchdog is armed BEFORE build (a no-beacon creation always logs
+  [window-watchdog], destroys the window, toasts), creation runs on the main
+  thread (the only context proven working there), the window is now a
+  TickTick-style focus PILL (ring + mm:ss, hover controls, top-edge dock),
+  and after 2 consecutive failures the app auto-falls-back to an in-app
+  floating panel (or force it: Settings → Desktop → simple in-app pop-outs).
+  Re-test per docs/pre-launch.md §3.)
 - ⬜ ~~(If wired) the tray tooltip reflects the focus countdown during a session.~~
   **N/A for v1.0** — confirmed not wired; deliberate (see the 2026-07-17
   "Tray focus countdown is not wired in v1.0" decision).
 
 ### Sticky-note pop-out windows
 - ❌ Popping a sticky out opens an always-on-top window showing that sticky's
-  title/content with its color. (Round 2: same white unclosable result as the
-  focus window; same fixes/failsafes apply — re-test on the new installer.)
+  title/content with its color. (Round 3: same white result + same fixes as
+  the focus window above; stickies are now color-filled frameless pills.
+  Re-test.)
 - ❌ Moving/resizing the pop-out persists position/color (survives reopen). The
-  in-app sticky board still works alongside it. (Blocked on the item above;
-  decorations + centering should make move/resize work once content shows.)
+  in-app sticky board still works alongside it. (Sticky pills now have body
+  drag, a corner resize grip, hover color swatches, and per-window
+  position/size persistence — re-test once the pill renders.)
 
 ### Launch at login
 - ✅ Toggling **Launch Toodoo at login** on, then rebooting, starts Toodoo
   automatically. Toggling off stops it. 
 
 ### Notification Complete / Snooze
-- ❌ When a reminder fires, a native notification appears. (Round 2, fresh
-  installer: still nothing fires — no native toast, no in-app toast; no logs
-  were captured. Since then: always-on file logging, startup permission
-  logging, and Settings → Advanced → "Send test notification now" exercise
-  the full path on demand — re-test per docs/pre-launch.md and send
-  toodoo.log if it still fails.)
-- ❌ **Where the OS supports action buttons** (record which): Complete and Snooze
-  buttons act correctly. (Blocked on the item above.)
-- ❌ **Everywhere**: an in-app Complete / Snooze toast also appears — Complete
-  closes the task, Snooze 10m reschedules it. (This is the reliable path.)
-  (Round 2: never appeared either — which is what implicates the scheduler/
-  data path rather than the OS toast pipeline. Re-test with the test button.)
+- ✅ When a reminder fires, a native notification appears. (Round 3 PASS on the
+  installed build: log shows notification.show() ok for both seeded
+  reminders; test-notification button works.)
+- ⬜ **Where the OS supports action buttons** (record which): Complete and Snooze
+  buttons act correctly. (Unblocked now — record the observed Windows
+  behavior in decisions.md either way.)
+- ✅ **Everywhere**: an in-app Complete / Snooze toast also appears — Complete
+  closes the task, Snooze 10m reschedules it. (Round 3 PASS: in-app toasts
+  fire reliably. New: the "toodoo" chirp plays on the in-app toast —
+  configurable in Settings → Desktop.)
 
 ### Per-OS notes
 - Windows 11: _record notification action-button support + any quirks here._

@@ -1,136 +1,118 @@
 # Toodoo — Pre-Launch Handoff (v1.0)
 
-> **Updated 2026-07-17, round 2 (`v1.0-fixes`).** Round 1 fixed the five
-> adversarial-review findings. The user's re-test of that installer showed
-> reminders still silent and the focus/sticky pop-outs still white and
-> unclosable — with no way to capture evidence. Round 2 therefore added
-> always-on file logging, hard failsafes around the pop-outs, a one-click
-> notification test, and a sample-data seed, and re-verified everything
-> possible against a **locally silent-installed NSIS build**. What remains is
-> the user's scripted re-test below. **No `v1.0.0` tag** until it passes plus
-> the release audit (Section 5).
+> **Updated 2026-07-17, round 3 (`v1.0-fixes`).** Reminders/toasts now PASS on
+> the owner's installed build. The remaining hard bug — focus/sticky pop-outs
+> opening pure white — was pinned by the round-3 log to
+> `WebviewWindowBuilder::build()` **never returning** on that machine (no
+> page-load, no beacon, and — the safety regression — no watchdog, because it
+> was armed only after build). Round 3 makes the watchdog unbypassable, moves
+> creation to the main thread, adds an in-app fallback that keeps focus/sticky
+> usable no matter what, redesigns the pop-outs as TickTick-style pills, adds
+> the "toodoo" chirp, resizable panes, and fixes the stuck pomodoro duration.
+> **No `v1.0.0` tag** until the scripted re-test below passes + the release
+> audit (§5).
 
 ---
 
 ## 1. WHERE WE ARE
 
-- **Branch:** `v1.0-fixes`. Round-1 commits fixed adversarial findings 1–5
-  (restore safety, completion idempotency, reminder claim/ack, atomic import,
-  imported tags). Round-2 commits, oldest first:
-  - `8498536` feat(logging): rotating toodoo.log + Settings → Advanced → Open logs folder
-  - `e3ffe9c` fix(windows): center pop-outs + boot watchdog destroying dead windows
-  - `9068093` feat(reminders): one-click test-notification path + permission logging
-  - `ed5c290` feat(seed): guarded, feature-complete sample workspace + first-run prompt
-- **Automated suites (green at HEAD):** `cargo test` **200 passed, 1 ignored**
-  (search perf gate) + clippy clean; `npm test` **143**; `npx playwright test`
-  **18**; `tsc --noEmit` + `npm run build` clean.
-- **Installers (unsigned):** rebuild from HEAD →
-  `src-tauri/target/release/bundle/nsis/Toodoo_0.1.0_x64-setup.exe` (+ MSI).
-- **Logging:** every `[reminders]`, `[window]`, `[notify]` diagnostic and any
-  panic goes to a rotating `toodoo.log` (Settings → Advanced → **Open logs
-  folder**), always on — a normal double-click launch now produces evidence.
+- **Branch:** `v1.0-fixes`. Round-3 commits, oldest first:
+  - `573a31b` fix(windows): watchdog armed before build + main-thread creation + load instrumentation
+  - `46e1d8d` feat(popouts): simple in-app pop-outs toggle + auto-fallback floating panels
+  - `16b14a8` feat(popouts): TickTick-style pill windows for focus and stickies
+  - `86cb0b2` feat(reminders): synthesized toodoo chirp with sound settings
+  - `1c26b92` feat(layout): resizable sidebar / list / detail panes with persistence
+  - `9a4550e` fix(focus): idle clock resyncs with config + quick duration picker
+- **Automated suites (green at HEAD):** `cargo test` **205 + 1 ignored** (perf
+  gate) + clippy clean; `npm test` **146**; `npx playwright test` **19**
+  (includes the new pane-resize spec); tsc/build clean.
+- **Reference designs:** `docs/design-refs/` (expanded pill, docked bar, the
+  white-window bug, Today view) — committed.
 
-## 2. THE TWO OPEN BUGS — current understanding & what changed
+## 2. THE POP-OUT BUG — state of evidence and defenses
 
-### (a) Focus/sticky pop-outs: white + unclosable (user's machine)
-- **Packaged-build evidence (local silent install of the identical build):**
-  the webview *does* load — `page load started/finished` on
-  `http://tauri.localhost/index.html?win=…` plus both boot beacons in the
-  log, and the windows render (screenshot-verified). So the white screen is
-  not a deterministic asset/URL/CSP failure of this build.
-- **Real bug found while reproducing:** the windows spawned at an OS-default
-  position **mostly off-screen at the bottom edge** — visually a broken
-  window fragment. Pop-outs are now **centered**.
-- **Failsafes now in place (a white window can never strand you again):**
-  native title bar + close on every pop-out; **Esc closes any pop-out**; a
-  **5 s watchdog** destroys a window whose content never boots, logs it, and
-  raises an in-app error toast; window URL + page-load progress + builder
-  errors are logged. Closing a pop-out never exits the app.
-- If white recurs on the user's machine, `toodoo.log` now pinpoints the stage
-  (created → page load started → finished → booted).
+- **Round-3 log conclusion:** `creating window` with zero page-load / beacon /
+  builder-error / watchdog lines ⇒ `build()` hung on the owner's machine.
+  The quick-add window (created on the **main thread** by the global-shortcut
+  handler) has always worked there; command/tray-context creation is what
+  failed. All pop-out creation now runs via `run_on_main_thread`
+  (fire-and-forget commands).
+- **Watchdog is now unbypassable:** pending registration + 5 s timer are armed
+  **before** `build()`; expiry always logs `[window-watchdog]`, destroys the
+  window (best-effort if a handle exists), persists a per-kind failure
+  counter, emits `popout-failed`, and toasts the main window. The state
+  machine is unit-tested. The log also now records the WebView2 runtime
+  version, `builder.build() returned` (or FAILED), and per-window navigation
+  — silence can no longer be mistaken for anything.
+- **Fallback:** after **2 consecutive failures** per kind (or via Settings →
+  Desktop → *Use simple in-app pop-outs*), focus/sticky open as **in-app
+  floating panels**; a watchdog kill auto-opens the panel immediately. Focus
+  and stickies remain fully usable regardless of the native-window outcome.
+- If the pills still white-screen on the owner's machine, the new log will say
+  whether `build()` returned and whether navigation started — send it; the
+  panels keep everything usable meanwhile.
 
-### (b) Reminders never fire (user's machine)
-- Round-2 result (no toast, no in-app toast, fresh installer) **still
-  implicates the scheduler/data path or event delivery** — the in-app toast
-  has never depended on native `show()` succeeding.
-- New: startup logs the notification **permission state** (never checked
-  before) and identifier; **Settings → Advanced → "Send test notification
-  now"** runs claim→show→ack style stages immediately (permission check +
-  request, native `show()`, in-app toast) and reports each stage inline and
-  to the log. The scheduler logs polls, computed fire times, skips
-  (including reminders that can never fire), attempts, and outcomes.
-- OS-side candidates for the user to check: Windows Settings → System →
-  Notifications (Toodoo allowed, notifications on, Focus Assist / Do Not
-  Disturb off).
-- Design note (documented): **a due date alone never fires a notification** —
-  a reminder must be added in the task's Reminders panel. (Default reminders
-  à la TickTick are a possible post-1.0 follow-up.)
+## 3. RE-TEST SCRIPT (owner, against the NEW installer)
 
-## 3. RE-TEST SCRIPT (user, against the NEW installer)
+**Setup:** uninstall Toodoo → install the fresh
+`src-tauri/target/release/bundle/nsis/Toodoo_0.1.0_x64-setup.exe` → launch
+normally (file logging is always on).
 
-**Setup:** uninstall Toodoo → install the freshly built
-`Toodoo_0.1.0_x64-setup.exe` → launch normally (no terminal needed — the log
-file records everything).
-
-1. **Sample data:** on first launch with an empty workspace a card offers
-   "Load sample data" — accept it (or Settings → Advanced → Load sample
-   data…). Expect lists (Work kanban with sections, Personal, Reading Notes),
-   tasks in every date bucket, tags, habits with streaks, stickies, filters,
-   templates, countdowns, non-empty stats — and **two reminders that fire
-   within ~3–5 minutes** of seeding.
-2. **Notification test:** Settings → Advanced → **Send test notification
-   now**. Expect: a native Windows toast AND an in-app toast bottom-right;
-   the button prints a stage report (e.g. `permission: Granted; native
-   show(): ok`).
-3. **Scheduled reminder:** wait for the seeded "Stand-up call" /
-   "Stretch break" reminders (~3–5 min after seeding), or add your own 2 min
-   out via a task's Reminders panel. Expect native + in-app toast; test
-   **Complete** and **Snooze 10m** on the in-app one.
-4. **Focus pop-out:** Focus header **↗**. Expect a centered, titled,
-   resizable always-on-top window showing the timer — or, if content fails,
-   it closes itself within ~5 s and an error toast appears in the main
-   window. **Either way, no stuck white window.**
-5. **Sticky pop-out:** **↗** on a sticky card. Same expectations; check
-   move/resize persists after closing and reopening.
-6. **If anything fails:** Settings → Advanced → **Open logs folder** → send
-   `toodoo.log` (and say which step failed). The log contains the
-   stage-by-stage evidence this diagnosis needs.
-7. Also confirm Windows Settings → Notifications: Toodoo allowed, Focus
-   Assist off during the test.
+1. **Watchdog proof:** run once from a terminal:
+   `$env:TOODOO_DIAG_WINDOWS="watchdog"; & "$env:LOCALAPPDATA\Toodoo\Toodoo.exe"`
+   → within ~8 s of launch a small "Diag" window appears and **self-closes
+   ≤ ~5 s later**, an error toast appears bottom-left in the main window, and
+   toodoo.log gains a `[window-watchdog]` line. A stuck white window is now a
+   bug report with a log line, never a Task-Manager situation.
+2. **Focus pill:** Focus view → **↗**. Expect a small dark rounded pill
+   (ring + mm:ss). Hover → pause/…-menu controls expand. Drag it around;
+   drag it to touch the **top screen edge** → it docks into a slim progress
+   bar; hover the bar → the pill slides back out. Esc or menu → Close.
+   Reopen → position remembered.
+   *If it opens white:* it should self-close in ~5 s with a toast; after two
+   failures the ↗ opens an in-app panel instead. Either way, send toodoo.log.
+3. **Sticky pill:** Sticky Notes → **↗** on a card. Expect a color-filled
+   rounded pill: drag by body, resize via the corner grip, change color from
+   the hover swatches, close with ✕ or Esc; reopen → size/position/color kept.
+4. **Chirp:** Settings → Desktop → Notification sound → **Preview** (try the
+   three variants, pick your favorite — tell me which to make default).
+   Then set a reminder 2 min out: native toast (system sound) + in-app toast
+   (chirp).
+5. **Panes:** drag the divider right of the sidebar and left of the detail
+   pane; double-click one to reset; restart the app → widths persist. Glance
+   at calendar/kanban/timeline/matrix at extreme widths for anything broken.
+6. **Pomodoro:** Focus → click the idle **25:00** clock → pick **10** (or
+   custom) → the idle clock updates immediately → Start → runs a 10-minute
+   session end-to-end. Also set Work minutes in Focus → Settings → idle clock
+   follows. Confirm a *running* session ignores settings changes (by design).
+7. **Anything fails:** Settings → Advanced → **Open logs folder** → send
+   `toodoo.log` + which step.
 
 ## 4. REMAINING OPS (unchanged)
 
-- Release-build perf audit on the 10k fixture (< 16 ms/frame scroll, < 2 s
-  cold start) — record numbers; automated proxies are green.
-- Signing (or an explicit "unsigned for v1.0" decision) + final icon check.
+- Release-build perf audit (10k fixture; < 16 ms/frame, < 2 s cold start).
+- Signing (or explicit "unsigned for v1.0" decision) + icon check.
+- OS notification action-button behavior → decisions.md entry (either way).
 
 ## 5. RELEASE PROCEDURE — unchanged
 
-1. Inventory audit (sanctioned deferrals in decisions.md).
-2. Automated suites green (cargo 200+1 ignored, vitest 143, playwright 18,
-   tsc/build/clippy clean).
-3. Backup → restore gate (repo::backup tests, incl. corrupt rejection +
-   rollback).
-4. Search < 50 ms on 10k (ignored perf test).
-5. Manual checklist all native items ✅ on the installed build; record OS
-   notification-button behavior in decisions.md.
-6. Ops: perf numbers, icon, signing decision.
-7. README written/refreshed.
-8. Commit, merge strategy to `main`, then `git tag v1.0.0`.
+1. Inventory audit → 2. suites green (cargo 205+1, vitest 146, playwright 19)
+→ 3. backup/restore gate → 4. search perf gate → 5. manual checklist ✅ on the
+installed build → 6. ops recorded → 7. README → 8. merge strategy + `git tag
+v1.0.0`.
 
-## Key file map
+## Key file map (round-3 additions)
 
-- Logging: `tauri-plugin-log` init + panic hook in `src-tauri/src/lib.rs`;
-  `open_logs_folder` command; Settings → Advanced panel
-  (`src/features/settings/components/AdvancedSettings.tsx`).
-- Pop-outs: `src-tauri/src/desktop.rs` (`open_or_focus`: center, decorations,
-  page-load logging, watchdog, `WindowWatch`); beacon command
-  `log_window_error` in `lib.rs`; shells + error boundary + beacon in
-  `src/windows/WindowRoot.tsx`; error toasts in
-  `src/components/layout/SystemToasts.tsx`. Diag hooks:
+- Watchdog + creation: `src-tauri/src/desktop.rs` (`WatchState`,
+  `request_popout`, `open_or_focus`, `PopoutStyle`); diag hooks
   `TOODOO_DIAG_WINDOWS=1|watchdog`, `TOODOO_DIAG_NOTIFY=1`.
-- Reminders: dispatch state machine `src-tauri/src/repo/reminders.rs`;
-  `send_test_notification` in `lib.rs`; in-app toasts
-  `src/features/reminders/components/ReminderToasts.tsx`.
-- Sample data: `src-tauri/src/repo/seed.rs::seed_sample_data`; first-run card
-  `src/components/layout/SampleDataPrompt.tsx`; Advanced action.
+- Fallback: `src/lib/popout.ts`, `src/components/layout/{FloatingPanel,PanelHost}.tsx`,
+  Settings toggle in `DesktopSettings.tsx` (`popout.simple`).
+- Pills: `src/windows/{pills.tsx,pillUtils.ts}`, `WindowRoot.tsx`;
+  timer ownership + broadcast: `src/features/focus/FocusProvider.tsx`
+  (`focus-state` / `focus-cmd`); persistence keys `popout:*`.
+- Chirp: `scripts/gen-chirp.mjs`, `src/features/reminders/{assets/chirp/,hooks/useNotifSound.ts}`.
+- Panes: `src/components/layout/{usePaneWidths.ts,PaneDivider.tsx}`,
+  `e2e/panes.spec.ts` (`layout:panes` setting).
+- Pomodoro: `src/features/focus/hooks/usePomodoro.ts` (idle resync, override,
+  totalSec), quick picker in `FocusTimer.tsx`.
