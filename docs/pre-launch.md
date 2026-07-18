@@ -1,6 +1,49 @@
 # Toodoo — Pre-Launch Handoff (v1.0)
 
-> **Updated 2026-07-17, round 3 (`v1.0-fixes`).** Reminders/toasts now PASS on
+> **Updated 2026-07-18, round 4 (`v1.0-fixes`).** Since round 3b: the two
+> round-2 Codex adversarial findings are fixed (`7827e9c` REST recurring
+> completion requires an occurrence key; `daad418` calendar refresh can no
+> longer erase the cache), and two features shipped: **Windows toast
+> Complete/Snooze action buttons** (`df2c1c7`, via tauri-winrt-notification —
+> closes the last 12D item) and **close-to-tray by default + single instance
+> + autostart-hidden** (`1e4ddda`). Suites: cargo **222 + 1 ignored** (clippy
+> clean), vitest **150**, playwright **19**, tsc/build clean. See §0 for the
+> round-4 re-test script. **No `v1.0.0` tag** without the owner's explicit
+> go-ahead.
+
+## 0. ROUND-4 RE-TEST (owner, against the NEW installer)
+
+**Setup:** uninstall Toodoo → install the fresh
+`src-tauri/target/release/bundle/nsis/Toodoo_0.1.0_x64-setup.exe` → launch.
+Anything fails: Settings → Advanced → **Open logs folder** → send
+`toodoo.log` (`[notify-action]` and `[tray]` lines are the relevant ones).
+
+1. **Toast buttons:** Settings → Notifications → check snooze duration (say
+   10m). Set a reminder ~2 min out → native toast shows **Complete** +
+   **Snooze 10m**. Press **Complete** → task completes (recurring task:
+   advances exactly one occurrence).
+2. **Action Center:** fire another reminder, let the toast slide away, wait
+   ~2 min, open Action Center → press **Snooze** there → reminder re-fires
+   after the duration. **Body click** (not a button) → window opens on that
+   task. Toggle the buttons OFF in Settings → next toast is plain.
+3. **Close-to-tray:** click the window **X** → hides to tray + one-time
+   "still running" notice (try **Don't show again**, restart, confirm it
+   stays away). While hidden: reminder fires; toast body-click restores the
+   window; Ctrl+Shift+A quick-add still works; an open focus/sticky pill
+   survives.
+4. **Tray:** left-click restores/focuses; menu is right-click; **Quit fully
+   exits**. Double-launch the exe while running (hidden or shown) → no second
+   instance, existing one focuses.
+5. **Setting off:** Settings → Desktop → "Keep running in the tray" OFF → X
+   quits fully (pills close too).
+6. **Autostart hidden:** re-toggle **Launch at login** once (refreshes the
+   registration with `--autostart`), keep "Start minimized to the tray" ON,
+   reboot → Toodoo sits in the tray, no window flash; left-click shows it.
+7. **Round-3b leftovers** (if not yet done): pill menu clip fix, hover/dock/
+   position persistence, sticky drag/resize/color persistence, chirp variant
+   choice (**still owed: your default pick**), panes, 10-min pomodoro.
+
+> **Round-3 posture note (superseded in part):** Reminders/toasts now PASS on
 > the owner's installed build. The remaining hard bug — focus/sticky pop-outs
 > opening pure white — was pinned by the round-3 log to
 > `WebviewWindowBuilder::build()` **never returning** on that machine (no
@@ -135,6 +178,22 @@ normally (file logging is always on).
 → 3. backup/restore gate → 4. search perf gate → 5. manual checklist ✅ on the
 installed build → 6. ops recorded → 7. README → 8. merge strategy + `git tag
 v1.0.0`.
+
+## Key file map (round-4 additions)
+
+- Toast actions: `src-tauri/src/toast_actions.rs` (pure arg encode/parse),
+  `repo/reminders.rs` (`ToastRequest`, `dispatch_toast_action`),
+  `lib.rs` (`show_windows_action_toast`, `handle_toast_activation`,
+  `toast_app_id`); setting `notif.snoozeMin`; UI
+  `src/features/settings/components/NotificationSettings.tsx` (new
+  Settings → Notifications section).
+- Close-to-tray: `desktop.rs` (`close_decision`, `launched_hidden`,
+  `tray.closeToTray` / `tray.startMinimized` / `tray.noticeShown`),
+  `lib.rs` (`on_window_event` intercept, `show_tray_notice`, tray left-click,
+  single-instance plugin, `--autostart` arg), `tauri.conf.json`
+  (`visible: false` + explicit show at setup).
+- REST idempotency: `api/routes.rs` complete handler (409 / occurrence key);
+  calendar cache safety: `repo/cal_subscriptions.rs` + `repo/ics.rs::is_calendar`.
 
 ## Key file map (round-3 additions)
 
