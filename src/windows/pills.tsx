@@ -26,6 +26,9 @@ const PILL_W = 210;
 const PILL_H = 64;
 const DOCK_W = 220;
 const DOCK_H = 12;
+/** Extra window height while the overflow menu is open (it can't overflow
+ *  the OS window, so the window grows to fit it). */
+const MENU_H = 130;
 
 const pillTransition =
   "transition-[opacity,transform] duration-200 motion-reduce:transition-none";
@@ -98,14 +101,28 @@ export function FocusPillWindow() {
   const dockedRef = useRef(docked);
   dockedRef.current = docked;
 
-  usePersistedWindowBox("popout:focus", (y) => {
-    // Touching the top screen edge docks the pill into the slim bar.
-    if (y <= 0 && !dockedRef.current) {
-      setDocked(true);
-      void setWindowSize(DOCK_W, DOCK_H);
-      void pinWindowTop(0);
-    }
-  });
+  usePersistedWindowBox(
+    "popout:focus",
+    (y) => {
+      // Touching the top screen edge docks the pill into the slim bar.
+      if (y <= 0 && !dockedRef.current) {
+        setDocked(true);
+        setMenuOpen(false);
+        void setWindowSize(DOCK_W, DOCK_H);
+        void pinWindowTop(0);
+      }
+    },
+    // The pill manages its own size (menu expansion, docking) — persist
+    // position only, or a menu-open height would stick across reopens.
+    { positionOnly: true },
+  );
+
+  // The OS window is exactly pill-height, so a dropdown can't overflow it —
+  // grow the window while the menu is open and shrink back after.
+  useEffect(() => {
+    if (dockedRef.current) return;
+    void setWindowSize(PILL_W, PILL_H + (menuOpen ? MENU_H : 0));
+  }, [menuOpen]);
 
   const undock = () => {
     setDocked(false);
@@ -155,51 +172,54 @@ export function FocusPillWindow() {
 
   return (
     <div
-      className="flex h-screen w-screen items-center overflow-hidden rounded-full bg-neutral-900/95 px-2.5 text-white shadow-none select-none"
-      data-testid="focus-pill"
-      data-tauri-drag-region
+      className="flex h-screen w-screen flex-col overflow-hidden select-none"
       onMouseEnter={onEnter}
       onMouseLeave={onLeave}
     >
-      <div className="relative flex shrink-0 items-center justify-center" data-tauri-drag-region>
-        <Ring progress={progress} />
-        <span
-          className="absolute font-mono text-[11px] tabular-nums"
-          data-tauri-drag-region
-          style={{ pointerEvents: "none" }}
-        >
-          {clock}
-        </span>
-      </div>
-
       <div
-        className={`ml-2 flex items-center gap-1 ${pillTransition} ${hover ? "opacity-100" : "opacity-0"}`}
+        className="flex shrink-0 items-center rounded-full bg-neutral-900/95 px-2.5 text-white"
+        style={{ height: PILL_H - 4, marginTop: 2 }}
+        data-testid="focus-pill"
+        data-tauri-drag-region
       >
-        {state?.running ? (
-          <button
-            type="button"
-            aria-label="Pause"
-            className="rounded-full p-1.5 text-accent hover:bg-white/10"
-            onClick={() => emitFocusCmd("pause")}
+        <div className="relative flex shrink-0 items-center justify-center" data-tauri-drag-region>
+          <Ring progress={progress} />
+          <span
+            className="absolute font-mono text-[11px] tabular-nums"
+            data-tauri-drag-region
+            style={{ pointerEvents: "none" }}
           >
-            <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor" aria-hidden>
-              <rect x="1.5" y="1" width="3.2" height="10" rx="1" />
-              <rect x="7.3" y="1" width="3.2" height="10" rx="1" />
-            </svg>
-          </button>
-        ) : (
-          <button
-            type="button"
-            aria-label={state?.active ? "Resume" : "Start"}
-            className="rounded-full p-1.5 text-accent hover:bg-white/10"
-            onClick={() => emitFocusCmd(state?.active ? "resume" : "start")}
-          >
-            <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor" aria-hidden>
-              <path d="M2.5 1.2v9.6L10.6 6z" />
-            </svg>
-          </button>
-        )}
-        <div className="relative">
+            {clock}
+          </span>
+        </div>
+
+        <div
+          className={`ml-2 flex items-center gap-1 ${pillTransition} ${hover ? "opacity-100" : "opacity-0"}`}
+        >
+          {state?.running ? (
+            <button
+              type="button"
+              aria-label="Pause"
+              className="rounded-full p-1.5 text-accent hover:bg-white/10"
+              onClick={() => emitFocusCmd("pause")}
+            >
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor" aria-hidden>
+                <rect x="1.5" y="1" width="3.2" height="10" rx="1" />
+                <rect x="7.3" y="1" width="3.2" height="10" rx="1" />
+              </svg>
+            </button>
+          ) : (
+            <button
+              type="button"
+              aria-label={state?.active ? "Resume" : "Start"}
+              className="rounded-full p-1.5 text-accent hover:bg-white/10"
+              onClick={() => emitFocusCmd(state?.active ? "resume" : "start")}
+            >
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor" aria-hidden>
+                <path d="M2.5 1.2v9.6L10.6 6z" />
+              </svg>
+            </button>
+          )}
           <button
             type="button"
             aria-label="More"
@@ -212,43 +232,50 @@ export function FocusPillWindow() {
               <circle cx="10" cy="6" r="1.2" />
             </svg>
           </button>
-          {menuOpen && (
-            <div className="absolute right-0 top-7 z-10 w-36 rounded-md border border-white/10 bg-neutral-800 py-1 text-xs shadow-xl">
-              <button
-                type="button"
-                className="block w-full px-3 py-1 text-left hover:bg-white/10"
-                onClick={() => void api.showMainWindow()}
-              >
-                Open Toodoo
-              </button>
-              <button
-                type="button"
-                className="block w-full px-3 py-1 text-left hover:bg-white/10 disabled:opacity-40"
-                disabled={state?.active}
-                onClick={() => emitFocusCmd("toggle-mode")}
-              >
-                Switch mode
-              </button>
-              {state?.active && (
-                <button
-                  type="button"
-                  className="block w-full px-3 py-1 text-left hover:bg-white/10"
-                  onClick={() => emitFocusCmd("stop")}
-                >
-                  Stop session
-                </button>
-              )}
-              <button
-                type="button"
-                className="block w-full px-3 py-1 text-left hover:bg-white/10"
-                onClick={closeThisWindow}
-              >
-                Close
-              </button>
-            </div>
-          )}
         </div>
       </div>
+
+      {/* The menu renders below the pill in the window space grown for it —
+          an absolutely-positioned dropdown would be clipped at the window
+          edge (the window is otherwise exactly pill-sized). */}
+      {menuOpen && (
+        <div
+          className="ml-auto mr-2 mt-1 w-36 rounded-md border border-white/10 bg-neutral-800 py-1 text-xs text-white shadow-xl"
+          data-testid="focus-pill-menu"
+        >
+          <button
+            type="button"
+            className="block w-full px-3 py-1 text-left hover:bg-white/10"
+            onClick={() => void api.showMainWindow()}
+          >
+            Open Toodoo
+          </button>
+          <button
+            type="button"
+            className="block w-full px-3 py-1 text-left hover:bg-white/10 disabled:opacity-40"
+            disabled={state?.active}
+            onClick={() => emitFocusCmd("toggle-mode")}
+          >
+            Switch mode
+          </button>
+          {state?.active && (
+            <button
+              type="button"
+              className="block w-full px-3 py-1 text-left hover:bg-white/10"
+              onClick={() => emitFocusCmd("stop")}
+            >
+              Stop session
+            </button>
+          )}
+          <button
+            type="button"
+            className="block w-full px-3 py-1 text-left hover:bg-white/10"
+            onClick={closeThisWindow}
+          >
+            Close
+          </button>
+        </div>
+      )}
     </div>
   );
 }

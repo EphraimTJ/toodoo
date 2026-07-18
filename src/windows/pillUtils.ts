@@ -36,7 +36,13 @@ export interface WindowBox {
 export function usePersistedWindowBox(
   key: string,
   onMoved?: (y: number) => void,
+  opts?: {
+    /** Persist/restore position only (windows whose size is app-managed —
+     *  the focus pill resizes itself for the hover menu and dock states). */
+    positionOnly?: boolean;
+  },
 ) {
+  const positionOnly = opts?.positionOnly ?? false;
   const onMovedRef = useRef(onMoved);
   onMovedRef.current = onMoved;
 
@@ -57,7 +63,7 @@ export function usePersistedWindowBox(
         const stored = (await api.getSetting(key)) as WindowBox | null;
         if (!disposed && stored && typeof stored.x === "number") {
           await win.setPosition(new PhysicalPosition(stored.x, stored.y));
-          if (stored.w > 0 && stored.h > 0) {
+          if (!positionOnly && stored.w > 0 && stored.h > 0) {
             await win.setSize(new PhysicalSize(stored.w, stored.h));
           }
         }
@@ -71,7 +77,7 @@ export function usePersistedWindowBox(
           void (async () => {
             try {
               const pos = await win.outerPosition();
-              const size = await win.innerSize();
+              const size = positionOnly ? { width: 0, height: 0 } : await win.innerSize();
               await api.setSetting(key, { x: pos.x, y: pos.y, w: size.width, h: size.height });
             } catch {
               // Persistence is best-effort.
