@@ -405,6 +405,15 @@ pub async fn complete_task(
     complete_task_with(pool, bus, id, tz_off_min, None).await
 }
 
+/// Whether completing this task advances a recurrence (rule + anchor date +
+/// still ACTIVE) instead of completing it outright. Shared with the REST layer,
+/// which requires an occurrence key for exactly these tasks.
+pub fn is_recurring(task: &Task) -> bool {
+    task.rrule.as_deref().is_some_and(|r| !r.trim().is_empty())
+        && (task.due_at.is_some() || task.start_at.is_some())
+        && task.status == "ACTIVE"
+}
+
 /// `complete_task` with an idempotency key for the recurring path: when the
 /// caller passes the occurrence it saw (`expected_occurrence` = the task's
 /// due-else-start at render time) and the task has since advanced, the call is
@@ -418,10 +427,7 @@ pub async fn complete_task_with(
     expected_occurrence: Option<&str>,
 ) -> Result<Vec<String>> {
     let top = get_task(pool, id).await?;
-    let is_recurring = top.rrule.as_deref().is_some_and(|r| !r.trim().is_empty())
-        && (top.due_at.is_some() || top.start_at.is_some())
-        && top.status == "ACTIVE";
-    if is_recurring {
+    if is_recurring(&top) {
         return advance_recurrence(pool, bus, &top, tz_off_min, "COMPLETED", true, expected_occurrence)
             .await;
     }

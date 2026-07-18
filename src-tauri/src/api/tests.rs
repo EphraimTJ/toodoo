@@ -9,18 +9,23 @@ use crate::repo::db::connect_in_memory;
 
 const TOKEN: &str = "test-token-123";
 
-/// Bind 127.0.0.1:0, serve the router, and return the base URL.
-async fn start() -> String {
+/// Bind 127.0.0.1:0, serve the router, and return the base URL plus the
+/// backing pool/bus so tests can seed state the API doesn't expose.
+async fn start_with_state() -> (String, sqlx::SqlitePool, EventBus) {
     let pool = connect_in_memory().await.unwrap();
     let bus = EventBus::new();
-    let state = ApiState::new(pool, bus, Arc::new(RwLock::new(TOKEN.to_string())));
+    let state = ApiState::new(pool.clone(), bus.clone(), Arc::new(RwLock::new(TOKEN.to_string())));
     let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0)).await.unwrap();
     let addr = listener.local_addr().unwrap();
     let app = router(state);
     tokio::spawn(async move {
         axum::serve(listener, app).await.unwrap();
     });
-    format!("http://{addr}")
+    (format!("http://{addr}"), pool, bus)
+}
+
+async fn start() -> String {
+    start_with_state().await.0
 }
 
 #[tokio::test]
@@ -123,4 +128,72 @@ async fn task_lifecycle_create_complete_delete() {
         .await
         .unwrap();
     assert!(find(&data).is_none());
+}
+
+/// Adversarial-review follow-up: completing a RECURRING task over REST requires
+/// the occurrence key, and retrying the identical request must not advance the
+/// series a second time. Non-recurring completion stays keyless (covered by
+/// `task_lifecycle_create_complete_delete` above).
+#[tokio::test]
+async fn recurring_completion_requires_and_honors_occurrence_key() {
+    use crate::repo::tasks::{create_task, get_task, tests::quick, NewTask};
+
+    let (base, pool, bus) = start_with_state().await;
+    let client = reqwest::Client::new();
+    let auth = |rb: reqwest::RequestBuilder| rb.bearer_auth(TOKEN);
+
+    let task = create_task(
+        &pool,
+        &bus,
+        NewTask {
+            due_at: Some("2026-07-01T00:00:00.000Z".into()),
+            rrule: Some("FREQ=DAILY".into()),
+            ..quick("inbox", "Water plants")
+        },
+    )
+    .await
+    .unwrap();
+    let url = format!("{base}/open/v1/project/inbox/task/{}/complete", task.id);
+
+    // Keyless → 409 carrying the current occurrence so the client can confirm.
+    let r = auth(client.post(&url)).send().await.unwrap();
+    assert_eq!(r.status(), 409);
+    let body: serde_json::Value = r.json().await.unwrap();
+    let occ = body["expectedOccurrence"].as_str().unwrap().to_string();
+    assert_eq!(occ, "2026-07-01T00:00:00.000Z");
+
+    // With the key → 200 and the series advances one day.
+    let r = auth(client.post(&url))
+        .json(&serde_json::json!({ "expectedOccurrence": occ }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status(), 200);
+    let advanced = get_task(&pool, &task.id).await.unwrap();
+    assert_eq!(advanced.due_at.as_deref(), Some("2026-07-02T00:00:00.000Z"));
+    assert_eq!(advanced.status, "ACTIVE");
+
+    // The identical retry (lost-response replay) → 200 but a safe no-op:
+    // no second advance, no extra ledger row.
+    let r = auth(client.post(&url))
+        .json(&serde_json::json!({ "expectedOccurrence": occ }))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status(), 200);
+    let after = get_task(&pool, &task.id).await.unwrap();
+    assert_eq!(after.due_at.as_deref(), Some("2026-07-02T00:00:00.000Z"));
+    let completions: i64 = sqlx::query_scalar(
+        "SELECT COUNT(*) FROM task_completions WHERE task_id = ? AND deleted_at IS NULL",
+    )
+    .bind(&task.id)
+    .fetch_one(&pool)
+    .await
+    .unwrap();
+    assert_eq!(completions, 1);
+
+    // The query-param form works too (still the same occurrence → no-op).
+    let r = auth(client.post(format!("{url}?expectedOccurrence={occ}"))).send().await.unwrap();
+    assert_eq!(r.status(), 200);
+    assert_eq!(get_task(&pool, &task.id).await.unwrap().due_at.as_deref(), Some("2026-07-02T00:00:00.000Z"));
 }

@@ -1,10 +1,11 @@
 //! REST handlers. Each delegates to the repository layer and maps results into
 //! TickTick-Open-API-shaped JSON (see `dto`). Errors become HTTP status codes.
 
+use std::collections::HashMap;
 use std::sync::Arc;
 
 use axum::{
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::StatusCode,
     response::{IntoResponse, Response},
     routing::{get, post},
@@ -19,12 +20,12 @@ use crate::repo;
 use crate::repo::projects::Project;
 use crate::repo::tasks::Task;
 
-/// Handler error → HTTP status + `{ "error": msg }` body.
-pub struct ApiError(StatusCode, String);
+/// Handler error → HTTP status + JSON body (always carries an `error` field).
+pub struct ApiError(StatusCode, Value);
 
 impl IntoResponse for ApiError {
     fn into_response(self) -> Response {
-        (self.0, Json(json!({ "error": self.1 }))).into_response()
+        (self.0, Json(self.1)).into_response()
     }
 }
 
@@ -35,7 +36,7 @@ impl From<RepoError> for ApiError {
             RepoError::Invalid(_) => StatusCode::BAD_REQUEST,
             _ => StatusCode::INTERNAL_SERVER_ERROR,
         };
-        ApiError(code, e.to_string())
+        ApiError(code, json!({ "error": e.to_string() }))
     }
 }
 
@@ -116,9 +117,33 @@ async fn update_task(
 async fn complete_task(
     State(s): State<Arc<ApiState>>,
     Path((_pid, tid)): Path<(String, String)>,
+    Query(query): Query<HashMap<String, String>>,
+    body: Option<Json<Value>>,
 ) -> ApiResult {
+    // Idempotency: a RECURRING task advances on completion, so a blind retry
+    // would close the next occurrence. Those calls must name the occurrence
+    // they saw (body `expectedOccurrence` or query param); a stale key is a
+    // safe no-op (docs/decisions.md). Non-recurring completion stays keyless
+    // (TickTick Open API shape).
+    let expected = body
+        .as_ref()
+        .and_then(|Json(b)| b["expectedOccurrence"].as_str().map(String::from))
+        .or_else(|| query.get("expectedOccurrence").cloned());
+    if expected.is_none() {
+        let task = repo::tasks::get_task(&s.pool, &tid).await?;
+        if repo::tasks::is_recurring(&task) {
+            let occurrence = task.due_at.as_deref().or(task.start_at.as_deref());
+            return Err(ApiError(
+                StatusCode::CONFLICT,
+                json!({
+                    "error": "recurring task: pass expectedOccurrence (body or query) to confirm which occurrence to complete",
+                    "expectedOccurrence": occurrence,
+                }),
+            ));
+        }
+    }
     // The API has no client timezone; score against UTC day (tz offset 0).
-    repo::tasks::complete_task(&s.pool, &s.bus, &tid, 0).await?;
+    repo::tasks::complete_task_with(&s.pool, &s.bus, &tid, 0, expected.as_deref()).await?;
     Ok(Json(json!({ "ok": true })))
 }
 
@@ -173,7 +198,18 @@ fn openapi_spec() -> Value {
             "/open/v1/project/{id}/data": { "get": path("Project with its tasks") },
             "/open/v1/task": { "post": path("Create a task") },
             "/open/v1/task/{id}": { "post": path("Update a task") },
-            "/open/v1/project/{projectId}/task/{taskId}/complete": { "post": path("Complete a task") },
+            "/open/v1/project/{projectId}/task/{taskId}/complete": { "post": {
+                "summary": "Complete a task",
+                "description": "Completing a RECURRING task requires `expectedOccurrence` (the occurrence's due-else-start datetime as the client last read it), passed in the JSON body or as a query parameter; without it the call returns 409 with the current occurrence so the client can confirm. Retrying with the same key after the task advanced is a safe no-op (200). Non-recurring tasks may be completed without a body (TickTick Open API shape).",
+                "requestBody": { "required": false, "content": { "application/json": { "schema": {
+                    "type": "object",
+                    "properties": { "expectedOccurrence": { "type": "string", "format": "date-time" } }
+                } } } },
+                "responses": {
+                    "200": ok,
+                    "409": { "description": "Recurring task completed without expectedOccurrence; body carries the current occurrence." }
+                }
+            } },
             "/open/v1/project/{projectId}/task/{taskId}": { "delete": path("Delete a task") },
             "/open/v1/toodoo/habits": { "get": path("List habits (Toodoo extension)") },
             "/open/v1/toodoo/focus/stats": { "get": path("Focus stats, last 30 days (Toodoo extension)") },

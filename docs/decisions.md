@@ -5,6 +5,30 @@ ambiguity we resolved by judgment call), with the reasoning. Newest entries at
 the top. Never rewrite history — if a decision is reversed, add a new entry
 that supersedes the old one.
 
+## 2026-07-18 — REST recurring completion requires an occurrence key (supersedes the 2026-07-17 "REST complete endpoint stays keyless" limitation)
+
+Adversarial-review follow-up (round 2, [high]): the documented limitation — a
+sequential keyless retry of `POST …/task/{id}/complete` advancing the next
+occurrence — was judged not acceptable for an exposed API path after all, since
+an automated client retrying a lost response silently skips occurrences and
+double-awards points. Owner-chosen middle ground, **"require for recurring"**:
+
+- **Non-recurring tasks: keyless completion is unchanged** (TickTick Open API
+  shape preserved — third-party TickTick-shaped clients keep working).
+- **Recurring tasks** (rule + anchor date + ACTIVE, the shared
+  `repo::tasks::is_recurring` predicate): the endpoint now **requires
+  `expectedOccurrence`** (JSON body or query param; the occurrence's
+  due-else-start as the client last read it). Without it → **409 CONFLICT**
+  with the current occurrence in the body, so a client can read-confirm-retry.
+- With the key, the call flows through `complete_task_with`'s occurrence-key
+  guard: an exact replay after the series advanced is a **safe no-op returning
+  200** — idempotent retry semantics, no second advance, no extra ledger row.
+- `openapi.json` documents the body, the 409, and the retry semantics.
+
+Covered by `api::tests::recurring_completion_requires_and_honors_occurrence_key`.
+The Tauri command path already passed the key (2026-07-17 entry); only the REST
+surface changed.
+
 ## 2026-07-18 — Pop-out window posture: pill default + defense-in-depth (closes the white-window saga)
 
 Final resolution of the three-round white-pop-out investigation. The failure
