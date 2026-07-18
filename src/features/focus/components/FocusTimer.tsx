@@ -1,8 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { api } from "../../../lib/api";
-import { useUiStore } from "../../../lib/uiStore";
 import { useFocusStats } from "../hooks/useFocus";
-import { usePomodoro } from "../hooks/usePomodoro";
+import { useFocusTimer } from "../FocusProvider";
 import { formatClock, type PomoConfig } from "../lib/pomodoro";
 
 const PHASE_LABEL = { work: "Focus", short: "Short break", long: "Long break" } as const;
@@ -15,8 +14,7 @@ function todayRange() {
 }
 
 export function FocusTimer({ config }: { config: PomoConfig }) {
-  const focusTaskId = useUiStore((s) => s.focusTaskId);
-  const p = usePomodoro(config, focusTaskId);
+  const p = useFocusTimer(config);
   const { from, to } = todayRange();
   const stats = useFocusStats(from, to);
   const pomosToday = stats.data?.pomoCount ?? 0;

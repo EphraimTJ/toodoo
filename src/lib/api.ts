@@ -726,6 +726,8 @@ export interface Api {
   todayCount(): Promise<number>;
   /** Reveal the folder holding the rotating toodoo.log (no-op in the browser). */
   openLogsFolder(): Promise<void>;
+  /** Show + focus the main window (pill overflow menus). */
+  showMainWindow(): Promise<void>;
   /** Fire the full notification path now; resolves to a short stage report. */
   sendTestNotification(): Promise<string>;
   /** Load the feature-complete sample workspace. Refuses a non-empty
@@ -989,6 +991,7 @@ const tauriApi: Api = {
   openStickyWindow: (id) => invoke("open_sticky_window", { id }),
   todayCount: () => invoke("today_count"),
   openLogsFolder: () => invoke("open_logs_folder"),
+  showMainWindow: () => invoke("show_main_window"),
   sendTestNotification: () => invoke("send_test_notification"),
   seedSampleData: (force) => invoke("seed_sample_data", { force }),
 
@@ -2399,6 +2402,7 @@ function browserStubApi(): Api {
     openFocusWindow: async () => {},
     openStickyWindow: async () => {},
     openLogsFolder: async () => {},
+    showMainWindow: async () => {},
     sendTestNotification: async () => {
       // Browser stub: exercise the in-app toast path only.
       window.dispatchEvent(

@@ -7,6 +7,7 @@ import { ReminderToasts } from "../../features/reminders/components/ReminderToas
 import { SystemToasts } from "./SystemToasts";
 import { SampleDataPrompt } from "./SampleDataPrompt";
 import { PanelHost } from "./PanelHost";
+import { FocusProvider } from "../../features/focus/FocusProvider";
 import { ShortcutCheatsheet } from "../../features/shortcuts/components/ShortcutCheatsheet";
 import { useShortcuts } from "../../features/shortcuts/useShortcuts";
 import { api } from "../../lib/api";
@@ -48,16 +49,18 @@ export function AppShell() {
   }, []);
 
   return (
-    <div className="flex h-full">
-      <Sidebar />
-      <ListPane />
-      <DetailPane />
-      <CommandPalette />
-      <ReminderToasts />
-      <SystemToasts />
-      <SampleDataPrompt />
-      <PanelHost />
-      <ShortcutCheatsheet />
-    </div>
+    <FocusProvider>
+      <div className="flex h-full">
+        <Sidebar />
+        <ListPane />
+        <DetailPane />
+        <CommandPalette />
+        <ReminderToasts />
+        <SystemToasts />
+        <SampleDataPrompt />
+        <PanelHost />
+        <ShortcutCheatsheet />
+      </div>
+    </FocusProvider>
   );
 }

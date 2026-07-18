@@ -1,8 +1,6 @@
 import { Component, useEffect, type ReactNode } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { api } from "../lib/api";
 import { QuickAddBar } from "../features/quickadd/components/QuickAddBar";
-import { FocusView } from "../features/focus/components/FocusView";
+import { FocusPillWindow, StickyPillWindow } from "./pills";
 
 /** Close the hosting Tauri window (no-op in the browser). */
 function closeWindow() {
@@ -54,28 +52,15 @@ function QuickAddWindow() {
 function FocusWindow() {
   return (
     <div className="h-full" data-testid="win-focus">
-      <FocusView />
+      <FocusPillWindow />
     </div>
   );
 }
 
 function StickyWindow({ id }: { id: string }) {
-  const { data: stickies } = useQuery({ queryKey: ["stickies"], queryFn: api.listStickies });
-  const sticky = (stickies ?? []).find((s) => s.id === id);
   return (
-    <div
-      className="h-screen w-screen overflow-auto p-3 text-sm"
-      data-testid="win-sticky"
-      style={{ background: sticky?.color ?? "var(--color-surface)" }}
-    >
-      {sticky ? (
-        <>
-          <div className="mb-1 font-semibold">{sticky.title}</div>
-          <div className="whitespace-pre-wrap">{sticky.contentPlain}</div>
-        </>
-      ) : (
-        <div className="text-text-muted">Sticky not found.</div>
-      )}
+    <div className="h-full" data-testid="win-sticky">
+      <StickyPillWindow id={id} />
     </div>
   );
 }

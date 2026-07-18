@@ -1372,21 +1372,32 @@ fn open_logs_folder(app: tauri::AppHandle) -> CmdResult<()> {
 // (desktop::request_popout) and its outcome is reported by the boot beacon /
 // watchdog, never by the IPC reply — an IPC-context build() hang was the
 // round-3 white-window failure mode.
+/// Show + focus the main window (pill overflow menu → "Open Toodoo").
+#[tauri::command]
+fn show_main_window(app: tauri::AppHandle) -> CmdResult<()> {
+    if let Some(win) = app.get_webview_window("main") {
+        let _ = win.unminimize();
+        let _ = win.show();
+        let _ = win.set_focus();
+    }
+    Ok(())
+}
+
 #[tauri::command]
 fn open_quick_add_window(app: tauri::AppHandle) -> CmdResult<()> {
-    desktop::request_popout(&app, "quickadd", "win=quickadd", "Quick add", 520.0, 180.0);
+    desktop::request_popout(&app, "quickadd", "win=quickadd", "Quick add", 520.0, 180.0, desktop::PopoutStyle::Decorated);
     Ok(())
 }
 
 #[tauri::command]
 fn open_focus_window(app: tauri::AppHandle) -> CmdResult<()> {
-    desktop::request_popout(&app, "focus", "win=focus", "Focus", 320.0, 220.0);
+    desktop::request_popout(&app, "focus", "win=focus", "Focus", 210.0, 64.0, desktop::PopoutStyle::Pill);
     Ok(())
 }
 
 #[tauri::command]
 fn open_sticky_window(app: tauri::AppHandle, id: String) -> CmdResult<()> {
-    desktop::request_popout(&app, &format!("sticky-{id}"), &format!("win=sticky&id={id}"), "Sticky", 260.0, 240.0);
+    desktop::request_popout(&app, &format!("sticky-{id}"), &format!("win=sticky&id={id}"), "Sticky", 260.0, 240.0, desktop::PopoutStyle::Pill);
     Ok(())
 }
 
@@ -1439,7 +1450,7 @@ pub fn run() {
                 .with_handler(|app, _shortcut, event| {
                     // We register a single shortcut (quick-add), so any press opens it.
                     if event.state == tauri_plugin_global_shortcut::ShortcutState::Pressed {
-                        desktop::request_popout(app, "quickadd", "win=quickadd", "Quick add", 520.0, 180.0);
+                        desktop::request_popout(app, "quickadd", "win=quickadd", "Quick add", 520.0, 180.0, desktop::PopoutStyle::Decorated);
                     }
                 })
                 .build(),
@@ -1514,13 +1525,13 @@ pub fn run() {
                 tauri::async_runtime::spawn(async move {
                     tokio::time::sleep(std::time::Duration::from_secs(3)).await;
                     log::info!("[diag] opening focus + sticky windows");
-                    desktop::request_popout(&h, "focus", "win=focus", "Focus", 320.0, 220.0);
-                    desktop::request_popout(&h, "sticky-diag", "win=sticky&id=diag", "Sticky", 260.0, 240.0);
+                    desktop::request_popout(&h, "focus", "win=focus", "Focus", 210.0, 64.0, desktop::PopoutStyle::Pill);
+                    desktop::request_popout(&h, "sticky-diag", "win=sticky&id=diag", "Sticky", 260.0, 240.0, desktop::PopoutStyle::Pill);
                     if diag == "watchdog" {
                         // A window whose content deliberately never beacons —
                         // the watchdog must destroy it and raise the toast.
                         log::info!("[diag] opening nobeacon window to exercise the watchdog");
-                        desktop::request_popout(&h, "diag-nobeacon", "win=nobeacon", "Diag", 260.0, 160.0);
+                        desktop::request_popout(&h, "diag-nobeacon", "win=nobeacon", "Diag", 260.0, 160.0, desktop::PopoutStyle::Decorated);
                     }
                 });
             }
@@ -1761,10 +1772,10 @@ pub fn run() {
                     .menu(&menu)
                     .on_menu_event(|app, event| match event.id.as_ref() {
                         "quick_add" => {
-                            desktop::request_popout(app, "quickadd", "win=quickadd", "Quick add", 520.0, 180.0);
+                            desktop::request_popout(app, "quickadd", "win=quickadd", "Quick add", 520.0, 180.0, desktop::PopoutStyle::Decorated);
                         }
                         "start_focus" => {
-                            desktop::request_popout(app, "focus", "win=focus", "Focus", 320.0, 220.0);
+                            desktop::request_popout(app, "focus", "win=focus", "Focus", 210.0, 64.0, desktop::PopoutStyle::Pill);
                         }
                         "open_today" => {
                             if let Some(w) = app.get_webview_window("main") {
@@ -1965,6 +1976,7 @@ pub fn run() {
             open_logs_folder,
             send_test_notification,
             seed_sample_data,
+            show_main_window,
             open_quick_add_window,
             open_focus_window,
             open_sticky_window,

@@ -165,17 +165,34 @@ pub fn mark_window_booted(app: &AppHandle, label: &str) {
 /// `build()` call itself — a hanging build is a watchdog hit, not silence.
 const BOOT_DEADLINE_SECS: u64 = 5;
 
+/// Pop-out window chrome. `Pill` is the TickTick-style frameless, transparent,
+/// rounded surface (focus timer + stickies); `Decorated` keeps a native title
+/// bar (quick-add and diagnostics).
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum PopoutStyle {
+    Decorated,
+    Pill,
+}
+
 /// Request a pop-out window from any thread/context. Creation is deferred to
 /// the **main thread** — the only creation context proven to work on the
 /// machine where command/tray-context creation hung (the quick-add window,
 /// created from the global-shortcut handler on the main thread, has always
 /// worked there). Fire-and-forget: success/failure is reported by the boot
 /// beacon / watchdog, never by an IPC reply.
-pub fn request_popout(app: &AppHandle, label: &str, query: &str, title: &str, w: f64, h: f64) {
+pub fn request_popout(
+    app: &AppHandle,
+    label: &str,
+    query: &str,
+    title: &str,
+    w: f64,
+    h: f64,
+    style: PopoutStyle,
+) {
     let app2 = app.clone();
     let (label, query, title) = (label.to_string(), query.to_string(), title.to_string());
     let res = app.run_on_main_thread(move || {
-        if let Err(e) = open_or_focus(&app2, &label, &query, &title, w, h) {
+        if let Err(e) = open_or_focus(&app2, &label, &query, &title, w, h, style) {
             log::error!("[window] {label}: open_or_focus errored: {e}");
         }
     });
@@ -194,6 +211,7 @@ pub fn open_or_focus(
     title: &str,
     w: f64,
     h: f64,
+    style: PopoutStyle,
 ) -> tauri::Result<()> {
     if let Some(win) = app.get_webview_window(label) {
         let _ = win.show();
@@ -261,15 +279,26 @@ pub fn open_or_focus(
     log::info!("[window] {label}: creating window url={url:?} title={title:?}");
     let build_label = label.to_string();
     let nav_label = label.to_string();
-    let result = WebviewWindowBuilder::new(app, label, WebviewUrl::App(url.into()))
+    let mut builder = WebviewWindowBuilder::new(app, label, WebviewUrl::App(url.into()))
         .title(title)
         .inner_size(w, h)
         // Without an explicit position the OS default can spawn the window
-        // partially off-screen (observed on the installed build). Center it.
+        // partially off-screen (observed on the installed build). Center it;
+        // pill windows re-apply their persisted position on boot.
         .center()
         .always_on_top(true)
-        .decorations(true)
-        .resizable(true)
+        .resizable(true);
+    builder = match style {
+        PopoutStyle::Decorated => builder.decorations(true),
+        // Frameless pill: no native chrome; Esc + the hover menu close it, and
+        // the pre-armed watchdog destroys it if its content never boots.
+        PopoutStyle::Pill => builder
+            .decorations(false)
+            .transparent(true)
+            .shadow(false)
+            .skip_taskbar(true),
+    };
+    let result = builder
         .on_navigation(move |url| {
             log::info!("[window] {nav_label}: navigation to {url}");
             true
