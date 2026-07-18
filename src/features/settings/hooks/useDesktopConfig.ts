@@ -11,6 +11,7 @@ export function useDesktopConfig() {
   const setAutostart = useMutation({ mutationFn: (on: boolean) => api.setAutostart(on), onSuccess: set });
   const setNotifActions = useMutation({ mutationFn: (on: boolean) => api.setNotifActions(on), onSuccess: set });
   const setSimplePopouts = useMutation({ mutationFn: (on: boolean) => api.setSimplePopouts(on), onSuccess: set });
+  const setPopoutStyle = useMutation({ mutationFn: (s: string) => api.setPopoutStyle(s), onSuccess: set });
 
-  return { query, setHotkey, setAutostart, setNotifActions, setSimplePopouts };
+  return { query, setHotkey, setAutostart, setNotifActions, setSimplePopouts, setPopoutStyle };
 }

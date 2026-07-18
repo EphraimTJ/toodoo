@@ -5,7 +5,8 @@ import { playChirp, useNotifSound } from "../../reminders/hooks/useNotifSound";
 /** Desktop panel: global quick-add hotkey, launch-at-login, notification actions.
  *  The toggles apply natively in the Tauri app; the browser mirrors the config. */
 export function DesktopSettings() {
-  const { query, setHotkey, setAutostart, setNotifActions, setSimplePopouts } = useDesktopConfig();
+  const { query, setHotkey, setAutostart, setNotifActions, setSimplePopouts, setPopoutStyle } =
+    useDesktopConfig();
   const { sound, setSound } = useNotifSound();
   const cfg = query.data;
   const [hotkey, setHotkeyDraft] = useState("");
@@ -130,6 +131,29 @@ export function DesktopSettings() {
         windows open blank on your machine (the app also switches automatically
         after repeated failures).
       </p>
+
+      {!cfg.simplePopouts && (
+        <label className="flex items-center gap-2 text-sm">
+          <span className="text-xs font-medium text-text-muted">Pop-out window style</span>
+          <select
+            aria-label="Pop-out window style"
+            data-testid="popout-style-select"
+            value={cfg.popoutStyle}
+            onChange={(e) => setPopoutStyle.mutate(e.target.value)}
+            className="rounded border border-border bg-bg px-1.5 py-0.5 text-sm"
+          >
+            <option value="pill">Pill (frameless, transparent)</option>
+            <option value="solid">Solid (frameless, opaque)</option>
+            <option value="windowed">Windowed (title bar)</option>
+          </select>
+        </label>
+      )}
+      {!cfg.simplePopouts && (
+        <p className="text-xs text-text-muted">
+          If pill pop-outs open blank on your machine, try Solid, then
+          Windowed — some graphics drivers cannot create transparent windows.
+        </p>
+      )}
     </div>
   );
 }

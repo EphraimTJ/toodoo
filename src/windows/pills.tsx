@@ -10,8 +10,14 @@ import {
   pinWindowTop,
   setWindowSize,
   usePersistedWindowBox,
-  useTransparentBody,
+  useWindowBackground,
 } from "./pillUtils";
+
+/** "transparent" only when the window chrome is the true transparent pill. */
+function usePillBackground(solidColor: string): string {
+  const { data: cfg } = useQuery({ queryKey: ["desktopConfig"], queryFn: api.desktopConfig });
+  return cfg && cfg.popoutStyle !== "pill" ? solidColor : "transparent";
+}
 
 const STICKY_COLORS = ["#ffd97d", "#a3e4b7", "#a7c7ff", "#f7a8c4", "#d7bde2", "#e0e0e0"];
 
@@ -83,7 +89,7 @@ function Ring({ progress, size = 40 }: { progress: number; size?: number }) {
  * into a slim progress bar, hovering the bar slides the pill back out.
  */
 export function FocusPillWindow() {
-  useTransparentBody();
+  useWindowBackground(usePillBackground("#171717"));
   const state = useFocusState();
   const [hover, setHover] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -252,12 +258,12 @@ export function FocusPillWindow() {
  * drag, corner-grip resize, hover menu with color swatches.
  */
 export function StickyPillWindow({ id }: { id: string }) {
-  useTransparentBody();
   usePersistedWindowBox(`popout:sticky-${id}`);
   const [hover, setHover] = useState(false);
   const grip = useRef<{ startX: number; startY: number; w: number; h: number } | null>(null);
   const { data: stickies, refetch } = useQuery({ queryKey: ["stickies"], queryFn: api.listStickies });
   const sticky = (stickies ?? []).find((s) => s.id === id);
+  useWindowBackground(usePillBackground(sticky?.color ?? "#ffd97d"));
 
   const onGripDown = (e: React.PointerEvent) => {
     grip.current = {

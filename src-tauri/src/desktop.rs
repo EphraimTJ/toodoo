@@ -30,6 +30,8 @@ pub const KEY_NOTIF: &str = "notif.actions";
 /// "Use simple in-app pop-outs": render focus/sticky pop-outs as in-app
 /// floating panels instead of native windows (the webview-load fallback).
 pub const KEY_SIMPLE_POPOUTS: &str = "popout.simple";
+/// Native pop-out chrome: "pill" | "solid" | "windowed" (style_from_setting).
+pub const KEY_POPOUT_STYLE: &str = "popout.style";
 pub const DEFAULT_HOTKEY: &str = "CmdOrCtrl+Shift+A";
 
 #[derive(Debug, Clone, Serialize)]
@@ -39,6 +41,7 @@ pub struct DesktopConfig {
     pub autostart: bool,
     pub notif_actions: bool,
     pub simple_popouts: bool,
+    pub popout_style: String,
 }
 
 /// Modifier tokens accepted in an accelerator (Tauri's `CmdOrCtrl` convention).
@@ -74,11 +77,24 @@ pub async fn config(pool: &SqlitePool) -> Result<DesktopConfig> {
             .await?
             .and_then(|v| v.as_bool())
             .unwrap_or(false),
+        popout_style: get_setting(pool, KEY_POPOUT_STYLE)
+            .await?
+            .and_then(|v| v.as_str().map(String::from))
+            .unwrap_or_else(|| "pill".to_string()),
     })
 }
 
 pub async fn set_simple_popouts(pool: &SqlitePool, bus: &EventBus, on: bool) -> Result<DesktopConfig> {
     set_setting(pool, bus, KEY_SIMPLE_POPOUTS, serde_json::json!(on)).await?;
+    config(pool).await
+}
+
+pub async fn set_popout_style(pool: &SqlitePool, bus: &EventBus, style: &str) -> Result<DesktopConfig> {
+    let style = match style {
+        "windowed" | "solid" | "pill" => style,
+        _ => "pill",
+    };
+    set_setting(pool, bus, KEY_POPOUT_STYLE, serde_json::json!(style)).await?;
     config(pool).await
 }
 
@@ -165,13 +181,31 @@ pub fn mark_window_booted(app: &AppHandle, label: &str) {
 /// `build()` call itself — a hanging build is a watchdog hit, not silence.
 const BOOT_DEADLINE_SECS: u64 = 5;
 
-/// Pop-out window chrome. `Pill` is the TickTick-style frameless, transparent,
-/// rounded surface (focus timer + stickies); `Decorated` keeps a native title
-/// bar (quick-add and diagnostics).
-#[derive(Clone, Copy, PartialEq, Eq)]
+/// Pop-out window chrome, from safest to fanciest. The round-3b log proved
+/// `build()` hangs machine-dependently for the full pill style while decorated
+/// windows build fine — the granular variants let one diag run
+/// (`TOODOO_DIAG_WINDOWS=styles`) bisect exactly which flag hangs, and the
+/// `popout.style` setting lets the user pick a working chrome without a
+/// rebuild.
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum PopoutStyle {
+    /// Native title bar (quick-add, diagnostics; proven everywhere).
     Decorated,
+    /// Frameless but opaque — no transparency/composition involvement.
+    FramelessOpaque,
+    /// Frameless + transparent, still with default shadow/taskbar flags.
+    FramelessTransparent,
+    /// Full pill: frameless + transparent + no shadow + skip taskbar.
     Pill,
+}
+
+/// The user-selectable `popout.style` values → chrome for focus/sticky pills.
+pub fn style_from_setting(value: &str) -> PopoutStyle {
+    match value {
+        "windowed" => PopoutStyle::Decorated,
+        "solid" => PopoutStyle::FramelessOpaque,
+        _ => PopoutStyle::Pill,
+    }
 }
 
 /// Request a pop-out window from any thread/context. Creation is deferred to
@@ -244,25 +278,40 @@ pub fn open_or_focus(
             );
         }
         // Persist the failure streak so the frontend can auto-fall-back to
-        // in-app panels, and tell the main window.
+        // in-app panels. Read-increment-write: the in-memory streak resets
+        // every launch, so overwriting with it kept the persisted counter
+        // pinned at 1 across restarts (round-3b log) and the fallback never
+        // engaged. The counter only resets when a window of this kind boots.
         let kind = popout_kind(&label_owned).to_string();
+        let mut total = failures;
         if let Some(state) = watchdog_app.try_state::<crate::AppState>() {
             let key = format!("popout.failures.{kind}");
+            let prior = crate::repo::settings::get_setting(&state.pool, &key)
+                .await
+                .ok()
+                .flatten()
+                .and_then(|v| v.as_u64())
+                .unwrap_or(0) as u32;
+            total = prior + 1;
             if let Err(e) = crate::repo::settings::set_setting(
                 &state.pool,
                 &state.bus,
                 &key,
-                serde_json::json!(failures),
+                serde_json::json!(total),
             )
             .await
             {
                 log::error!("[window-watchdog] persisting {key} failed: {e}");
+            } else {
+                log::error!(
+                    "[window-watchdog] {kind}: lifetime consecutive failures now {total} (in-app fallback engages at 2)"
+                );
             }
         }
         let _ = watchdog_app.emit_to(
             "main",
             "popout-failed",
-            serde_json::json!({ "label": label_owned, "kind": kind, "failures": failures }),
+            serde_json::json!({ "label": label_owned, "kind": kind, "failures": total }),
         );
         let _ = watchdog_app.emit_to(
             "main",
@@ -288,8 +337,11 @@ pub fn open_or_focus(
         .center()
         .always_on_top(true)
         .resizable(true);
+    log::info!("[window] {label}: style {style:?}");
     builder = match style {
         PopoutStyle::Decorated => builder.decorations(true),
+        PopoutStyle::FramelessOpaque => builder.decorations(false),
+        PopoutStyle::FramelessTransparent => builder.decorations(false).transparent(true),
         // Frameless pill: no native chrome; Esc + the hover menu close it, and
         // the pre-armed watchdog destroys it if its content never boots.
         PopoutStyle::Pill => builder

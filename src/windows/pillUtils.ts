@@ -3,19 +3,22 @@ import { api } from "../lib/api";
 
 export const IS_TAURI = "__TAURI_INTERNALS__" in window;
 
-/** Frameless pill windows are transparent — clear the page background. */
-export function useTransparentBody() {
+/** Set the page background for a pill window: "transparent" for the true
+ *  pill chrome, or a solid color when the window itself is opaque (the
+ *  "solid"/"windowed" pop-out styles) so the pill's rounded corners don't sit
+ *  on a stark default background. */
+export function useWindowBackground(color: string) {
   useEffect(() => {
     const html = document.documentElement;
     const prevHtml = html.style.background;
     const prevBody = document.body.style.background;
-    html.style.background = "transparent";
-    document.body.style.background = "transparent";
+    html.style.background = color;
+    document.body.style.background = color;
     return () => {
       html.style.background = prevHtml;
       document.body.style.background = prevBody;
     };
-  }, []);
+  }, [color]);
 }
 
 export interface WindowBox {

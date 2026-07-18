@@ -336,6 +336,8 @@ export interface DesktopConfig {
   notifActions: boolean;
   /** Render focus/sticky pop-outs as in-app floating panels (webview fallback). */
   simplePopouts: boolean;
+  /** Native pop-out chrome: "pill" | "solid" (frameless opaque) | "windowed". */
+  popoutStyle: string;
 }
 
 // ---- Search -----------------------------------------------------------------
@@ -719,6 +721,7 @@ export interface Api {
   setQuickAddHotkey(accel: string): Promise<DesktopConfig>;
   setNotifActions(on: boolean): Promise<DesktopConfig>;
   setSimplePopouts(on: boolean): Promise<DesktopConfig>;
+  setPopoutStyle(style: string): Promise<DesktopConfig>;
   setAutostart(on: boolean): Promise<DesktopConfig>;
   openQuickAddWindow(): Promise<void>;
   openFocusWindow(): Promise<void>;
@@ -985,6 +988,7 @@ const tauriApi: Api = {
   setQuickAddHotkey: (accel) => invoke("set_quick_add_hotkey", { accel }),
   setNotifActions: (on) => invoke("set_notif_actions", { on }),
   setSimplePopouts: (on) => invoke("set_simple_popouts", { on }),
+  setPopoutStyle: (style) => invoke("set_popout_style", { style }),
   setAutostart: (on) => invoke("set_autostart", { on }),
   openQuickAddWindow: () => invoke("open_quick_add_window"),
   openFocusWindow: () => invoke("open_focus_window"),
@@ -1102,6 +1106,7 @@ function browserStubApi(): Api {
     autostart: false,
     notifActions: true,
     simplePopouts: false,
+    popoutStyle: "pill",
   };
   const nowIso = () => new Date().toISOString();
   const uid = () => crypto.randomUUID();
@@ -2386,6 +2391,10 @@ function browserStubApi(): Api {
     },
     setSimplePopouts: async (on) => {
       desktopCfg.simplePopouts = on;
+      return clone(desktopCfg);
+    },
+    setPopoutStyle: async (style) => {
+      desktopCfg.popoutStyle = style;
       return clone(desktopCfg);
     },
     setNotifActions: async (on) => {

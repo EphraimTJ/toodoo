@@ -1266,6 +1266,11 @@ async fn set_simple_popouts(state: State<'_, AppState>, on: bool) -> CmdResult<d
 }
 
 #[tauri::command]
+async fn set_popout_style(state: State<'_, AppState>, style: String) -> CmdResult<desktop::DesktopConfig> {
+    desktop::set_popout_style(&state.pool, &state.bus, &style).await.map_err(err)
+}
+
+#[tauri::command]
 async fn set_autostart(
     app: tauri::AppHandle,
     state: State<'_, AppState>,
@@ -1282,16 +1287,20 @@ async fn set_autostart(
 /// here, so a packaged build's white screen becomes a diagnosable log line.
 /// The beacon also feeds the watchdog in `desktop::open_or_focus`.
 #[tauri::command]
-fn log_window_error(
+async fn log_window_error(
     app: tauri::AppHandle,
     window: tauri::WebviewWindow,
+    state: State<'_, AppState>,
     message: String,
     win: Option<String>,
 ) -> CmdResult<()> {
-    let label = window.label();
+    let label = window.label().to_string();
     if message == "booted ok" {
         log::info!("[window] {label} ({}): {message}", win.as_deref().unwrap_or("?"));
-        desktop::mark_window_booted(&app, label);
+        desktop::mark_window_booted(&app, &label);
+        // A healthy boot clears the persisted failure streak for this kind.
+        let key = format!("popout.failures.{}", desktop::popout_kind(&label));
+        let _ = repo::settings::set_setting(&state.pool, &state.bus, &key, serde_json::json!(0)).await;
     } else {
         log::error!("[window] {label} ({}): {message}", win.as_deref().unwrap_or("?"));
     }
@@ -1389,15 +1398,50 @@ fn open_quick_add_window(app: tauri::AppHandle) -> CmdResult<()> {
     Ok(())
 }
 
+/// The chrome the user picked for focus/sticky pop-outs (popout.style).
+async fn configured_popout_style(app: &tauri::AppHandle) -> desktop::PopoutStyle {
+    match app.try_state::<AppState>() {
+        Some(state) => desktop::style_from_setting(
+            &desktop::config(&state.pool).await.map(|c| c.popout_style).unwrap_or_default(),
+        ),
+        None => desktop::PopoutStyle::Pill,
+    }
+}
+
+/// Open the focus pop-out with the configured chrome (usable from any context).
+fn open_focus_popout(app: &tauri::AppHandle) {
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        let style = configured_popout_style(&app).await;
+        desktop::request_popout(&app, "focus", "win=focus", "Focus", 210.0, 64.0, style);
+    });
+}
+
+fn open_sticky_popout(app: &tauri::AppHandle, id: String) {
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        let style = configured_popout_style(&app).await;
+        desktop::request_popout(
+            &app,
+            &format!("sticky-{id}"),
+            &format!("win=sticky&id={id}"),
+            "Sticky",
+            260.0,
+            240.0,
+            style,
+        );
+    });
+}
+
 #[tauri::command]
 fn open_focus_window(app: tauri::AppHandle) -> CmdResult<()> {
-    desktop::request_popout(&app, "focus", "win=focus", "Focus", 210.0, 64.0, desktop::PopoutStyle::Pill);
+    open_focus_popout(&app);
     Ok(())
 }
 
 #[tauri::command]
 fn open_sticky_window(app: tauri::AppHandle, id: String) -> CmdResult<()> {
-    desktop::request_popout(&app, &format!("sticky-{id}"), &format!("win=sticky&id={id}"), "Sticky", 260.0, 240.0, desktop::PopoutStyle::Pill);
+    open_sticky_popout(&app, id);
     Ok(())
 }
 
@@ -1524,6 +1568,36 @@ pub fn run() {
                 let h = app.handle().clone();
                 tauri::async_runtime::spawn(async move {
                     tokio::time::sleep(std::time::Duration::from_secs(3)).await;
+                    if diag == "styles" {
+                        // Chrome bisect (round-3b): four windows from safest
+                        // to fanciest chrome, same content. The log's
+                        // build-returned / booted / watchdog lines per label
+                        // name the exact flag that hangs on this machine.
+                        log::info!("[diag] style bisect: opening 4 windows (a=decorated, b=frameless, c=+transparent, d=full pill)");
+                        use desktop::PopoutStyle as S;
+                        for (label, style) in [
+                            ("diag-style-a-decorated", S::Decorated),
+                            ("diag-style-b-frameless", S::FramelessOpaque),
+                            ("diag-style-c-transparent", S::FramelessTransparent),
+                            ("diag-style-d-pill", S::Pill),
+                        ] {
+                            desktop::request_popout(&h, label, "win=quickadd", label, 300.0, 120.0, style);
+                        }
+                        // Tidy up after the evidence is in the log.
+                        tokio::time::sleep(std::time::Duration::from_secs(15)).await;
+                        for label in [
+                            "diag-style-a-decorated",
+                            "diag-style-b-frameless",
+                            "diag-style-c-transparent",
+                            "diag-style-d-pill",
+                        ] {
+                            if let Some(win) = h.get_webview_window(label) {
+                                let _ = win.destroy();
+                            }
+                        }
+                        log::info!("[diag] style bisect finished");
+                        return;
+                    }
                     log::info!("[diag] opening focus + sticky windows");
                     desktop::request_popout(&h, "focus", "win=focus", "Focus", 210.0, 64.0, desktop::PopoutStyle::Pill);
                     desktop::request_popout(&h, "sticky-diag", "win=sticky&id=diag", "Sticky", 260.0, 240.0, desktop::PopoutStyle::Pill);
@@ -1775,7 +1849,7 @@ pub fn run() {
                             desktop::request_popout(app, "quickadd", "win=quickadd", "Quick add", 520.0, 180.0, desktop::PopoutStyle::Decorated);
                         }
                         "start_focus" => {
-                            desktop::request_popout(app, "focus", "win=focus", "Focus", 210.0, 64.0, desktop::PopoutStyle::Pill);
+                            open_focus_popout(app);
                         }
                         "open_today" => {
                             if let Some(w) = app.get_webview_window("main") {
@@ -1971,6 +2045,7 @@ pub fn run() {
             set_quick_add_hotkey,
             set_notif_actions,
             set_simple_popouts,
+            set_popout_style,
             set_autostart,
             log_window_error,
             open_logs_folder,
