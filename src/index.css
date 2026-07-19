@@ -5,24 +5,28 @@
 
 /* Theme tokens — light is the default; `.dark` overrides. Custom accent
    themes (Phase 12) only need to override these variables. */
+/* "Stone & Sage" — warm stone neutrals with a grey-green sage accent.
+   Neutrals carry a faint warm/olive bias so they read as chosen, not default.
+   The accent is normally set at runtime from `theme.accent`; these values are
+   the fallback and match ACCENT_PRESETS[0] in settings/lib/theme.ts. */
 :root {
-  --color-bg: #f7f7f8;
-  --color-surface: #ffffff;
-  --color-border: #e4e4e7;
-  --color-text: #18181b;
-  --color-text-muted: #71717a;
-  --color-accent: #4772fa; /* TickTick blue */
-  --color-accent-fg: #ffffff;
+  --color-bg: #eae7df;
+  --color-surface: #f5f3ec;
+  --color-border: #d8d3c5;
+  --color-text: #2e2d27;
+  --color-text-muted: #767468;
+  --color-accent: #6c7e58; /* sage */
+  --color-accent-fg: #f5f3ec;
 }
 
 .dark {
-  --color-bg: #17181c;
-  --color-surface: #202126;
-  --color-border: #34353b;
-  --color-text: #e4e4e7;
-  --color-text-muted: #9d9da6;
-  --color-accent: #5a82fb;
-  --color-accent-fg: #ffffff;
+  --color-bg: #1e1d19;
+  --color-surface: #26251f;
+  --color-border: #37362e;
+  --color-text: #e6e4d8;
+  --color-text-muted: #9a988b;
+  --color-accent: #8fa271; /* sage, lifted for dark grounds */
+  --color-accent-fg: #1e1d19;
 }
 
 @theme inline {
@@ -33,6 +37,11 @@
   --color-text-muted: var(--color-text-muted);
   --color-accent: var(--color-accent);
   --color-accent-fg: var(--color-accent-fg);
+
+  /* Quiet grotesk. "Hanken Grotesk" is the intended face (bundle it to
+     activate); until then this resolves to the system UI grotesk. */
+  --font-sans: "Hanken Grotesk", ui-sans-serif, system-ui, -apple-system,
+    "Segoe UI Variable Text", "Segoe UI", Roboto, sans-serif;
 }
 
 html,
@@ -43,4 +52,5 @@ body,
 
 body {
   @apply bg-bg text-text antialiased;
+  font-family: var(--font-sans);
 }
