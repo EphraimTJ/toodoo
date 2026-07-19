@@ -1,0 +1,52 @@
+name: Release
+
+# Push a version tag (e.g. v1.1.0) to build a signed installer and publish a
+# GitHub Release with the updater manifest (latest.json). Installed apps read
+# that manifest from the "latest" release and offer the update in-app.
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+jobs:
+  release:
+    permissions:
+      contents: write
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache Rust build
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Build, sign, and publish release
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # The private key and its password live only in repo secrets.
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          tagName: ${{ github.ref_name }}
+          releaseName: "Toodoo ${{ github.ref_name }}"
+          releaseBody: "See the changelog. The app will offer this update automatically to existing installs once this release is published."
+          # Draft so you can review before it goes live. Publishing the draft is
+          # what makes the update reach existing installs (the updater reads the
+          # "latest" *published* release).
+          releaseDraft: true
+          prerelease: false
+          includeUpdaterJson: true

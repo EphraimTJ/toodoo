@@ -6,15 +6,16 @@
 export type ThemeMode = "light" | "dark" | "auto";
 export type FontSize = "small" | "medium" | "large";
 
+// "Stone & Sage" earthy accent family. Index 0 (sage) is the app default.
 export const ACCENT_PRESETS = [
-  "#4772fa", // TickTick blue
-  "#e0362a", // red
-  "#f0a825", // amber
-  "#35b979", // green
-  "#9d6ff0", // purple
-  "#ec4899", // pink
-  "#0ea5e9", // sky
-  "#71717a", // slate
+  "#6c7e58", // sage
+  "#4f6f52", // pine
+  "#b0763f", // ochre
+  "#a75a41", // clay
+  "#4f7d76", // teal
+  "#8a6f8e", // mauve
+  "#a8586b", // dusty rose
+  "#7a756a", // stone
 ] as const;
 
 export const FONT_PX: Record<FontSize, number> = { small: 14, medium: 16, large: 18 };
