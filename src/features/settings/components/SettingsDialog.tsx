@@ -8,6 +8,7 @@ import { DataSettings } from "./DataSettings";
 import { DesktopSettings } from "./DesktopSettings";
 import { NotificationSettings } from "./NotificationSettings";
 import { SmartListSettings } from "./SmartListSettings";
+import { UpdateSettings } from "../../updates/components/UpdateSettings";
 
 /** Gear button in the sidebar header that opens the Settings modal. */
 export function SettingsDialog() {
@@ -72,6 +73,12 @@ export function SettingsDialog() {
                 API &amp; Integrations
               </h3>
               <ApiSettings />
+            </section>
+            <section>
+              <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-text-muted">
+                Updates
+              </h3>
+              <UpdateSettings />
             </section>
             <section>
               <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-text-muted">

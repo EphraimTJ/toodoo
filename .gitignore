@@ -22,3 +22,8 @@ Thumbs.db
 # Logs
 *.log
 npm-debug.log*
+
+# Signing keys — updater private keys must never be committed
+*.key
+*.key.pub
+!*.pub.example

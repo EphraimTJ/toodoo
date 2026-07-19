@@ -29,12 +29,12 @@ describe("AppearanceSettings", () => {
     await user.click(await screen.findByRole("button", { name: "Theme Dark" }));
     await waitFor(() => expect(document.documentElement).toHaveClass("dark"));
 
-    await user.click(screen.getByRole("button", { name: "Accent #f0a825" }));
+    await user.click(screen.getByRole("button", { name: "Accent #b0763f" }));
     await waitFor(() =>
-      expect(document.documentElement.style.getPropertyValue("--color-accent")).toBe("#f0a825"),
+      expect(document.documentElement.style.getPropertyValue("--color-accent")).toBe("#b0763f"),
     );
-    // Amber is light → black foreground for contrast.
-    expect(document.documentElement.style.getPropertyValue("--color-accent-fg")).toBe("#000000");
+    // Ochre is a mid-tone earthy accent → white foreground for contrast.
+    expect(document.documentElement.style.getPropertyValue("--color-accent-fg")).toBe("#ffffff");
 
     await user.click(screen.getByRole("button", { name: "Font size L" }));
     await waitFor(() => expect(document.documentElement.style.fontSize).toBe("18px"));
