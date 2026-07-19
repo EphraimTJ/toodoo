@@ -38,10 +38,10 @@
   --color-accent: var(--color-accent);
   --color-accent-fg: var(--color-accent-fg);
 
-  /* Quiet grotesk. "Hanken Grotesk" is the intended face (bundle it to
-     activate); until then this resolves to the system UI grotesk. */
-  --font-sans: "Hanken Grotesk", ui-sans-serif, system-ui, -apple-system,
-    "Segoe UI Variable Text", "Segoe UI", Roboto, sans-serif;
+  /* Quiet grotesk. Hanken Grotesk (bundled via @fontsource-variable and
+     imported in main.tsx) with a system-grotesk fallback chain. */
+  --font-sans: "Hanken Grotesk Variable", ui-sans-serif, system-ui,
+    -apple-system, "Segoe UI Variable Text", "Segoe UI", Roboto, sans-serif;
 }
 
 html,

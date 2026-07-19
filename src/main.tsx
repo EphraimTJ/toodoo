@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import App from "./App";
 import { WindowRoot } from "./windows/WindowRoot";
 import { AppearanceProvider } from "./features/settings/components/AppearanceProvider";
+import "@fontsource-variable/hanken-grotesk";
 import "./i18n";
 import "./index.css";
 
