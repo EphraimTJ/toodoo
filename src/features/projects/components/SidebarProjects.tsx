@@ -7,7 +7,7 @@ import { INBOX_ID, type Folder, type Project } from "../../../lib/api";
 import { useUiStore } from "../../../lib/uiStore";
 import { useFolders, useProjectMutations, useProjects } from "../hooks/useProjects";
 
-const PROJECT_COLORS = ["#4772fa", "#e0362a", "#f0a825", "#35b979", "#9d6ff0", "#71717a"];
+const PROJECT_COLORS = ["#5d7052", "#a85448", "#b0763f", "#4f6f52", "#a8586b", "#78786c"];
 const PROJECT_ICONS = ["📋", "🏠", "💼", "🛒", "🎯", "📚", "💪", "✈️", "🎨"];
 
 const menuItem =
@@ -139,7 +139,7 @@ function ProjectRow({ project }: { project: Project }) {
             </DropdownMenu.Sub>
             {!isInbox && (
               <DropdownMenu.Item
-                className={`${menuItem} text-red-500`}
+                className={`${menuItem} text-destructive`}
                 onSelect={() => deleteProject.mutate(project.id)}
               >
                 Delete

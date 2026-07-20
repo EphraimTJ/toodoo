@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Dialog } from "radix-ui";
 import { useSubscriptions } from "../hooks/useSubscriptions";
 
-const COLORS = ["#4772fa", "#e0362a", "#f0a825", "#35b979", "#9d6ff0"];
+const COLORS = ["#5d7052", "#a85448", "#b0763f", "#4f6f52", "#a8586b"];
 
 export function CalendarSubscriptions({
   open,
@@ -45,7 +45,7 @@ export function CalendarSubscriptions({
                 >
                   {sub.visible ? "👁" : "🚫"}
                 </button>
-                <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: sub.color ?? "#71717a" }} />
+                <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: sub.color ?? "#78786c" }} />
                 <span className="min-w-0 flex-1 truncate">{sub.name}</span>
                 <button
                   type="button"
@@ -59,7 +59,7 @@ export function CalendarSubscriptions({
                   type="button"
                   aria-label={`Delete ${sub.name}`}
                   onClick={() => deleteSubscription.mutate(sub.id)}
-                  className="text-text-muted hover:text-red-500"
+                  className="text-text-muted hover:text-destructive"
                 >
                   ✕
                 </button>

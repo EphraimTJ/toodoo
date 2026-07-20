@@ -3,30 +3,59 @@
 /* Dark mode is driven by a `.dark` class on <html>, toggled from settings. */
 @custom-variant dark (&:where(.dark, .dark *));
 
-/* Theme tokens — light is the default; `.dark` overrides. Custom accent
-   themes (Phase 12) only need to override these variables. */
-/* "Stone & Sage" — warm stone neutrals with a grey-green sage accent.
-   Neutrals carry a faint warm/olive bias so they read as chosen, not default.
-   The accent is normally set at runtime from `theme.accent`; these values are
-   the fallback and match ACCENT_PRESETS[0] in settings/lib/theme.ts. */
+/* ============================================================================
+   "Organic / Natural" — a wabi-sabi palette drawn from forest floor, clay, and
+   unbleached paper. Earth tones, soft moss-tinted shadows, and a paper-grain
+   texture. Light is the default; `.dark` is a designed warm-night variant.
+
+   Interactive accent (`--color-accent`) is moss by default but user-overridable
+   at runtime (theme.accent → ACCENT_PRESETS[0] in settings/lib/theme.ts).
+   ========================================================================== */
 :root {
-  --color-bg: #eae7df;
-  --color-surface: #f5f3ec;
-  --color-border: #d8d3c5;
-  --color-text: #2e2d27;
-  --color-text-muted: #767468;
-  --color-accent: #6c7e58; /* sage */
-  --color-accent-fg: #f5f3ec;
+  --color-bg: #fdfcf8; /* rice paper */
+  --color-surface: #fefefa; /* card, a hair lighter than the page */
+  --color-border: #ded8cf; /* raw timber */
+  --color-text: #2c2c24; /* deep loam */
+  --color-text-muted: #78786c; /* dried grass */
+  --color-accent: #5d7052; /* moss green (primary) */
+  --color-accent-fg: #f3f4f1; /* pale mist */
+
+  --color-secondary: #c18c5d; /* terracotta / clay */
+  --color-secondary-fg: #ffffff;
+  --color-muted: #f0ebe5; /* stone — subtle fills */
+  --color-muted-fg: #78786c;
+  --color-sand: #e6dccd; /* beige — section tints */
+  --color-destructive: #a85448; /* burnt sienna */
+  --color-destructive-fg: #fdfcf8;
+
+  /* Soft, diffused, naturally-tinted shadows — never pure black. */
+  --shadow-soft: 0 4px 20px -2px rgba(93, 112, 82, 0.15); /* moss */
+  --shadow-float: 0 10px 40px -10px rgba(193, 140, 93, 0.2); /* clay */
+
+  --grain-opacity: 0.045;
 }
 
 .dark {
-  --color-bg: #1e1d19;
-  --color-surface: #26251f;
-  --color-border: #37362e;
-  --color-text: #e6e4d8;
-  --color-text-muted: #9a988b;
-  --color-accent: #8fa271; /* sage, lifted for dark grounds */
-  --color-accent-fg: #1e1d19;
+  --color-bg: #1b1a16; /* deep loam at night */
+  --color-surface: #232119; /* raised bark */
+  --color-border: #3a3730; /* timber, dim */
+  --color-text: #ece7db; /* warm mist */
+  --color-text-muted: #a29c8c; /* dried grass, lifted */
+  --color-accent: #86a06b; /* moss, lifted for dark grounds */
+  --color-accent-fg: #16150f;
+
+  --color-secondary: #d2a074; /* terracotta, lifted */
+  --color-secondary-fg: #1b1a16;
+  --color-muted: #2a2820; /* stone at night */
+  --color-muted-fg: #a29c8c;
+  --color-sand: #3a3324; /* dark sand tint */
+  --color-destructive: #c56a5b;
+  --color-destructive-fg: #16150f;
+
+  --shadow-soft: 0 4px 22px -4px rgba(0, 0, 0, 0.45);
+  --shadow-float: 0 14px 44px -12px rgba(0, 0, 0, 0.55);
+
+  --grain-opacity: 0.06;
 }
 
 @theme inline {
@@ -37,11 +66,31 @@
   --color-text-muted: var(--color-text-muted);
   --color-accent: var(--color-accent);
   --color-accent-fg: var(--color-accent-fg);
+  --color-secondary: var(--color-secondary);
+  --color-secondary-fg: var(--color-secondary-fg);
+  --color-muted: var(--color-muted);
+  --color-muted-fg: var(--color-muted-fg);
+  --color-sand: var(--color-sand);
+  --color-destructive: var(--color-destructive);
+  --color-destructive-fg: var(--color-destructive-fg);
 
-  /* Quiet grotesk. Hanken Grotesk (bundled via @fontsource-variable and
-     imported in main.tsx) with a system-grotesk fallback chain. */
-  --font-sans: "Hanken Grotesk Variable", ui-sans-serif, system-ui,
-    -apple-system, "Segoe UI Variable Text", "Segoe UI", Roboto, sans-serif;
+  --shadow-soft: var(--shadow-soft);
+  --shadow-float: var(--shadow-float);
+
+  /* Nunito's rounded terminals echo the organic shapes; Fraunces brings
+     old-world warmth to headings. Both bundled via @fontsource, imported in
+     main.tsx, with system fallbacks. */
+  --font-sans: "Nunito Variable", ui-sans-serif, system-ui, -apple-system,
+    "Segoe UI", Roboto, sans-serif;
+  --font-display: "Fraunces Variable", ui-serif, Georgia, "Times New Roman",
+    serif;
+
+  /* Softened radius scale — "there are no straight lines in nature." */
+  --radius-md: 0.5rem;
+  --radius-lg: 0.75rem;
+  --radius-xl: 1rem;
+  --radius-2xl: 1.5rem;
+  --radius-3xl: 2rem;
 }
 
 html,
@@ -53,4 +102,35 @@ body,
 body {
   @apply bg-bg text-text antialiased;
   font-family: var(--font-sans);
+}
+
+/* Display headings use the serif. Utility (`.font-display`) is generated from
+   the theme var; this base rule covers the largest headings automatically. */
+h1,
+h2 {
+  font-family: var(--font-display);
+  font-optical-sizing: auto;
+}
+
+/* Paper grain — a fixed, non-interactive overlay at very low opacity. The
+   texture is the single most important signal of the organic aesthetic. We use
+   a plain alpha layer (no mix-blend-mode) so a dense app with virtualized lists
+   and drag-and-drop never pays the full-viewport recomposite cost of blending. */
+body::after {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  pointer-events: none;
+  opacity: var(--grain-opacity);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
 }

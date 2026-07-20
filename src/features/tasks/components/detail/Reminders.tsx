@@ -59,7 +59,7 @@ export function Reminders({ task }: { task: Task }) {
             <button
               type="button"
               aria-label={`Delete reminder ${describeReminder(r)}`}
-              className="text-xs text-text-muted opacity-0 hover:text-red-500 group-hover:opacity-100"
+              className="text-xs text-text-muted opacity-0 hover:text-destructive group-hover:opacity-100"
               onClick={() => deleteReminder.mutate(r.id)}
             >
               ✕

@@ -189,7 +189,7 @@ export function SearchView() {
                   <button
                     type="button"
                     aria-label={`Delete saved search ${s.query}`}
-                    className="rounded border border-border px-1.5 py-0.5 text-xs text-text-muted hover:text-red-500"
+                    className="rounded border border-border px-1.5 py-0.5 text-xs text-text-muted hover:text-destructive"
                     onClick={() => saved.remove.mutate(s.id)}
                   >
                     ✕
@@ -215,7 +215,7 @@ export function SearchView() {
                 onClick={() => openTask(t.id, t.projectId)}
                 className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-bg"
               >
-                <span className={`text-xs ${t.status === "COMPLETED" ? "text-green-500" : "text-text-muted"}`}>
+                <span className={`text-xs ${t.status === "COMPLETED" ? "text-accent" : "text-text-muted"}`}>
                   {t.status === "COMPLETED" ? "✓" : "○"}
                 </span>
                 <span className="min-w-0 truncate">{t.title}</span>

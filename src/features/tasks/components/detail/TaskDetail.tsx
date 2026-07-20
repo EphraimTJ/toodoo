@@ -17,9 +17,9 @@ import { Reminders } from "./Reminders";
 import { RepeatPicker } from "./RepeatPicker";
 
 const PRIORITIES: [Priority, string, string][] = [
-  [5, "High", "text-red-500"],
-  [3, "Medium", "text-amber-500"],
-  [1, "Low", "text-sky-500"],
+  [5, "High", "text-destructive"],
+  [3, "Medium", "text-secondary"],
+  [1, "Low", "text-accent"],
   [0, "None", "text-text-muted"],
 ];
 
@@ -68,7 +68,7 @@ function CheckItems({ task }: { task: Task }) {
             <button
               type="button"
               aria-label={`Delete ${item.title}`}
-              className="text-xs text-text-muted opacity-0 hover:text-red-500 group-hover:opacity-100"
+              className="text-xs text-text-muted opacity-0 hover:text-destructive group-hover:opacity-100"
               onClick={() => void api.deleteCheckItem(item.id)}
             >
               ✕
@@ -148,7 +148,7 @@ function Subtasks({ task }: { task: Task }) {
   );
 }
 
-const TAG_COLORS = ["#4772fa", "#e0362a", "#f0a825", "#35b979", "#9d6ff0", "#71717a"];
+const TAG_COLORS = ["#5d7052", "#a85448", "#b0763f", "#4f6f52", "#a8586b", "#78786c"];
 
 function TagPicker({ task }: { task: Task }) {
   const { data: tags } = useTags();
@@ -165,7 +165,7 @@ function TagPicker({ task }: { task: Task }) {
         <span
           key={tag.id}
           className="flex items-center gap-1 rounded-full px-2 py-0.5 text-xs"
-          style={{ backgroundColor: `${tag.color ?? "#71717a"}22`, color: tag.color ?? undefined }}
+          style={{ backgroundColor: `${tag.color ?? "#78786c"}22`, color: tag.color ?? undefined }}
         >
           {tag.name}
           <button
@@ -237,7 +237,7 @@ function TagPicker({ task }: { task: Task }) {
                 >
                   <span
                     className="h-2 w-2 rounded-full"
-                    style={{ backgroundColor: tag.color ?? "#71717a" }}
+                    style={{ backgroundColor: tag.color ?? "#78786c" }}
                   />
                   {tag.name}
                 </button>
@@ -538,7 +538,7 @@ export function TaskDetail() {
             <button
               type="button"
               aria-label="Move task to trash"
-              className="rounded-md border border-border px-2 py-1 text-xs text-text-muted hover:text-red-500"
+              className="rounded-md border border-border px-2 py-1 text-xs text-text-muted hover:text-destructive"
               onClick={() => {
                 trashTask.mutate(task.id);
                 selectTask(null);

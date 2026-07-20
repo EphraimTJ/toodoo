@@ -166,7 +166,7 @@ export function TimelineView({ projectId }: { projectId: string }) {
                     <div key={i} className="absolute top-0 h-full bg-text-muted/5" style={{ left: t.x, width: ppd }} />
                   ) : null,
                 )}
-              <div className="absolute top-0 z-10 h-full w-px bg-red-500" style={{ left: todayX }} aria-label="Today" />
+              <div className="absolute top-0 z-10 h-full w-px bg-destructive" style={{ left: todayX }} aria-label="Today" />
 
               {virtualizer.getVirtualItems().map((vr) => {
                 const row = rows[vr.index];

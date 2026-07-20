@@ -254,7 +254,7 @@ export function RepeatPicker({ task }: { task: Task }) {
                 clear();
                 setOpen(false);
               }}
-              className="mt-3 w-full rounded-md border border-border py-1 text-xs text-text-muted hover:text-red-500"
+              className="mt-3 w-full rounded-md border border-border py-1 text-xs text-text-muted hover:text-destructive"
             >
               Remove repeat
             </button>

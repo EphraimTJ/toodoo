@@ -223,7 +223,7 @@ export function FilterBuilder({ filter, onClose, onSaved }: Props) {
               type="button"
               aria-label={`Remove condition ${i + 1}`}
               onClick={() => setConditions((cs) => cs.filter((_, idx) => idx !== i))}
-              className="ml-auto text-text-muted hover:text-red-500"
+              className="ml-auto text-text-muted hover:text-destructive"
             >
               ✕
             </button>

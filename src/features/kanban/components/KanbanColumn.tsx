@@ -107,7 +107,7 @@ export function KanbanColumn({
                   Rename
                 </DropdownMenu.Item>
                 <DropdownMenu.Item
-                  className="cursor-pointer rounded px-2 py-1 text-red-500 outline-none hover:bg-bg data-[highlighted]:bg-bg"
+                  className="cursor-pointer rounded px-2 py-1 text-destructive outline-none hover:bg-bg data-[highlighted]:bg-bg"
                   onSelect={() => deleteSection.mutate(section.id)}
                 >
                   Delete column

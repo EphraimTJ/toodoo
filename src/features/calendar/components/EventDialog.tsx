@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Dialog } from "radix-ui";
 import type { CalEvent, NewEvent } from "../../../lib/api";
 
-const COLORS = ["#4772fa", "#e0362a", "#f0a825", "#35b979", "#9d6ff0", "#71717a"];
+const COLORS = ["#5d7052", "#a85448", "#b0763f", "#4f6f52", "#a8586b", "#78786c"];
 
 /** ISO (UTC) → value for a datetime-local / date input, in the viewer's TZ. */
 function toLocalInput(iso: string | null, allDay: boolean): string {
@@ -166,7 +166,7 @@ function EventForm({
                   onDelete(event.id);
                   onClose();
                 }}
-                className="rounded-md border border-border px-3 py-1 text-sm text-text-muted hover:text-red-500"
+                className="rounded-md border border-border px-3 py-1 text-sm text-text-muted hover:text-destructive"
               >
                 Delete
               </button>

@@ -31,9 +31,9 @@ export function SettingsDialog() {
         <Dialog.Overlay className="fixed inset-0 z-50 bg-black/40" />
         <Dialog.Content
           aria-describedby={undefined}
-          className="fixed left-1/2 top-1/2 z-50 w-[32rem] max-w-[90vw] -translate-x-1/2 -translate-y-1/2 rounded-lg border border-border bg-surface p-5 shadow-xl"
+          className="fixed left-1/2 top-1/2 z-50 w-[32rem] max-w-[90vw] -translate-x-1/2 -translate-y-1/2 rounded-[2rem] border border-border/70 bg-surface p-6 shadow-float"
         >
-          <Dialog.Title className="mb-4 text-base font-semibold">Settings</Dialog.Title>
+          <Dialog.Title className="mb-4 font-display text-xl font-semibold">Settings</Dialog.Title>
           <div className="max-h-[70vh] space-y-6 overflow-y-auto pr-1">
             <section>
               <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-text-muted">

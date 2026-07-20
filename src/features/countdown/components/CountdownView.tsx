@@ -39,7 +39,7 @@ export function CountdownView() {
                 key={c.id}
                 data-testid="countdown-card"
                 className="group relative flex aspect-square flex-col justify-between rounded-lg p-3 text-white shadow-sm"
-                style={{ backgroundColor: style.color ?? "#4772fa" }}
+                style={{ backgroundColor: style.color ?? "#5d7052" }}
               >
                 <button
                   type="button"

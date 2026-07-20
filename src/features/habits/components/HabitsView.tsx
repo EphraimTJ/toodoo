@@ -94,8 +94,8 @@ export function HabitsView() {
                     onClick={() => (h.habit.goalKind === "AMOUNT" ? addAmount(h) : toggleCheck(h))}
                     className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full border text-xs"
                     style={{
-                      borderColor: h.habit.color ?? "#71717a",
-                      backgroundColor: h.status === "DONE" ? (h.habit.color ?? "#35b979") : "transparent",
+                      borderColor: h.habit.color ?? "#78786c",
+                      backgroundColor: h.status === "DONE" ? (h.habit.color ?? "#4f6f52") : "transparent",
                       color: h.status === "DONE" ? "#fff" : undefined,
                     }}
                   >
@@ -110,7 +110,7 @@ export function HabitsView() {
                       </span>
                     )}
                   </button>
-                  {h.streak > 0 && <span className="text-xs text-amber-500">🔥 {h.streak}</span>}
+                  {h.streak > 0 && <span className="text-xs text-secondary">🔥 {h.streak}</span>}
                   <button
                     type="button"
                     aria-label={`Skip ${h.habit.name}`}
@@ -141,7 +141,7 @@ export function HabitsView() {
                   <button type="button" onClick={() => setArchived.mutate({ id: h.id, archived: false })} className="text-xs text-accent hover:underline">
                     Restore
                   </button>
-                  <button type="button" onClick={() => deleteHabit.mutate(h.id)} className="text-xs hover:text-red-500">
+                  <button type="button" onClick={() => deleteHabit.mutate(h.id)} className="text-xs hover:text-destructive">
                     Delete
                   </button>
                 </li>

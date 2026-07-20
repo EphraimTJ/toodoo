@@ -4,9 +4,9 @@ import { useTaskMutations } from "../../tasks/hooks/useTasks";
 import { addDays, barGeometry, dateToX, toAllDayIso, xToDate } from "../lib/timeline";
 
 const PRIORITY_FILL: Record<number, string> = {
-  5: "#e0362a",
-  3: "#f0a825",
-  1: "#4772fa",
+  5: "#a85448",
+  3: "#b0763f",
+  1: "#5d7052",
   0: "#8a8f98",
 };
 

@@ -31,7 +31,7 @@ class WindowErrorBoundary extends Component<{ children: ReactNode }, { error: st
     if (this.state.error) {
       return (
         <div className="p-4 text-sm">
-          <div className="font-semibold text-red-600">This window hit an error.</div>
+          <div className="font-semibold text-destructive">This window hit an error.</div>
           <div className="mt-1 break-words text-text-muted">{this.state.error}</div>
         </div>
       );

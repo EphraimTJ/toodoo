@@ -198,8 +198,20 @@ export function TaskListView({ view }: { view: ViewSelection }) {
         })}
       </div>
       {items.length === 0 && (
-        <div className="flex h-40 items-center justify-center text-sm text-text-muted">
-          {isTrash ? "Trash is empty." : "No tasks here — add one above."}
+        <div className="flex h-full flex-col items-center justify-center gap-4 py-16 text-center">
+          <span
+            aria-hidden="true"
+            className="flex h-24 w-24 items-center justify-center bg-accent/10 text-accent"
+            style={{ borderRadius: "60% 40% 30% 70% / 60% 30% 70% 40%" }}
+          >
+            <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M11 20A7 7 0 0 1 4 13c0-3 2-6 7-9 5 3 7 6 7 9a7 7 0 0 1-7 7Z" />
+              <path d="M11 20v-8" />
+            </svg>
+          </span>
+          <p className="text-sm text-text-muted">
+            {isTrash ? "Trash is empty." : "Nothing growing here yet — plant one above."}
+          </p>
         </div>
       )}
     </div>
@@ -208,7 +220,7 @@ export function TaskListView({ view }: { view: ViewSelection }) {
   return (
     <div className="relative flex h-full min-w-0 flex-1 flex-col" onClick={clearMultiSelect}>
       <header className="flex items-center justify-between border-b border-border px-4 py-2.5">
-        <h2 className="text-base font-semibold">{title}</h2>
+        <h2 className="text-lg font-semibold">{title}</h2>
         {!flatView && (
           <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
             {view.kind === "project" &&

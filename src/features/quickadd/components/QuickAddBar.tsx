@@ -2,12 +2,14 @@ import { useMemo, useState } from "react";
 import { parseQuickAdd, type ParsedToken } from "../lib/parse";
 import { useQuickAdd, type QuickAddDefaults } from "../hooks/useQuickAdd";
 
+// Live-parse chips, tinted across the earth palette (dusty rose / moss / ochre
+// / teal / terracotta) so they read as one natural family.
 const CHIP_COLOR: Record<ParsedToken["kind"], string> = {
-  tag: "text-purple-500",
-  list: "text-blue-500",
-  priority: "text-amber-500",
-  date: "text-green-600",
-  repeat: "text-accent",
+  tag: "text-[#a8586b]",
+  list: "text-accent",
+  priority: "text-[#b0763f]",
+  date: "text-[#4f7d76]",
+  repeat: "text-secondary",
 };
 
 /** Natural-language add bar: parses tokens live, shows removable chips, and
@@ -36,7 +38,7 @@ export function QuickAddBar({ defaults }: { defaults: QuickAddDefaults }) {
         }}
         placeholder="+ Add task — try “Pay rent ~Bills #finance !high every month”"
         aria-label="Add task"
-        className="w-full rounded-md border border-border bg-surface px-3 py-1.5 text-sm outline-none placeholder:text-text-muted focus:border-accent"
+        className="w-full rounded-full border border-border bg-surface px-4 py-2 text-sm shadow-soft outline-none transition-all placeholder:text-text-muted focus-visible:border-accent focus-visible:ring-2 focus-visible:ring-accent/25"
       />
       {parsed.tokens.length > 0 && (
         <div className="mt-1 flex flex-wrap gap-1" data-testid="qa-chips">

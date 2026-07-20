@@ -5,9 +5,9 @@ import { useMatrix } from "../hooks/useMatrix";
 import { MatrixQuadrant } from "./MatrixQuadrant";
 
 const QUADRANTS: { quadrant: number; label: string; accent: string }[] = [
-  { quadrant: 0, label: "Urgent & Important", accent: "bg-red-500" },
-  { quadrant: 1, label: "Important, Not Urgent", accent: "bg-sky-500" },
-  { quadrant: 2, label: "Urgent, Not Important", accent: "bg-amber-500" },
+  { quadrant: 0, label: "Urgent & Important", accent: "bg-destructive" },
+  { quadrant: 1, label: "Important, Not Urgent", accent: "bg-accent" },
+  { quadrant: 2, label: "Urgent, Not Important", accent: "bg-secondary" },
   { quadrant: 3, label: "Neither", accent: "bg-zinc-400" },
 ];
 

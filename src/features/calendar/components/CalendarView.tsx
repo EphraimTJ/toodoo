@@ -45,7 +45,7 @@ export function CalendarView() {
         end: i.endAt ?? undefined,
         allDay: i.allDay,
         editable: i.editable,
-        color: i.color ?? (i.kind === "TASK" ? "#4772fa" : undefined),
+        color: i.color ?? (i.kind === "TASK" ? "#5d7052" : undefined),
         extendedProps: { kind: i.kind, sourceId: i.sourceId },
       })),
     [query.data],

@@ -54,7 +54,7 @@ export function SidebarFilters() {
               >
                 <span
                   className="h-2 w-2 shrink-0 rounded-full"
-                  style={{ backgroundColor: filter.color ?? "#71717a" }}
+                  style={{ backgroundColor: filter.color ?? "#78786c" }}
                 />
                 <span className="truncate">{filter.name}</span>
               </button>

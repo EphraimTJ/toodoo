@@ -76,7 +76,7 @@ export function CommandPalette() {
                 className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm font-normal normal-case tracking-normal text-text data-[selected=true]:bg-accent/10"
               >
                 <span
-                  className={`text-xs ${task.status === "COMPLETED" ? "text-green-500" : "text-text-muted"}`}
+                  className={`text-xs ${task.status === "COMPLETED" ? "text-accent" : "text-text-muted"}`}
                 >
                   {task.status === "COMPLETED" ? "✓" : "○"}
                 </span>
