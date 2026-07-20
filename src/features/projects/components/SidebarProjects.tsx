@@ -6,6 +6,7 @@ import { Dialog, DropdownMenu } from "radix-ui";
 import { INBOX_ID, type Folder, type Project } from "../../../lib/api";
 import { useUiStore } from "../../../lib/uiStore";
 import { useFolders, useProjectMutations, useProjects } from "../hooks/useProjects";
+import { promptDialog } from "../../../components/ui/AppDialogs";
 
 const PROJECT_COLORS = ["#5d7052", "#a85448", "#b0763f", "#4f6f52", "#a8586b", "#78786c"];
 const PROJECT_ICONS = ["📋", "🏠", "💼", "🛒", "🎯", "📚", "💪", "✈️", "🎨"];
@@ -224,8 +225,11 @@ export function SidebarProjects() {
             title="New folder"
             className="rounded px-1 text-xs text-text-muted hover:bg-bg"
             onClick={() => {
-              const name = window.prompt("Folder name");
-              if (name?.trim()) createFolder.mutate(name.trim());
+              void promptDialog({ title: "New folder", label: "Folder name", placeholder: "e.g. Work" }).then(
+                (name) => {
+                  if (name?.trim()) createFolder.mutate(name.trim());
+                },
+              );
             }}
           >
             🗀

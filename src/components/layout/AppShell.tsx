@@ -11,6 +11,7 @@ import { FocusProvider } from "../../features/focus/FocusProvider";
 import { PaneDivider } from "./PaneDivider";
 import { PANE_LIMITS, usePaneWidths } from "./usePaneWidths";
 import { ShortcutCheatsheet } from "../../features/shortcuts/components/ShortcutCheatsheet";
+import { AppDialogs } from "../ui/AppDialogs";
 import { useShortcuts } from "../../features/shortcuts/useShortcuts";
 import { api } from "../../lib/api";
 import { useUiStore } from "../../lib/uiStore";
@@ -90,6 +91,7 @@ export function AppShell() {
         <SampleDataPrompt />
         <PanelHost />
         <ShortcutCheatsheet />
+        <AppDialogs />
       </div>
     </FocusProvider>
   );

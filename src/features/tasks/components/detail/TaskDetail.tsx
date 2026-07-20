@@ -6,6 +6,7 @@ import { downloadText } from "../../../../lib/download";
 import { taskToMarkdown, taskToText } from "../../../share/lib/shareText";
 import { downloadTaskImage } from "../../../share/lib/shareImage";
 import { useUiStore } from "../../../../lib/uiStore";
+import { confirmDialog, promptDialog } from "../../../../components/ui/AppDialogs";
 import { useTags, useTagMutations } from "../../../tags/hooks/useTags";
 import { useTaskMutations } from "../../hooks/useTasks";
 import { TaskFocusInfo } from "../../../focus/components/TaskFocusInfo";
@@ -479,11 +480,16 @@ export function TaskDetail() {
           type="button"
           className="rounded-md border border-border px-2 py-1 text-xs text-text-muted hover:text-accent"
           onClick={() => {
-            const name = window.prompt("Template name", task.title);
-            if (name?.trim())
-              void api.saveTaskAsTemplate(task.id, name.trim()).then(() => {
-                void queryClient.invalidateQueries({ queryKey: ["templates"] });
-              });
+            void promptDialog({
+              title: "Save as template",
+              label: "Template name",
+              defaultValue: task.title,
+            }).then((name) => {
+              if (name?.trim())
+                void api.saveTaskAsTemplate(task.id, name.trim()).then(() => {
+                  void queryClient.invalidateQueries({ queryKey: ["templates"] });
+                });
+            });
           }}
         >
           ⧉ Save as template
@@ -498,12 +504,22 @@ export function TaskDetail() {
                 task.priority !== 0 ||
                 task.dueAt !== null ||
                 task.startAt !== null;
-              if (lossy && !window.confirm("Converting to a check item drops its tags, priority, dates, and any subtasks. Continue?"))
-                return;
-              void api.subtaskToCheckItem(task.id).then(() => {
-                selectTask(null);
-                void queryClient.invalidateQueries({ queryKey: ["tasks"] });
-                void queryClient.invalidateQueries({ queryKey: ["checkItems"] });
+              const proceed = lossy
+                ? confirmDialog({
+                    title: "Convert to check item?",
+                    message:
+                      "This drops its tags, priority, dates, and any subtasks. Continue?",
+                    confirmText: "Convert",
+                    destructive: true,
+                  })
+                : Promise.resolve(true);
+              void proceed.then((ok) => {
+                if (!ok) return;
+                void api.subtaskToCheckItem(task.id).then(() => {
+                  selectTask(null);
+                  void queryClient.invalidateQueries({ queryKey: ["tasks"] });
+                  void queryClient.invalidateQueries({ queryKey: ["checkItems"] });
+                });
               });
             }}
           >
