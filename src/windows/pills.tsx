@@ -232,6 +232,16 @@ export function FocusPillWindow() {
               <circle cx="10" cy="6" r="1.2" />
             </svg>
           </button>
+          <button
+            type="button"
+            aria-label="Close focus pill"
+            className="rounded-full p-1.5 hover:bg-white/10 hover:text-[#e88b7d]"
+            onClick={closeThisWindow}
+          >
+            <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden>
+              <path d="M2 2l8 8M10 2l-8 8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+            </svg>
+          </button>
         </div>
       </div>
 
