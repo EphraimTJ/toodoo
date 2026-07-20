@@ -51,6 +51,10 @@ export function AppShell() {
   }, []);
 
   const { widths, setPane, resetPane } = usePaneWidths();
+  // The detail pane is a focused surface: it appears only while a task is
+  // selected and slides away when selection clears (e.g. `setView` on any
+  // sidebar/menu click resets `selectedTaskId`).
+  const selectedTaskId = useUiStore((s) => s.selectedTaskId);
 
   return (
     <FocusProvider>
@@ -66,16 +70,20 @@ export function AppShell() {
           onReset={() => resetPane("sidebar")}
         />
         <ListPane />
-        <PaneDivider
-          label="Resize detail pane"
-          value={widths.detail}
-          min={PANE_LIMITS.detail.min}
-          max={PANE_LIMITS.detail.max}
-          direction={-1}
-          onResize={(w) => setPane("detail", w)}
-          onReset={() => resetPane("detail")}
-        />
-        <DetailPane width={widths.detail} />
+        {selectedTaskId && (
+          <>
+            <PaneDivider
+              label="Resize detail pane"
+              value={widths.detail}
+              min={PANE_LIMITS.detail.min}
+              max={PANE_LIMITS.detail.max}
+              direction={-1}
+              onResize={(w) => setPane("detail", w)}
+              onReset={() => resetPane("detail")}
+            />
+            <DetailPane width={widths.detail} />
+          </>
+        )}
         <CommandPalette />
         <ReminderToasts />
         <SystemToasts />

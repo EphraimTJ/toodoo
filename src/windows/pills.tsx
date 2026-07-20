@@ -74,7 +74,7 @@ function Ring({ progress, size = 40 }: { progress: number; size?: number }) {
         cy={size / 2}
         r={r}
         fill="none"
-        stroke="var(--color-accent, #4f9cf9)"
+        stroke="var(--color-accent, #5d7052)"
         strokeWidth="2.5"
         strokeLinecap="round"
         strokeDasharray={c}
@@ -92,7 +92,7 @@ function Ring({ progress, size = 40 }: { progress: number; size?: number }) {
  * into a slim progress bar, hovering the bar slides the pill back out.
  */
 export function FocusPillWindow() {
-  useWindowBackground(usePillBackground("#171717"));
+  useWindowBackground(usePillBackground("#1f1e1a"));
   const state = useFocusState();
   const [hover, setHover] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -156,7 +156,7 @@ export function FocusPillWindow() {
   if (docked) {
     return (
       <div
-        className="flex h-screen w-screen items-center overflow-hidden rounded-b-md bg-neutral-900/95 px-1"
+        className="flex h-screen w-screen items-center overflow-hidden rounded-b-md bg-[#1f1e1a]/95 px-1"
         data-testid="focus-pill-docked"
         onMouseEnter={onEnter}
       >
@@ -177,7 +177,7 @@ export function FocusPillWindow() {
       onMouseLeave={onLeave}
     >
       <div
-        className="flex shrink-0 items-center rounded-full bg-neutral-900/95 px-2.5 text-white"
+        className="flex shrink-0 items-center rounded-full bg-[#1f1e1a]/95 px-2.5 text-white"
         style={{ height: PILL_H - 4, marginTop: 2 }}
         data-testid="focus-pill"
         data-tauri-drag-region

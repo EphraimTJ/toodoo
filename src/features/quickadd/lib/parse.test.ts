@@ -86,6 +86,28 @@ describe("parseQuickAdd — dates & times", () => {
   });
 });
 
+describe("parseQuickAdd — deadline prepositions", () => {
+  // REF is Mon 2026-03-02, so the coming Wednesday is 2026-03-04.
+  it("'on <day>' keeps that day (and strips the preposition from the title)", () => {
+    const r = parseQuickAdd("Pay the electricity bill on wednesday", REF);
+    expect(r.dueAt).toBe("2026-03-04T00:00:00.000Z");
+    expect(r.isAllDay).toBe(true);
+    expect(r.title).toBe("Pay the electricity bill");
+  });
+
+  it("'by <day>' keeps that day", () => {
+    const r = parseQuickAdd("Pay bill by wednesday", REF);
+    expect(r.dueAt).toBe("2026-03-04T00:00:00.000Z");
+    expect(r.title).toBe("Pay bill");
+  });
+
+  it("'before <day>' means the day before", () => {
+    const r = parseQuickAdd("Pay bill before wednesday", REF);
+    expect(r.dueAt).toBe("2026-03-03T00:00:00.000Z");
+    expect(r.title).toBe("Pay bill");
+  });
+});
+
 describe("parseQuickAdd — chips carry exact spans", () => {
   it("each token's text is a substring of the input (for dismissal)", () => {
     const input = "Pay rent ~Bills #finance !high every month";

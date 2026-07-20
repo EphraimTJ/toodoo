@@ -7,11 +7,11 @@ import {
   format,
   isSameDay,
   isSameMonth,
-  parseISO,
   startOfMonth,
   startOfWeek,
 } from "date-fns";
 import { Popover } from "radix-ui";
+import { allDayToLocal } from "../../../../lib/date";
 
 interface Props {
   label: string;
@@ -21,8 +21,8 @@ interface Props {
 
 /** All-day date picker (timed tasks arrive with Phase 2's date-picker parity). */
 export function DatePicker({ label, value, onChange }: Props) {
-  const [month, setMonth] = useState(() => (value ? parseISO(value) : new Date()));
-  const selected = value ? parseISO(value) : null;
+  const [month, setMonth] = useState(() => (value ? allDayToLocal(value) : new Date()));
+  const selected = value ? allDayToLocal(value) : null;
 
   const days = eachDayOfInterval({
     start: startOfWeek(startOfMonth(month), { weekStartsOn: 1 }),

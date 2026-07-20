@@ -17,9 +17,17 @@ function at(hoursFromNow: number): string {
   return new Date(Date.now() + hoursFromNow * 3_600_000).toISOString();
 }
 
+// All-day values are stored as UTC midnight of the calendar date; this builds
+// one for today's local date (the shape the app actually persists).
+function allDayToday(): string {
+  const n = new Date();
+  const p = (x: number) => String(x).padStart(2, "0");
+  return `${n.getFullYear()}-${p(n.getMonth() + 1)}-${p(n.getDate())}T00:00:00.000Z`;
+}
+
 describe("dueChip", () => {
   it("shows only the date for an all-day task due today", () => {
-    const chip = dueChip(task({ dueAt: at(2), isAllDay: true }));
+    const chip = dueChip(task({ dueAt: allDayToday(), isAllDay: true }));
     expect(chip?.text).toBe("Today");
   });
 
@@ -33,7 +41,7 @@ describe("dueChip", () => {
     const chip = dueChip(task({ dueAt: at(-1), isAllDay: false }));
     expect(chip?.overdue).toBe(true);
     // An all-day task 'due today' is never overdue mid-day.
-    expect(dueChip(task({ dueAt: at(-1), isAllDay: true }))?.overdue).toBe(false);
+    expect(dueChip(task({ dueAt: allDayToday(), isAllDay: true }))?.overdue).toBe(false);
   });
 
   it("returns null when there is no date", () => {
