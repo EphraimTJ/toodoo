@@ -1,7 +1,8 @@
 import { render, screen } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { beforeEach, describe, expect, it } from "vitest";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { AppShell } from "./AppShell";
+import { useUiStore } from "../../lib/uiStore";
 
 function renderShell() {
   const queryClient = new QueryClient({
@@ -15,10 +16,18 @@ function renderShell() {
 }
 
 describe("AppShell", () => {
-  it("renders the three columns: sidebar, list pane, detail pane", () => {
+  beforeEach(() => useUiStore.setState({ selectedTaskId: null }));
+
+  it("renders the sidebar and list pane; detail pane stays hidden until a task is selected", () => {
     renderShell();
     expect(screen.getByRole("complementary", { name: "Sidebar" })).toBeInTheDocument();
     expect(screen.getByRole("main", { name: "Task list" })).toBeInTheDocument();
+    expect(screen.queryByRole("complementary", { name: "Task detail" })).not.toBeInTheDocument();
+  });
+
+  it("reveals the detail pane once a task is selected", () => {
+    useUiStore.setState({ selectedTaskId: "t1" });
+    renderShell();
     expect(screen.getByRole("complementary", { name: "Task detail" })).toBeInTheDocument();
   });
 

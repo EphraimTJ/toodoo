@@ -1,5 +1,6 @@
 import { format, isToday, isTomorrow, isYesterday, parseISO, startOfDay } from "date-fns";
 import type { Project, Tag, Task } from "../../../lib/api";
+import { taskDate } from "../../../lib/date";
 import { flattenTree, type TreeRow } from "../hooks/useTasks";
 import type { GroupMode, SortMode } from "../hooks/useViewOptions";
 
@@ -41,7 +42,7 @@ export function comparator(sort: SortMode, tagsById: Map<string, Tag>) {
 function dateGroupLabel(task: Task): string {
   const iso = task.dueAt ?? task.startAt;
   if (!iso) return "No date";
-  const date = parseISO(iso);
+  const date = taskDate(iso, task.isAllDay);
   if (startOfDay(date) < startOfDay(new Date()) && !isToday(date)) return "Overdue";
   if (isToday(date)) return "Today";
   if (isTomorrow(date)) return "Tomorrow";
@@ -117,7 +118,7 @@ export function completedDateLabel(task: Task): string {
 export function dueChip(task: Task): { text: string; overdue: boolean } | null {
   const iso = task.dueAt ?? task.startAt;
   if (!iso) return null;
-  const date = parseISO(iso);
+  const date = taskDate(iso, task.isAllDay);
   const now = new Date();
   // Timed tasks compare by the actual instant; all-day by calendar day.
   const overdue =

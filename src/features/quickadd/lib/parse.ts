@@ -141,14 +141,28 @@ export function parseQuickAdd(input: string, ref: Date = new Date()): ParsedQuic
     const r = results[0];
     const c = r.start;
     const timed = c.isCertain("hour");
+
+    // Deadline prepositions chrono leaves for us to interpret. "before <date>"
+    // means the day *before* (a deadline you must beat); "by"/"on"/"due" just
+    // prefix the date and should be stripped from the title, no day shift.
+    const pre = rest.slice(0, r.index).match(/\b(before|by|on|due(?:\s+(?:on|by))?)\s+$/i);
+    const shift = pre && /before/i.test(pre[1]) ? -1 : 0;
+
     if (timed) {
-      dueAt = c.date().toISOString();
+      const d = c.date();
+      d.setDate(d.getDate() + shift);
+      dueAt = d.toISOString();
       isAllDay = false;
     } else {
-      dueAt = `${c.get("year")}-${pad(c.get("month") ?? 1)}-${pad(c.get("day") ?? 1)}T00:00:00.000Z`;
+      // All-day: keep the calendar date in the UTC-midnight convention.
+      const d = new Date(Date.UTC(c.get("year") ?? 1970, (c.get("month") ?? 1) - 1, c.get("day") ?? 1));
+      d.setUTCDate(d.getUTCDate() + shift);
+      dueAt = `${d.getUTCFullYear()}-${pad(d.getUTCMonth() + 1)}-${pad(d.getUTCDate())}T00:00:00.000Z`;
       isAllDay = true;
     }
-    consume("date", `Due: ${r.text}`, r.text);
+
+    const matched = pre ? pre[0] + r.text : r.text;
+    consume("date", `Due: ${matched.trim()}`, matched);
   }
 
   const title = rest.replace(/\s+/g, " ").trim();

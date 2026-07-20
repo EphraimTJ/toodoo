@@ -134,3 +134,96 @@ body::after {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* ============================================================================
+   FullCalendar — retheme off the app tokens (it ships an opinionated blue,
+   hard-bordered look). Map its CSS variables to the earth palette, soften the
+   grid, pill the toolbar buttons, and use moss for today/selection/events.
+   ========================================================================== */
+.fc {
+  --fc-border-color: color-mix(in srgb, var(--color-border) 70%, transparent);
+  --fc-page-bg-color: transparent;
+  --fc-neutral-bg-color: var(--color-muted);
+  --fc-today-bg-color: color-mix(in srgb, var(--color-accent) 10%, transparent);
+  --fc-highlight-color: color-mix(in srgb, var(--color-accent) 16%, transparent);
+  --fc-event-bg-color: var(--color-accent);
+  --fc-event-border-color: var(--color-accent);
+  --fc-event-text-color: var(--color-accent-fg);
+  --fc-list-event-hover-bg-color: var(--color-muted);
+  --fc-neutral-text-color: var(--color-text-muted);
+  font-family: var(--font-sans);
+  color: var(--color-text);
+}
+
+/* Rounded, breathable outer frame instead of a hard-edged box. */
+.fc .fc-scrollgrid {
+  border-radius: var(--radius-xl);
+  overflow: hidden;
+  border-color: var(--fc-border-color);
+}
+
+.fc .fc-toolbar-title {
+  font-family: var(--font-display);
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+/* Toolbar buttons → soft pills in the theme, moss when active. */
+.fc .fc-button-primary {
+  background: var(--color-surface);
+  border-color: var(--color-border);
+  color: var(--color-text);
+  border-radius: 999px;
+  padding: 0.3rem 0.85rem;
+  font-weight: 600;
+  text-transform: capitalize;
+  box-shadow: none;
+  transition:
+    background-color 0.2s,
+    color 0.2s;
+}
+.fc .fc-button-primary:hover {
+  background: var(--color-muted);
+  border-color: var(--color-border);
+  color: var(--color-text);
+}
+.fc .fc-button-primary:disabled {
+  background: var(--color-muted);
+  border-color: var(--color-border);
+  color: var(--color-text-muted);
+  opacity: 1;
+}
+.fc .fc-button-primary:not(:disabled).fc-button-active,
+.fc .fc-button-primary:not(:disabled):active {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+  color: var(--color-accent-fg);
+}
+.fc .fc-button-primary:focus,
+.fc .fc-button-primary:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-accent) 30%, transparent);
+}
+
+/* Softer, rounded events; day/column headers in muted timber. */
+.fc .fc-daygrid-event,
+.fc .fc-timegrid-event,
+.fc .fc-list-event {
+  border-radius: 7px;
+  padding: 1px 4px;
+  font-weight: 600;
+  box-shadow: var(--shadow-soft);
+}
+.fc .fc-col-header-cell-cushion,
+.fc .fc-daygrid-day-number {
+  color: var(--color-text-muted);
+  padding: 6px 8px;
+  text-decoration: none;
+}
+.fc .fc-daygrid-day.fc-day-today .fc-daygrid-day-number {
+  color: var(--color-accent);
+  font-weight: 700;
+}
+.fc a {
+  color: inherit;
+}

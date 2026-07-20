@@ -79,16 +79,16 @@ export function CalendarView() {
       <header className="flex flex-wrap items-center gap-2 border-b border-border px-4 py-2">
         <h2 className="text-base font-semibold">Calendar</h2>
         <div className="ml-auto flex items-center gap-2 text-xs">
-          <button type="button" onClick={() => openNewEvent(null, true)} className="rounded-md border border-border px-2 py-1 hover:border-accent">
+          <button type="button" onClick={() => openNewEvent(null, true)} className="rounded-full border border-border px-3 py-1 hover:border-accent">
             + Event
           </button>
-          <button type="button" onClick={() => setSubsOpen(true)} className="rounded-md border border-border px-2 py-1 hover:border-accent">
+          <button type="button" onClick={() => setSubsOpen(true)} className="rounded-full border border-border px-3 py-1 hover:border-accent">
             Subscriptions
           </button>
-          <button type="button" onClick={() => fileRef.current?.click()} className="rounded-md border border-border px-2 py-1 hover:border-accent">
+          <button type="button" onClick={() => fileRef.current?.click()} className="rounded-full border border-border px-3 py-1 hover:border-accent">
             Import
           </button>
-          <button type="button" onClick={() => void onExport()} className="rounded-md border border-border px-2 py-1 hover:border-accent">
+          <button type="button" onClick={() => void onExport()} className="rounded-full border border-border px-3 py-1 hover:border-accent">
             Export
           </button>
           <input ref={fileRef} type="file" accept=".ics,text/calendar" className="hidden" aria-label="Import ICS file" onChange={onImport} />
