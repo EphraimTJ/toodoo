@@ -227,3 +227,22 @@ body::after {
 .fc a {
   color: inherit;
 }
+
+/* Print: show just the calendar grid, drop the app chrome. */
+@media print {
+  body::after {
+    display: none;
+  }
+  aside[aria-label="Sidebar"],
+  aside[aria-label="Task detail"],
+  aside[aria-label="Unscheduled tasks"],
+  [data-print-hide] {
+    display: none !important;
+  }
+  .fc .fc-button {
+    display: none !important;
+  }
+  .fc .fc-toolbar-title {
+    font-size: 1.4rem;
+  }
+}
