@@ -161,7 +161,7 @@ export function FocusTimer({ config }: { config: PomoConfig }) {
           </button>
         )}
         {p.active && (
-          <button type="button" onClick={() => void p.stop("DONE")} className="rounded-md border border-border px-6 py-2 text-sm hover:text-red-500">
+          <button type="button" onClick={() => void p.stop("DONE")} className="rounded-md border border-border px-6 py-2 text-sm hover:text-destructive">
             Stop
           </button>
         )}

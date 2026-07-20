@@ -90,7 +90,7 @@ export function FocusRecords() {
               type="button"
               aria-label="Delete record"
               onClick={() => deleteSession.mutate(s.id)}
-              className="text-text-muted opacity-0 hover:text-red-500 group-hover:opacity-100"
+              className="text-text-muted opacity-0 hover:text-destructive group-hover:opacity-100"
             >
               ✕
             </button>

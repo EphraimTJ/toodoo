@@ -6,9 +6,9 @@ import { useTaskMutations } from "../../tasks/hooks/useTasks";
 import { dueChip } from "../../tasks/lib/sortGroup";
 
 const PRIORITY_DOT: Record<number, string> = {
-  5: "border-red-500 bg-red-500",
-  3: "border-amber-500 bg-amber-500",
-  1: "border-sky-500 bg-sky-500",
+  5: "border-destructive bg-destructive",
+  3: "border-secondary bg-secondary",
+  1: "border-accent bg-accent",
   0: "border-border bg-transparent",
 };
 
@@ -58,7 +58,7 @@ export function KanbanCard({ task, tags, subtaskTotal, subtaskDone }: Props) {
         {task.rrule && <span aria-label="Repeats">↻</span>}
       </div>
       <div className="mt-1 flex flex-wrap items-center gap-2 pl-5 text-xs text-text-muted">
-        {chip && <span className={chip.overdue ? "text-red-500" : ""}>{chip.text}</span>}
+        {chip && <span className={chip.overdue ? "text-destructive" : ""}>{chip.text}</span>}
         {subtaskTotal > 0 && (
           <span>
             ☑ {subtaskDone}/{subtaskTotal}

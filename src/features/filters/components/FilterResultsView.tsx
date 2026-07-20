@@ -44,7 +44,7 @@ export function FilterResultsView({ filterId }: { filterId: string }) {
                 setView({ kind: "project", projectId: "inbox" });
               }
             }}
-            className="rounded-md px-2 py-1 text-xs text-text-muted hover:text-red-500"
+            className="rounded-md px-2 py-1 text-xs text-text-muted hover:text-destructive"
           >
             🗑
           </button>

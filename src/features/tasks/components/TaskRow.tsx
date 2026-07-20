@@ -7,10 +7,12 @@ import { useTaskMutations } from "../hooks/useTasks";
 import { dueChip } from "../lib/sortGroup";
 import { describeRrule } from "../lib/rrule";
 
+// Priority reads through the earth palette: burnt sienna (high) → terracotta
+// (medium) → moss (low) → raw timber (none).
 const PRIORITY_COLOR: Record<number, string> = {
-  5: "border-red-500 text-red-500",
-  3: "border-amber-500 text-amber-500",
-  1: "border-sky-500 text-sky-500",
+  5: "border-destructive text-destructive",
+  3: "border-secondary text-secondary",
+  1: "border-accent text-accent",
   0: "border-border text-text-muted",
 };
 
@@ -98,7 +100,7 @@ export function TaskRow({ task, depth, tags, draggable, inTrash }: Props) {
           e.stopPropagation();
           toggle();
         }}
-        className={`flex h-4 w-4 shrink-0 items-center justify-center rounded border transition-all duration-300 ${
+        className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-md border-2 transition-all duration-300 ${
           PRIORITY_COLOR[task.priority] ?? PRIORITY_COLOR[0]
         } ${done || completing ? "bg-current" : "bg-transparent"}`}
       >
@@ -154,13 +156,13 @@ export function TaskRow({ task, depth, tags, draggable, inTrash }: Props) {
         <span
           key={tag.id}
           className="rounded-full px-1.5 py-0.5 text-[10px]"
-          style={{ backgroundColor: `${tag.color ?? "#71717a"}22`, color: tag.color ?? undefined }}
+          style={{ backgroundColor: `${tag.color ?? "#78786c"}22`, color: tag.color ?? undefined }}
         >
           {tag.name}
         </span>
       ))}
       {chip && (
-        <span className={`text-xs ${chip.overdue ? "text-red-500" : "text-text-muted"}`}>
+        <span className={`text-xs ${chip.overdue ? "text-destructive" : "text-text-muted"}`}>
           {chip.text}
         </span>
       )}
@@ -169,7 +171,7 @@ export function TaskRow({ task, depth, tags, draggable, inTrash }: Props) {
         <span className="flex gap-1 opacity-0 group-hover:opacity-100">
           <button
             type="button"
-            className="rounded px-1.5 py-0.5 text-xs text-accent hover:bg-accent/10"
+            className="rounded-full px-1.5 py-0.5 text-xs text-accent hover:bg-accent/10"
             onClick={(e) => {
               e.stopPropagation();
               restoreTask.mutate(task.id);
@@ -179,7 +181,7 @@ export function TaskRow({ task, depth, tags, draggable, inTrash }: Props) {
           </button>
           <button
             type="button"
-            className="rounded px-1.5 py-0.5 text-xs text-red-500 hover:bg-red-500/10"
+            className="rounded-full px-1.5 py-0.5 text-xs text-destructive hover:bg-destructive/10"
             onClick={(e) => {
               e.stopPropagation();
               deleteTaskForever.mutate(task.id);

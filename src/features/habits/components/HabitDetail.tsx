@@ -16,7 +16,7 @@ function statusStyle(status: CheckinStatus | undefined, color: string): { classN
     case "DONE":
       return { className: "", style: { backgroundColor: color } };
     case "PARTIAL":
-      return { className: "bg-amber-400/60" };
+      return { className: "bg-secondary/60" };
     case "SKIP":
       return { className: "bg-border" };
     default:
@@ -32,7 +32,7 @@ export function HabitDetail({ habit, onBack, onEdit }: { habit: Habit; onBack():
   const { data: checkins } = useHabitCheckins(habit.id, from, to);
 
   const byDate = new Map((checkins ?? []).map((c) => [c.date, c.status]));
-  const color = habit.color ?? "#35b979";
+  const color = habit.color ?? "#4f6f52";
 
   const monthDays = eachDayOfInterval({ start: startOfMonth(today), end: endOfMonth(today) });
   const leadPad = (startOfMonth(today).getDay() + 6) % 7; // Monday-first

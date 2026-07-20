@@ -113,7 +113,7 @@ export function UpdateSettings() {
       )}
 
       {status.kind === "error" && (
-        <p className="text-xs text-red-500" data-testid="update-error">
+        <p className="text-xs text-destructive" data-testid="update-error">
           Update failed: {status.message}
         </p>
       )}

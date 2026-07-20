@@ -73,7 +73,7 @@ export function TagManager({ open, onOpenChange }: Props) {
                 <button
                   type="button"
                   aria-label={`Delete ${tag.name}`}
-                  className="rounded border border-border px-2 py-1 text-xs text-text-muted hover:text-red-500"
+                  className="rounded border border-border px-2 py-1 text-xs text-text-muted hover:text-destructive"
                   onClick={() => deleteTag.mutate(tag.id)}
                 >
                   Delete

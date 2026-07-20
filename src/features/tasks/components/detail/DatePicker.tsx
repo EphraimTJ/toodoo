@@ -90,7 +90,7 @@ export function DatePicker({ label, value, onChange }: Props) {
               <button
                 type="button"
                 onClick={() => onChange(null)}
-                className="mt-2 w-full rounded-md border border-border py-1 text-xs text-text-muted hover:text-red-500"
+                className="mt-2 w-full rounded-md border border-border py-1 text-xs text-text-muted hover:text-destructive"
               >
                 Clear
               </button>
