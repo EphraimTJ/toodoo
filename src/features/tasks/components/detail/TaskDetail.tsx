@@ -24,6 +24,9 @@ const PRIORITIES: [Priority, string, string][] = [
   [0, "None", "text-text-muted"],
 ];
 
+const menuItem =
+  "flex cursor-pointer select-none items-center rounded-md px-2 py-1.5 text-sm outline-none hover:bg-bg data-[highlighted]:bg-bg";
+
 function CheckItems({ task }: { task: Task }) {
   const queryClient = useQueryClient();
   const { data: items } = useQuery({
@@ -286,114 +289,121 @@ export function TaskDetail() {
   const priority = PRIORITIES.find(([p]) => p === task.priority) ?? PRIORITIES[3];
 
   return (
-    <div className="flex h-full flex-col overflow-y-auto p-4" data-testid="task-detail">
-      <div className="flex items-center gap-2">
-        <input
-          type="checkbox"
-          checked={done}
-          disabled={trashed}
-          aria-label={done ? "Reopen task" : "Complete task"}
-          onChange={(e) =>
-            e.target.checked ? completeTask.mutate(task) : reopenTask.mutate(task.id)
-          }
-          className="h-4 w-4 accent-(--color-accent)"
-        />
-        <DatePicker
-          label="Start"
-          value={task.startAt}
-          onChange={(startAt) => updateTask.mutate({ id: task.id, patch: { startAt } })}
-        />
-        <DatePicker
-          label="Due"
-          value={task.dueAt}
-          onChange={(dueAt) => updateTask.mutate({ id: task.id, patch: { dueAt } })}
-        />
-        <label className="flex items-center gap-1 text-xs text-text-muted" title="All-day vs. timed">
+    <div className="flex h-full flex-col" data-testid="task-detail">
+      <div className="min-h-0 flex-1 overflow-y-auto p-4">
+        <div className="flex items-start gap-2.5">
           <input
             type="checkbox"
-            aria-label="All day"
-            checked={task.isAllDay}
-            onChange={(e) => updateTask.mutate({ id: task.id, patch: { isAllDay: e.target.checked } })}
-            className="h-3.5 w-3.5 accent-(--color-accent)"
+            checked={done}
+            disabled={trashed}
+            aria-label={done ? "Reopen task" : "Complete task"}
+            onChange={(e) =>
+              e.target.checked ? completeTask.mutate(task) : reopenTask.mutate(task.id)
+            }
+            className="mt-2 h-4 w-4 accent-(--color-accent)"
           />
-          All day
-        </label>
-        {!task.isAllDay && (
-          <label className="flex items-center gap-1 text-xs text-text-muted" title="Duration in minutes">
+          <textarea
+            key={task.id}
+            defaultValue={task.title}
+            aria-label="Task title"
+            rows={1}
+            onBlur={(e) => {
+              const title = e.target.value.trim();
+              if (title && title !== task.title) updateTask.mutate({ id: task.id, patch: { title } });
+            }}
+            className={`w-full resize-none bg-transparent pt-1 text-lg font-semibold leading-snug outline-none ${
+              done ? "text-text-muted line-through" : ""
+            }`}
+          />
+          <button
+            type="button"
+            aria-label={task.pinned ? "Unpin task" : "Pin task"}
+            aria-pressed={task.pinned}
+            disabled={trashed}
+            onClick={() => setPinned.mutate({ id: task.id, pinned: !task.pinned })}
+            className={`mt-1 shrink-0 rounded-full border px-2 py-1 text-xs ${
+              task.pinned ? "border-accent text-accent" : "border-border text-text-muted hover:text-text"
+            }`}
+          >
+            📌
+          </button>
+        </div>
+
+        {/* Properties — a tidy chip row rather than one cramped line. */}
+        <div className="mt-3 flex flex-wrap items-center gap-1.5">
+          <DatePicker
+            label="Start"
+            value={task.startAt}
+            onChange={(startAt) => updateTask.mutate({ id: task.id, patch: { startAt } })}
+          />
+          <DatePicker
+            label="Due"
+            value={task.dueAt}
+            onChange={(dueAt) => updateTask.mutate({ id: task.id, patch: { dueAt } })}
+          />
+          <DropdownMenu.Root>
+            <DropdownMenu.Trigger asChild>
+              <button
+                type="button"
+                className={`rounded-full border border-border px-2.5 py-1 text-xs ${priority[2]}`}
+              >
+                ⚑ {priority[1]}
+              </button>
+            </DropdownMenu.Trigger>
+            <DropdownMenu.Portal>
+              <DropdownMenu.Content
+                sideOffset={6}
+                className="z-50 min-w-28 rounded-xl border border-border bg-surface p-1 text-sm shadow-float"
+              >
+                {PRIORITIES.map(([value, label, cls]) => (
+                  <DropdownMenu.Item
+                    key={value}
+                    className={`flex cursor-pointer select-none rounded-md px-2 py-1 outline-none hover:bg-bg data-[highlighted]:bg-bg ${cls}`}
+                    onSelect={() => updateTask.mutate({ id: task.id, patch: { priority: value } })}
+                  >
+                    ⚑ {label}
+                  </DropdownMenu.Item>
+                ))}
+              </DropdownMenu.Content>
+            </DropdownMenu.Portal>
+          </DropdownMenu.Root>
+          <RepeatPicker task={task} />
+          <label
+            className="flex items-center gap-1 rounded-full border border-border px-2.5 py-1 text-xs text-text-muted"
+            title="All-day vs. timed"
+          >
             <input
-              type="number"
-              min={0}
-              step={5}
-              aria-label="Duration minutes"
-              value={task.durationMin ?? ""}
-              placeholder="dur"
-              onChange={(e) =>
-                updateTask.mutate({
-                  id: task.id,
-                  patch: { durationMin: e.target.value === "" ? null : Math.max(0, Number(e.target.value)) },
-                })
-              }
-              className="w-14 rounded border border-border bg-bg px-1 py-0.5 outline-none focus:border-accent"
+              type="checkbox"
+              aria-label="All day"
+              checked={task.isAllDay}
+              onChange={(e) => updateTask.mutate({ id: task.id, patch: { isAllDay: e.target.checked } })}
+              className="h-3.5 w-3.5 accent-(--color-accent)"
             />
-            min
+            All day
           </label>
-        )}
-        <RepeatPicker task={task} />
-        <button
-          type="button"
-          aria-label={task.pinned ? "Unpin task" : "Pin task"}
-          aria-pressed={task.pinned}
-          disabled={trashed}
-          onClick={() => setPinned.mutate({ id: task.id, pinned: !task.pinned })}
-          className={`ml-auto rounded-md border border-border px-2 py-1 text-xs ${
-            task.pinned ? "border-accent text-accent" : "text-text-muted hover:text-text"
-          }`}
-        >
-          📌
-        </button>
-        <DropdownMenu.Root>
-          <DropdownMenu.Trigger asChild>
-            <button
-              type="button"
-              className={`rounded-md border border-border px-2 py-1 text-xs ${priority[2]}`}
-            >
-              ⚑ {priority[1]}
-            </button>
-          </DropdownMenu.Trigger>
-          <DropdownMenu.Portal>
-            <DropdownMenu.Content
-              sideOffset={6}
-              className="z-50 min-w-28 rounded-md border border-border bg-surface p-1 text-sm shadow-lg"
-            >
-              {PRIORITIES.map(([value, label, cls]) => (
-                <DropdownMenu.Item
-                  key={value}
-                  className={`flex cursor-pointer select-none rounded px-2 py-1 outline-none hover:bg-bg data-[highlighted]:bg-bg ${cls}`}
-                  onSelect={() => updateTask.mutate({ id: task.id, patch: { priority: value } })}
-                >
-                  ⚑ {label}
-                </DropdownMenu.Item>
-              ))}
-            </DropdownMenu.Content>
-          </DropdownMenu.Portal>
-        </DropdownMenu.Root>
-      </div>
+          {!task.isAllDay && (
+            <label className="flex items-center gap-1 text-xs text-text-muted" title="Duration in minutes">
+              <input
+                type="number"
+                min={0}
+                step={5}
+                aria-label="Duration minutes"
+                value={task.durationMin ?? ""}
+                placeholder="dur"
+                onChange={(e) =>
+                  updateTask.mutate({
+                    id: task.id,
+                    patch: { durationMin: e.target.value === "" ? null : Math.max(0, Number(e.target.value)) },
+                  })
+                }
+                className="w-14 rounded-full border border-border bg-bg px-2 py-0.5 outline-none focus:border-accent"
+              />
+              min
+            </label>
+          )}
+        </div>
 
-      <textarea
-        key={task.id}
-        defaultValue={task.title}
-        aria-label="Task title"
-        rows={1}
-        onBlur={(e) => {
-          const title = e.target.value.trim();
-          if (title && title !== task.title) updateTask.mutate({ id: task.id, patch: { title } });
-        }}
-        className={`mt-3 w-full resize-none bg-transparent text-lg font-semibold outline-none ${
-          done ? "text-text-muted line-through" : ""
-        }`}
-      />
-
-      <TagPicker task={task} />
+        <TagPicker task={task} />
       <DescriptionEditor task={task} />
       <Reminders task={task} />
       <CheckItems task={task} />
@@ -402,136 +412,127 @@ export function TaskDetail() {
       <Comments task={task} />
       <ActivityLog task={task} />
 
-      <div className="mt-auto flex items-center gap-2 pt-4">
-        <button
-          type="button"
-          className="rounded-md border border-border px-2 py-1 text-xs text-text-muted hover:text-text"
-          onClick={() =>
-            void api.setTaskKind(task.id, task.kind === "NOTE" ? "TASK" : "NOTE").then(() => {
-              void queryClient.invalidateQueries({ queryKey: ["tasks"] });
-            })
-          }
-        >
-          {task.kind === "NOTE" ? "Convert to task" : "Convert to note"}
-        </button>
-        <button
-          type="button"
-          className="rounded-md border border-border px-2 py-1 text-xs text-text-muted hover:text-accent"
-          onClick={() => void api.stickyFromTask(task.id)}
-        >
-          📌 Pop out
-        </button>
-        <button
-          type="button"
-          aria-label="Copy task link"
-          className="rounded-md border border-border px-2 py-1 text-xs text-text-muted hover:text-accent"
-          onClick={() => void copyLink(task.id)}
-        >
-          🔗 Copy link
-        </button>
+      </div>
+
+      {/* Pinned footer: essential status actions stay visible; the rest fold
+          into a single "More" menu instead of a nine-button pile. */}
+      <footer className="flex shrink-0 items-center gap-1 border-t border-border/70 px-3 py-2">
         <DropdownMenu.Root>
           <DropdownMenu.Trigger asChild>
             <button
               type="button"
-              aria-label="Share task"
-              className="rounded-md border border-border px-2 py-1 text-xs text-text-muted hover:text-accent"
+              aria-label="More actions"
+              className="rounded-full border border-border px-3 py-1 text-xs text-text-muted hover:text-text"
             >
-              ↗ Share
+              ⋯ More
             </button>
           </DropdownMenu.Trigger>
           <DropdownMenu.Portal>
             <DropdownMenu.Content
               sideOffset={6}
-              className="z-50 min-w-40 rounded-md border border-border bg-surface p-1 text-sm shadow-lg"
+              align="start"
+              className="z-50 min-w-44 rounded-xl border border-border bg-surface p-1 text-sm shadow-float"
             >
               <DropdownMenu.Item
-                className="cursor-pointer select-none rounded px-2 py-1 outline-none hover:bg-bg data-[highlighted]:bg-bg"
+                className={menuItem}
+                onSelect={() =>
+                  void api.setTaskKind(task.id, task.kind === "NOTE" ? "TASK" : "NOTE").then(() => {
+                    void queryClient.invalidateQueries({ queryKey: ["tasks"] });
+                  })
+                }
+              >
+                {task.kind === "NOTE" ? "Convert to task" : "Convert to note"}
+              </DropdownMenu.Item>
+              <DropdownMenu.Item className={menuItem} onSelect={() => void api.stickyFromTask(task.id)}>
+                Pop out as sticky
+              </DropdownMenu.Item>
+              <DropdownMenu.Item className={menuItem} onSelect={() => void copyLink(task.id)}>
+                Copy link
+              </DropdownMenu.Item>
+              <DropdownMenu.Item
+                className={menuItem}
                 onSelect={() => void navigator.clipboard.writeText(taskToText(task)).catch(() => {})}
               >
                 Copy as text
               </DropdownMenu.Item>
               <DropdownMenu.Item
-                className="cursor-pointer select-none rounded px-2 py-1 outline-none hover:bg-bg data-[highlighted]:bg-bg"
+                className={menuItem}
                 onSelect={() => downloadText(`${task.title || "task"}.md`, taskToMarkdown(task), "text/markdown")}
               >
                 Download markdown
               </DropdownMenu.Item>
-              <DropdownMenu.Item
-                className="cursor-pointer select-none rounded px-2 py-1 outline-none hover:bg-bg data-[highlighted]:bg-bg"
-                onSelect={() => void downloadTaskImage(task)}
-              >
+              <DropdownMenu.Item className={menuItem} onSelect={() => void downloadTaskImage(task)}>
                 Download image
               </DropdownMenu.Item>
+              <DropdownMenu.Separator className="my-1 h-px bg-border" />
+              <DropdownMenu.Item
+                className={menuItem}
+                onSelect={() =>
+                  void api.duplicateTask(task.id).then(() => {
+                    void queryClient.invalidateQueries({ queryKey: ["tasks"] });
+                  })
+                }
+              >
+                Duplicate
+              </DropdownMenu.Item>
+              <DropdownMenu.Item
+                className={menuItem}
+                onSelect={() => {
+                  void promptDialog({
+                    title: "Save as template",
+                    label: "Template name",
+                    defaultValue: task.title,
+                  }).then((name) => {
+                    if (name?.trim())
+                      void api.saveTaskAsTemplate(task.id, name.trim()).then(() => {
+                        void queryClient.invalidateQueries({ queryKey: ["templates"] });
+                      });
+                  });
+                }}
+              >
+                Save as template
+              </DropdownMenu.Item>
+              {task.parentId && (
+                <DropdownMenu.Item
+                  className={menuItem}
+                  onSelect={() => {
+                    const lossy =
+                      (task.tagIds?.length ?? 0) > 0 ||
+                      task.priority !== 0 ||
+                      task.dueAt !== null ||
+                      task.startAt !== null;
+                    const proceed = lossy
+                      ? confirmDialog({
+                          title: "Convert to check item?",
+                          message:
+                            "This drops its tags, priority, dates, and any subtasks. Continue?",
+                          confirmText: "Convert",
+                          destructive: true,
+                        })
+                      : Promise.resolve(true);
+                    void proceed.then((ok) => {
+                      if (!ok) return;
+                      void api.subtaskToCheckItem(task.id).then(() => {
+                        selectTask(null);
+                        void queryClient.invalidateQueries({ queryKey: ["tasks"] });
+                        void queryClient.invalidateQueries({ queryKey: ["checkItems"] });
+                      });
+                    });
+                  }}
+                >
+                  Convert to check item
+                </DropdownMenu.Item>
+              )}
             </DropdownMenu.Content>
           </DropdownMenu.Portal>
         </DropdownMenu.Root>
-        <button
-          type="button"
-          className="rounded-md border border-border px-2 py-1 text-xs text-text-muted hover:text-accent"
-          onClick={() =>
-            void api.duplicateTask(task.id).then(() => {
-              void queryClient.invalidateQueries({ queryKey: ["tasks"] });
-            })
-          }
-        >
-          ⧉ Duplicate
-        </button>
-        <button
-          type="button"
-          className="rounded-md border border-border px-2 py-1 text-xs text-text-muted hover:text-accent"
-          onClick={() => {
-            void promptDialog({
-              title: "Save as template",
-              label: "Template name",
-              defaultValue: task.title,
-            }).then((name) => {
-              if (name?.trim())
-                void api.saveTaskAsTemplate(task.id, name.trim()).then(() => {
-                  void queryClient.invalidateQueries({ queryKey: ["templates"] });
-                });
-            });
-          }}
-        >
-          ⧉ Save as template
-        </button>
-        {task.parentId && (
-          <button
-            type="button"
-            className="rounded-md border border-border px-2 py-1 text-xs text-text-muted hover:text-accent"
-            onClick={() => {
-              const lossy =
-                (task.tagIds?.length ?? 0) > 0 ||
-                task.priority !== 0 ||
-                task.dueAt !== null ||
-                task.startAt !== null;
-              const proceed = lossy
-                ? confirmDialog({
-                    title: "Convert to check item?",
-                    message:
-                      "This drops its tags, priority, dates, and any subtasks. Continue?",
-                    confirmText: "Convert",
-                    destructive: true,
-                  })
-                : Promise.resolve(true);
-              void proceed.then((ok) => {
-                if (!ok) return;
-                void api.subtaskToCheckItem(task.id).then(() => {
-                  selectTask(null);
-                  void queryClient.invalidateQueries({ queryKey: ["tasks"] });
-                  void queryClient.invalidateQueries({ queryKey: ["checkItems"] });
-                });
-              });
-            }}
-          >
-            ✓ To check item
-          </button>
-        )}
-        <div className="ml-auto flex gap-2">
+
+        <div className="ml-auto flex items-center gap-1">
           {!done && !trashed && (
             <button
               type="button"
               aria-label="Mark won't do"
-              className="rounded-md border border-border px-2 py-1 text-xs text-text-muted hover:text-text"
+              className="rounded-full border border-border px-3 py-1 text-xs text-text-muted hover:text-text"
               onClick={() =>
                 void api.setWontDo(task.id).then(() => {
                   void queryClient.invalidateQueries({ queryKey: ["tasks"] });
@@ -545,7 +546,7 @@ export function TaskDetail() {
           {trashed ? (
             <button
               type="button"
-              className="rounded-md border border-border px-2 py-1 text-xs text-accent hover:bg-accent/10"
+              className="rounded-full border border-border px-3 py-1 text-xs text-accent hover:bg-accent/10"
               onClick={() => restoreTask.mutate(task.id)}
             >
               Restore
@@ -554,7 +555,7 @@ export function TaskDetail() {
             <button
               type="button"
               aria-label="Move task to trash"
-              className="rounded-md border border-border px-2 py-1 text-xs text-text-muted hover:text-destructive"
+              className="rounded-full border border-border px-3 py-1 text-xs text-text-muted hover:text-destructive"
               onClick={() => {
                 trashTask.mutate(task.id);
                 selectTask(null);
@@ -564,10 +565,10 @@ export function TaskDetail() {
             </button>
           )}
         </div>
-      </div>
+      </footer>
 
       {copiedLink && (
-        <p className="pt-2 text-xs text-text-muted" aria-live="polite" data-testid="task-link">
+        <p className="px-3 pb-2 text-xs text-text-muted" aria-live="polite" data-testid="task-link">
           Copied <code>{copiedLink}</code>
         </p>
       )}
