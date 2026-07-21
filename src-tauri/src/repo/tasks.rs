@@ -337,7 +337,24 @@ pub async fn update_task(pool: &SqlitePool, bus: &EventBus, id: &str, patch: Tas
     tx.commit().await?;
 
     bus.emit(DomainEvent::TaskUpdated { id: id.to_string() });
-    get_task(pool, id).await
+    let task = get_task(pool, id).await?;
+
+    // Auto-add a default "on time" reminder when a *timed* due date is set on a
+    // task that has none yet, so a due time actually notifies (matches the
+    // common expectation; the user can delete it). All-day tasks are left alone.
+    if matches!(&patch.due_at, Some(Some(_))) && !task.is_all_day && task.due_at.is_some() {
+        let count: i64 = sqlx::query_scalar(
+            "SELECT COUNT(*) FROM reminders WHERE task_id = ? AND deleted_at IS NULL",
+        )
+        .bind(id)
+        .fetch_one(pool)
+        .await
+        .unwrap_or(0);
+        if count == 0 {
+            let _ = super::reminders::add_reminder(pool, bus, id, "REL", None, Some(0)).await;
+        }
+    }
+    Ok(task)
 }
 
 /// Collect `id` plus every live descendant of `id`, deepest last.
