@@ -434,6 +434,8 @@ pub async fn seed_sample_data(pool: &SqlitePool, bus: &EventBus, force: bool) ->
             section: None,
             reminders: vec![],
             start_date: Some(date_only(-10)),
+            goal_days: None,
+            auto_log_popup: false,
         },
     )
     .await?;
@@ -455,6 +457,8 @@ pub async fn seed_sample_data(pool: &SqlitePool, bus: &EventBus, force: bool) ->
             section: None,
             reminders: vec![],
             start_date: Some(date_only(-14)),
+            goal_days: Some(66),
+            auto_log_popup: false,
         },
     )
     .await?;

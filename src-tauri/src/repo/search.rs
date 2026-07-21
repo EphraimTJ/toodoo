@@ -229,6 +229,8 @@ mod tests {
             section: None,
             reminders: vec![],
             start_date: None,
+            goal_days: None,
+            auto_log_popup: false,
         }
     }
 

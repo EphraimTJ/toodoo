@@ -31,9 +31,10 @@ describe("TaskDetail — Phase 2 extras", () => {
   it("shows the reminders and activity sections, with a Created entry", async () => {
     await renderDetailFor(`Extras render ${Date.now()}`);
     expect(screen.getByRole("heading", { name: "Reminders" })).toBeInTheDocument();
-    // The Activity section appears once its query resolves.
+    // Activity is collapsed by default — its toggle appears once the query
+    // resolves; expanding it reveals the Created entry.
+    await userEvent.click(await screen.findByRole("button", { name: /Activity/ }));
     expect(await screen.findByText("Created")).toBeInTheDocument();
-    expect(screen.getByRole("heading", { name: "Activity" })).toBeInTheDocument();
   });
 
   it("pins and unpins a task", async () => {

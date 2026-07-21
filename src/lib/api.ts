@@ -390,6 +390,8 @@ export interface Habit {
   section: string | null;
   remindersJson: string | null;
   startDate: string | null;
+  goalDays: number | null;
+  autoLogPopup: boolean;
   archived: boolean;
   sortOrder: number;
 }
@@ -406,6 +408,8 @@ export interface HabitInput {
   section?: string | null;
   reminders?: string[];
   startDate?: string | null;
+  goalDays?: number | null;
+  autoLogPopup?: boolean;
 }
 
 export interface HabitCheckin {
@@ -2505,6 +2509,8 @@ function browserStubApi(): Api {
         section: input.section ?? null,
         remindersJson: JSON.stringify(input.reminders ?? []),
         startDate: input.startDate ?? null,
+        goalDays: input.goalDays ?? null,
+        autoLogPopup: input.autoLogPopup ?? false,
         archived: false,
         sortOrder: habits.length,
       };

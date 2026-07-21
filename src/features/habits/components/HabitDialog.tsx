@@ -60,6 +60,8 @@ function HabitForm({ habit, onClose, onSaved }: { habit?: Habit | null; onClose(
   const [section, setSection] = useState(habit?.section ?? "");
   const [reminders, setReminders] = useState(initialReminders.join(", "));
   const [startDate, setStartDate] = useState(habit?.startDate ?? "");
+  const [goalDays, setGoalDays] = useState<string>(habit?.goalDays != null ? String(habit.goalDays) : "");
+  const [autoLogPopup, setAutoLogPopup] = useState(habit?.autoLogPopup ?? false);
 
   const applyPreset = (p: HabitInput) => {
     setName(p.name);
@@ -104,6 +106,8 @@ function HabitForm({ habit, onClose, onSaved }: { habit?: Habit | null; onClose(
         .map((s) => s.trim())
         .filter((s) => /^\d{1,2}:\d{2}$/.test(s)),
       startDate: startDate || null,
+      goalDays: goalDays ? Number(goalDays) : null,
+      autoLogPopup,
     };
     const saved = habit ? await updateHabit.mutateAsync({ id: habit.id, input }) : await createHabit.mutateAsync(input);
     onSaved?.(saved.id);
@@ -194,6 +198,27 @@ function HabitForm({ habit, onClose, onSaved }: { habit?: Habit | null; onClose(
         <label className="block text-xs text-text-muted">
           Start date
           <input type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} aria-label="Start date" className={field} />
+        </label>
+        <label className="block text-xs text-text-muted">
+          Goal days
+          <select value={goalDays} onChange={(e) => setGoalDays(e.target.value)} aria-label="Goal days" className={field}>
+            <option value="">Forever</option>
+            <option value="7">7 days</option>
+            <option value="21">21 days</option>
+            <option value="30">30 days</option>
+            <option value="66">66 days</option>
+            <option value="100">100 days</option>
+          </select>
+        </label>
+        <label className="flex items-center gap-2 text-sm text-text-muted">
+          <input
+            type="checkbox"
+            checked={autoLogPopup}
+            onChange={(e) => setAutoLogPopup(e.target.checked)}
+            aria-label="Auto pop-up of habit log"
+            className="h-3.5 w-3.5 accent-(--color-accent)"
+          />
+          Auto pop-up of check-in log
         </label>
       </div>
 
