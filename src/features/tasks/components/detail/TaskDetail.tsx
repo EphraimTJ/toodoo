@@ -603,6 +603,16 @@ export function TaskDetail() {
               Won't do
             </button>
           )}
+          {wontDo && !trashed && (
+            <button
+              type="button"
+              aria-label="Reopen task"
+              className="rounded-full border border-border px-3 py-1 text-xs text-accent hover:bg-accent/10"
+              onClick={() => reopenTask.mutate(task.id)}
+            >
+              Reopen
+            </button>
+          )}
           {trashed ? (
             <button
               type="button"

@@ -180,6 +180,20 @@ export function TaskRow({ task, depth, tags, draggable, inTrash }: Props) {
         </span>
       )}
 
+      {wontDo && !inTrash && (
+        <button
+          type="button"
+          aria-label={`Reopen ${task.title}`}
+          className="rounded-full px-1.5 py-0.5 text-xs text-accent opacity-0 hover:bg-accent/10 group-hover:opacity-100"
+          onClick={(e) => {
+            e.stopPropagation();
+            reopenTask.mutate(task.id);
+          }}
+        >
+          Reopen
+        </button>
+      )}
+
       {inTrash && (
         <>
           <span

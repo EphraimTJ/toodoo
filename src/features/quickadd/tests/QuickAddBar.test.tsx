@@ -17,17 +17,18 @@ function renderBar() {
 }
 
 describe("QuickAddBar", () => {
-  it("shows chips for parsed tokens and dismisses one", async () => {
+  it("highlights parsed tokens inline (no chips)", async () => {
     const user = userEvent.setup();
     renderBar();
     const input = screen.getByRole("textbox", { name: "Add task" });
     await user.type(input, "Pay rent #finance !high");
 
-    await waitFor(() => expect(screen.getAllByTestId("qa-chip").length).toBe(2));
-    // Dismiss the tag chip → it leaves the text and the chip disappears.
-    await user.click(screen.getByRole("button", { name: "Remove Tag: finance" }));
-    await waitFor(() => expect(screen.getAllByTestId("qa-chip").length).toBe(1));
-    expect((input as HTMLInputElement).value).not.toContain("#finance");
+    // Tag + priority each get an inline highlight span, not a separate chip.
+    await waitFor(() => expect(screen.getAllByTestId("qa-hl").length).toBe(2));
+    const kinds = screen.getAllByTestId("qa-hl").map((el) => el.getAttribute("data-kind"));
+    expect(kinds).toContain("tag");
+    expect(kinds).toContain("priority");
+    expect(screen.queryByTestId("qa-chip")).toBeNull();
   });
 
   it("creates a task with the parsed tag and priority on Enter", async () => {

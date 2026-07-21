@@ -1,19 +1,21 @@
-import { useMemo, useState } from "react";
-import { Bell, Calendar, Flag, Tag as TagIcon, X } from "lucide-react";
-import { DropdownMenu } from "radix-ui";
+import { useLayoutEffect, useMemo, useRef, useState } from "react";
+import { Bell, Calendar, Flag, Tag as TagIcon } from "lucide-react";
+import { DropdownMenu, Popover } from "radix-ui";
+import { format } from "date-fns";
 import { parseQuickAdd, type ParsedQuickAdd, type ParsedToken } from "../lib/parse";
 import { useQuickAdd, type QuickAddDefaults } from "../hooks/useQuickAdd";
 import { useTags } from "../../tags/hooks/useTags";
 
-// Live-parse chips, tinted across the earth palette (dusty rose / moss / ochre
-// / teal / terracotta) so they read as one natural family.
-const CHIP_COLOR: Record<ParsedToken["kind"], string> = {
-  tag: "text-[#a8586b]",
-  list: "text-accent",
-  priority: "text-[#b0763f]",
-  date: "text-[#4f7d76]",
-  repeat: "text-secondary",
-  remind: "text-[#4f7d76]",
+// Inline highlight per token kind — a translucent tint + matching text colour,
+// tuned across the earth palette so each meaning reads distinctly:
+// reminder (teal), due (ochre), priority (terracotta), tag (rose), list (moss).
+const HL: Record<ParsedToken["kind"], string> = {
+  remind: "rounded bg-[#4f7d76]/25 text-[#4f7d76]",
+  date: "rounded bg-[#b0763f]/25 text-[#b0763f]",
+  priority: "rounded bg-[#a85448]/25 text-[#a85448]",
+  tag: "rounded bg-[#a8586b]/25 text-[#a8586b]",
+  list: "rounded bg-accent/25 text-accent",
+  repeat: "rounded bg-[#78786c]/25 text-secondary",
 };
 
 const PRIORITY_OPTS: [number, string, string][] = [
@@ -37,36 +39,68 @@ function allDayIso(daysFromNow: number): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T00:00:00.000Z`;
 }
 
-const DUE_OPTS: [string, number][] = [
+const DUE_QUICK: [string, number][] = [
   ["Today", 0],
   ["Tomorrow", 1],
-  ["In 3 days", 3],
   ["Next week", 7],
 ];
 
 interface DueOverride {
   iso: string;
   label: string;
+  allDay: boolean;
 }
 
-/** Natural-language add bar: parses tokens live, shows removable chips, and a
- *  toolbar to set priority / due / tags right in the prompt — TickTick-style.
- *  Creates the task through the normal path on Enter. */
+/** Render the input text with each parsed token wrapped in a coloured span. */
+function renderHighlighted(text: string, tokens: ParsedToken[]) {
+  const sorted = [...tokens].sort((a, b) => a.start - b.start);
+  const out: React.ReactNode[] = [];
+  let i = 0;
+  for (const [n, t] of sorted.entries()) {
+    if (t.start < i) continue; // guard against any overlap
+    if (t.start > i) out.push(<span key={`p${n}`}>{text.slice(i, t.start)}</span>);
+    out.push(
+      <mark key={`t${n}`} data-testid="qa-hl" data-kind={t.kind} className={HL[t.kind]}>
+        {text.slice(t.start, t.end)}
+      </mark>,
+    );
+    i = t.end;
+  }
+  // Trailing space keeps the backdrop width in step with the caret at line end.
+  out.push(<span key="tail">{text.slice(i) || "​"}</span>);
+  return out;
+}
+
+/** Natural-language add bar: highlights parsed tokens inline (reminder / due /
+ *  priority / tag / list), with a toolbar to set due / priority / tags right in
+ *  the prompt. Creates the task through the normal path on Enter. */
 export function QuickAddBar({ defaults }: { defaults: QuickAddDefaults }) {
   const [text, setText] = useState("");
   const [priorityOverride, setPriorityOverride] = useState<number | null>(null);
   const [dueOverride, setDueOverride] = useState<DueOverride | null>(null);
   const [tagOverride, setTagOverride] = useState<string[]>([]);
+  const [dateStr, setDateStr] = useState("");
+  const [timeStr, setTimeStr] = useState("");
   const parsed = useMemo(() => parseQuickAdd(text), [text]);
   const submit = useQuickAdd();
   const { data: tags } = useTags();
+
+  const inputRef = useRef<HTMLInputElement>(null);
+  const backdropRef = useRef<HTMLDivElement>(null);
+  // Keep the highlight backdrop scrolled in lock-step with the input.
+  const syncScroll = () => {
+    if (backdropRef.current && inputRef.current) {
+      backdropRef.current.scrollLeft = inputRef.current.scrollLeft;
+    }
+  };
+  useLayoutEffect(syncScroll, [text]);
 
   // Toolbar overrides win over anything parsed from the text.
   const effective: ParsedQuickAdd = {
     ...parsed,
     priority: priorityOverride ?? parsed.priority,
     dueAt: dueOverride?.iso ?? parsed.dueAt,
-    isAllDay: dueOverride ? true : parsed.isAllDay,
+    isAllDay: dueOverride ? dueOverride.allDay : parsed.isAllDay,
     tags: Array.from(new Set([...parsed.tags, ...tagOverride])),
   };
 
@@ -75,6 +109,8 @@ export function QuickAddBar({ defaults }: { defaults: QuickAddDefaults }) {
     setPriorityOverride(null);
     setDueOverride(null);
     setTagOverride([]);
+    setDateStr("");
+    setTimeStr("");
   };
 
   const doSubmit = async () => {
@@ -83,29 +119,58 @@ export function QuickAddBar({ defaults }: { defaults: QuickAddDefaults }) {
     reset();
   };
 
-  const dismiss = (token: ParsedToken) =>
-    setText(text.replace(token.text, "").replace(/\s+/g, " ").trim());
+  // Recompute the due override from the custom date/time inputs.
+  const applyCustomDue = (date: string, time: string) => {
+    setDateStr(date);
+    setTimeStr(time);
+    if (!date) {
+      setDueOverride(null);
+      return;
+    }
+    if (time) {
+      const dt = new Date(`${date}T${time}`);
+      setDueOverride({ iso: dt.toISOString(), label: format(dt, "MMM d, p"), allDay: false });
+    } else {
+      setDueOverride({ iso: `${date}T00:00:00.000Z`, label: format(new Date(`${date}T00:00:00`), "MMM d"), allDay: true });
+    }
+  };
 
   const priorityChip = PRIORITY_OPTS.find(([p]) => p === priorityOverride);
 
   return (
     <div className="px-4 pb-2 pt-3">
-      <input
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") void doSubmit();
-        }}
-        placeholder="+ Add task — try “remind me tomorrow to pay rent ~Bills #finance !high”"
-        aria-label="Add task"
-        className="w-full rounded-full border border-border bg-surface px-4 py-2 text-sm shadow-soft outline-none transition-all placeholder:text-text-muted focus-visible:border-accent focus-visible:ring-2 focus-visible:ring-accent/25"
-      />
+      {/* Highlight backdrop under a transparent input (text shows through the
+          backdrop's coloured spans; the input carries the caret + selection). */}
+      <div className="relative rounded-full border border-border bg-surface shadow-soft focus-within:border-accent focus-within:ring-2 focus-within:ring-accent/25">
+        <div
+          ref={backdropRef}
+          aria-hidden
+          className="pointer-events-none absolute inset-0 overflow-hidden whitespace-pre rounded-full px-4 py-2 text-sm text-text"
+          data-testid="qa-backdrop"
+        >
+          {renderHighlighted(text, parsed.tokens)}
+        </div>
+        <input
+          ref={inputRef}
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          onScroll={syncScroll}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") void doSubmit();
+          }}
+          placeholder="+ Add task — try “remind me tomorrow to pay rent #finance !high”"
+          aria-label="Add task"
+          spellCheck={false}
+          style={{ caretColor: "var(--color-text, #888)" }}
+          className="relative w-full bg-transparent px-4 py-2 text-sm text-transparent outline-none placeholder:text-text-muted"
+        />
+      </div>
 
-      {/* Toolbar — set priority / due / tags without typing tokens. */}
+      {/* Toolbar — set due / priority / tags without typing tokens. */}
       <div className="mt-1.5 flex flex-wrap items-center gap-1.5" data-testid="qa-toolbar">
-        {/* Due */}
-        <DropdownMenu.Root>
-          <DropdownMenu.Trigger asChild>
+        {/* Due — quick picks plus any date/time. */}
+        <Popover.Root>
+          <Popover.Trigger asChild>
             <button
               type="button"
               aria-label="Set due date"
@@ -116,29 +181,67 @@ export function QuickAddBar({ defaults }: { defaults: QuickAddDefaults }) {
               <Calendar size={12} strokeWidth={1.75} />
               {dueOverride ? dueOverride.label : "Due"}
             </button>
-          </DropdownMenu.Trigger>
-          <DropdownMenu.Portal>
-            <DropdownMenu.Content
+          </Popover.Trigger>
+          <Popover.Portal>
+            <Popover.Content
               sideOffset={6}
-              className="z-50 min-w-32 rounded-xl border border-border bg-surface p-1 shadow-float"
+              align="start"
+              className="z-50 w-56 rounded-xl border border-border bg-surface p-2 shadow-float"
             >
-              {DUE_OPTS.map(([label, days]) => (
-                <DropdownMenu.Item
-                  key={label}
-                  className={menuItem}
-                  onSelect={() => setDueOverride({ iso: allDayIso(days), label })}
-                >
-                  {label}
-                </DropdownMenu.Item>
-              ))}
+              <div className="flex flex-wrap gap-1">
+                {DUE_QUICK.map(([label, days]) => (
+                  <button
+                    key={label}
+                    type="button"
+                    onClick={() => {
+                      setDueOverride({ iso: allDayIso(days), label, allDay: true });
+                      setDateStr("");
+                      setTimeStr("");
+                    }}
+                    className="rounded-full border border-border px-2 py-0.5 text-xs hover:border-accent"
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              <div className="mt-2 space-y-1.5 border-t border-border pt-2">
+                <label className="flex items-center justify-between text-xs">
+                  Date
+                  <input
+                    type="date"
+                    value={dateStr}
+                    aria-label="Due date"
+                    onChange={(e) => applyCustomDue(e.target.value, timeStr)}
+                    className="rounded border border-border bg-bg px-1.5 py-0.5 text-xs outline-none focus:border-accent"
+                  />
+                </label>
+                <label className="flex items-center justify-between text-xs">
+                  Time
+                  <input
+                    type="time"
+                    value={timeStr}
+                    aria-label="Due time"
+                    onChange={(e) => applyCustomDue(dateStr, e.target.value)}
+                    className="rounded border border-border bg-bg px-1.5 py-0.5 text-xs outline-none focus:border-accent"
+                  />
+                </label>
+              </div>
               {dueOverride && (
-                <DropdownMenu.Item className={menuItem} onSelect={() => setDueOverride(null)}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDueOverride(null);
+                    setDateStr("");
+                    setTimeStr("");
+                  }}
+                  className="mt-2 w-full rounded-md py-1 text-xs text-text-muted hover:bg-bg"
+                >
                   Clear
-                </DropdownMenu.Item>
+                </button>
               )}
-            </DropdownMenu.Content>
-          </DropdownMenu.Portal>
-        </DropdownMenu.Root>
+            </Popover.Content>
+          </Popover.Portal>
+        </Popover.Root>
 
         {/* Priority */}
         <DropdownMenu.Root>
@@ -210,7 +313,6 @@ export function QuickAddBar({ defaults }: { defaults: QuickAddDefaults }) {
                   >
                     <span className="h-2 w-2 rounded-full" style={{ backgroundColor: tag.color ?? "#78786c" }} />
                     {tag.name}
-                    {on && <span className="ml-auto text-accent">✓</span>}
                   </DropdownMenu.CheckboxItem>
                 );
               })}
@@ -219,32 +321,11 @@ export function QuickAddBar({ defaults }: { defaults: QuickAddDefaults }) {
         </DropdownMenu.Root>
 
         {parsed.remind && (
-          <span className="flex items-center gap-1 rounded-full border border-border bg-bg px-2 py-0.5 text-xs text-[#4f7d76]">
-            <Bell size={11} strokeWidth={1.75} /> Reminder
+          <span className="flex items-center gap-1 text-xs text-[#4f7d76]">
+            <Bell size={11} strokeWidth={1.75} /> Reminder set
           </span>
         )}
       </div>
-
-      {/* Parsed-from-text chips (removable). */}
-      {parsed.tokens.length > 0 && (
-        <div className="mt-1 flex flex-wrap gap-1" data-testid="qa-chips">
-          {parsed.tokens.map((token) => (
-            <button
-              key={`${token.kind}:${token.text}`}
-              type="button"
-              data-testid="qa-chip"
-              aria-label={`Remove ${token.label}`}
-              onClick={() => dismiss(token)}
-              className="flex items-center gap-1 rounded-full border border-border bg-bg px-2 py-0.5 text-xs hover:border-accent"
-            >
-              <span className={CHIP_COLOR[token.kind]}>{token.label}</span>
-              <span className="flex items-center text-text-muted">
-                <X size={11} strokeWidth={2} />
-              </span>
-            </button>
-          ))}
-        </div>
-      )}
     </div>
   );
 }

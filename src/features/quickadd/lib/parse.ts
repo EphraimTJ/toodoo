@@ -35,6 +35,8 @@ export interface ParsedToken {
   kind: TokenKind;
   label: string; // chip text, e.g. "Tag: finance"
   text: string; // exact matched substring of the input (for dismissal)
+  start: number; // index of `text` in the original input …
+  end: number; // … and one past its last char (for inline highlighting)
 }
 
 export interface ParsedQuickAdd {
@@ -103,40 +105,43 @@ export function parseQuickAdd(input: string, ref: Date = new Date()): ParsedQuic
   let isAllDay = true;
   let rrule: string | null = null;
 
-  let rest = input;
   let remind = false;
-  const consume = (kind: TokenKind, label: string, text: string) => {
-    tokens.push({ kind, label, text });
-    rest = rest.replace(text, " ");
+  // `rest` mirrors `input` but with consumed spans blanked to equal-length
+  // spaces, so every match index stays aligned to the original input — which
+  // lets the UI highlight each token inline (not as separate chips).
+  let rest = input;
+  const consume = (kind: TokenKind, label: string, start: number, len: number) => {
+    tokens.push({ kind, label, text: input.slice(start, start + len), start, end: start + len });
+    rest = rest.slice(0, start) + " ".repeat(len) + rest.slice(start + len);
   };
 
   // "remind me [to] …" — TickTick treats this as a reminder request. Strip the
   // phrase and flag it; the linking "to" before the task text is removed after
   // the date is parsed out (e.g. "remind me in 2 days to ship" → "ship").
-  const remindMatch = input.match(/\bremind me\b/i);
-  if (remindMatch) {
+  const remindMatch = rest.match(/\bremind me\b/i);
+  if (remindMatch?.index != null) {
     remind = true;
-    consume("remind", "Reminder", remindMatch[0]);
+    consume("remind", "Reminder", remindMatch.index, remindMatch[0].length);
   }
 
   // #tag (may repeat)
-  for (const m of input.matchAll(/(?:^|\s)(#[\p{L}\p{N}_-]+)/gu)) {
-    const name = m[1].slice(1);
-    tags.push(name);
-    consume("tag", `Tag: ${name}`, m[1]);
+  for (const m of rest.matchAll(/(?:^|\s)(#[\p{L}\p{N}_-]+)/gu)) {
+    const start = m.index + m[0].indexOf(m[1]);
+    tags.push(m[1].slice(1));
+    consume("tag", `Tag: ${m[1].slice(1)}`, start, m[1].length);
   }
   // ~list (last one wins if repeated)
-  for (const m of input.matchAll(/(?:^|\s)(~[\p{L}\p{N}_-]+)/gu)) {
+  for (const m of rest.matchAll(/(?:^|\s)(~[\p{L}\p{N}_-]+)/gu)) {
     listName = m[1].slice(1);
-    consume("list", `List: ${listName}`, m[1]);
+    consume("list", `List: ${listName}`, m.index + m[0].indexOf(m[1]), m[1].length);
   }
   // !priority
-  const pm = input.match(/(?:^|\s)(![a-z]+)/i);
-  if (pm) {
+  const pm = rest.match(/(?:^|\s)(![a-z]+)/i);
+  if (pm?.index != null) {
     const word = pm[1].slice(1).toLowerCase();
     if (word in PRIORITY) {
       priority = PRIORITY[word];
-      consume("priority", `Priority: ${PRIORITY_LABEL[priority]}`, pm[1]);
+      consume("priority", `Priority: ${PRIORITY_LABEL[priority]}`, pm.index + pm[0].indexOf(pm[1]), pm[1].length);
     }
   }
 
@@ -144,7 +149,8 @@ export function parseQuickAdd(input: string, ref: Date = new Date()): ParsedQuic
   const rec = matchRecurrence(rest);
   if (rec) {
     rrule = rec.rrule;
-    consume("repeat", "Repeat", rec.text.trim());
+    const start = rest.indexOf(rec.text);
+    if (start >= 0) consume("repeat", "Repeat", start, rec.text.length);
   }
 
   // Date / time.
@@ -173,8 +179,9 @@ export function parseQuickAdd(input: string, ref: Date = new Date()): ParsedQuic
       isAllDay = true;
     }
 
-    const matched = pre ? pre[0] + r.text : r.text;
-    consume("date", `Due: ${matched.trim()}`, matched);
+    const start = r.index - (pre ? pre[0].length : 0);
+    const len = (pre ? pre[0].length : 0) + r.text.length;
+    consume("date", `Due: ${input.slice(start, start + len).trim()}`, start, len);
   }
 
   // Strip a leading connective "to"/"that" left behind by "remind me … to <task>".
