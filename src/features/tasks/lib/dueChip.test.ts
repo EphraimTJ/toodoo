@@ -32,7 +32,10 @@ describe("dueChip", () => {
   });
 
   it("appends the time for a timed task due today", () => {
-    const chip = dueChip(task({ dueAt: at(2), isAllDay: false }));
+    // Pin to midday today so the assertion never rolls into "Tomorrow" when the
+    // suite runs within a couple hours of midnight.
+    const noon = new Date(new Date().setHours(12, 0, 0, 0)).toISOString();
+    const chip = dueChip(task({ dueAt: noon, isAllDay: false }));
     // e.g. "Today 3:45 PM" — starts with Today and carries a clock time.
     expect(chip?.text).toMatch(/^Today \d{1,2}:\d{2} (AM|PM)$/);
   });
