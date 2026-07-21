@@ -2,7 +2,9 @@ import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { DropdownMenu, Popover } from "radix-ui";
 import { ArrowUp, Flag, Pin, X } from "lucide-react";
+import { format, parseISO } from "date-fns";
 import { api, type Priority, type Task } from "../../../../lib/api";
+import { allDayToLocal } from "../../../../lib/date";
 import { downloadText } from "../../../../lib/download";
 import { taskToMarkdown, taskToText } from "../../../share/lib/shareText";
 import { downloadTaskImage } from "../../../share/lib/shareImage";
@@ -335,11 +337,13 @@ export function TaskDetail() {
           <DatePicker
             label="Start"
             value={task.startAt}
+            allDay={task.isAllDay}
             onChange={(startAt) => updateTask.mutate({ id: task.id, patch: { startAt } })}
           />
           <DatePicker
             label="Due"
             value={task.dueAt}
+            allDay={task.isAllDay}
             onChange={(dueAt) => updateTask.mutate({ id: task.id, patch: { dueAt } })}
           />
           <DropdownMenu.Root>
@@ -377,7 +381,23 @@ export function TaskDetail() {
               type="checkbox"
               aria-label="All day"
               checked={task.isAllDay}
-              onChange={(e) => updateTask.mutate({ id: task.id, patch: { isAllDay: e.target.checked } })}
+              onChange={(e) => {
+                const toAllDay = e.target.checked;
+                // Convert existing dates so toggling doesn't shift the day: a
+                // timed instant → that calendar date at UTC-midnight, and an
+                // all-day date → that day at 9am local.
+                const conv = (iso: string | null): string | null => {
+                  if (!iso) return null;
+                  if (toAllDay) return `${format(parseISO(iso), "yyyy-MM-dd")}T00:00:00.000Z`;
+                  const d = allDayToLocal(iso);
+                  d.setHours(9, 0, 0, 0);
+                  return d.toISOString();
+                };
+                updateTask.mutate({
+                  id: task.id,
+                  patch: { isAllDay: toAllDay, dueAt: conv(task.dueAt), startAt: conv(task.startAt) },
+                });
+              }}
               className="h-3.5 w-3.5 accent-(--color-accent)"
             />
             All day

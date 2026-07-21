@@ -1,3 +1,4 @@
+import { Play } from "lucide-react";
 import type { Task } from "../../../lib/api";
 import { useUiStore } from "../../../lib/uiStore";
 import { useTaskMutations } from "../../tasks/hooks/useTasks";
@@ -19,14 +20,16 @@ export function TaskFocusInfo({ task }: { task: Task }) {
         <button
           type="button"
           onClick={() => openFocus(task.id)}
-          className="rounded-md border border-border px-2 py-1 text-xs text-accent hover:bg-accent/10"
+          className="flex items-center gap-1 rounded-full border border-border px-2.5 py-1 text-xs text-accent hover:bg-accent/10"
         >
-          ▶ Start focus
+          <Play size={11} strokeWidth={2} fill="currentColor" /> Start focus
         </button>
       </div>
-      <div className="mt-2 grid grid-cols-2 gap-2 text-sm">
+      {/* Stacked full-width rows — a 2-column grid overflows and overlaps in the
+          narrow detail pane. */}
+      <div className="mt-2 flex flex-col gap-2 text-sm">
         <label className="flex items-center gap-2 text-text-muted">
-          Est. pomos
+          <span className="w-20 shrink-0">Est. pomos</span>
           <input
             type="number"
             min={0}
@@ -38,12 +41,12 @@ export function TaskFocusInfo({ task }: { task: Task }) {
                 patch: { estPomos: e.target.value ? Number(e.target.value) : null },
               })
             }
-            className="w-16 rounded border border-border bg-bg px-1 py-0.5 text-text outline-none focus:border-accent"
+            className="w-14 rounded-md border border-border bg-bg px-1.5 py-0.5 text-text outline-none focus:border-accent"
           />
-          <span className="text-text">/ {actuals?.actualPomos ?? 0} done</span>
+          <span className="whitespace-nowrap text-text-muted">/ {actuals?.actualPomos ?? 0} done</span>
         </label>
         <label className="flex items-center gap-2 text-text-muted">
-          Est. min
+          <span className="w-20 shrink-0">Est. min</span>
           <input
             type="number"
             min={0}
@@ -55,9 +58,9 @@ export function TaskFocusInfo({ task }: { task: Task }) {
                 patch: { estDurationMin: e.target.value ? Number(e.target.value) : null },
               })
             }
-            className="w-16 rounded border border-border bg-bg px-1 py-0.5 text-text outline-none focus:border-accent"
+            className="w-14 rounded-md border border-border bg-bg px-1.5 py-0.5 text-text outline-none focus:border-accent"
           />
-          <span className="text-text">/ {actualMin}m done</span>
+          <span className="whitespace-nowrap text-text-muted">/ {actualMin}m done</span>
         </label>
       </div>
     </section>
