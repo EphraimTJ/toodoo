@@ -1,0 +1,28 @@
+# Normalize line endings so builds are reproducible across machines/CI.
+# Default: store text as LF in the repo and check it out as LF everywhere
+# (kills the "LF will be replaced by CRLF" churn on Windows).
+* text=auto eol=lf
+
+# EXCEPTION — migration SQL must stay CRLF.
+# sqlx embeds each migration file at compile time and stores a checksum of its
+# bytes in the database's _sqlx_migrations table. Databases created by the
+# CI-built installers recorded CRLF checksums (GitHub's Windows runners check
+# out with core.autocrlf=true). A build that embedded LF instead would fail the
+# checksum ("migration N was previously applied but has been modified") and the
+# app would refuse to start on every existing install. Keep CRLF to stay
+# compatible with already-migrated databases.
+src-tauri/migrations/*.sql text eol=crlf
+
+# Binary assets — never touch line endings.
+*.png   binary
+*.jpg   binary
+*.jpeg  binary
+*.gif   binary
+*.ico   binary
+*.icns  binary
+*.woff  binary
+*.woff2 binary
+*.wav   binary
+*.mp3   binary
+*.db    binary
+*.sig   binary
