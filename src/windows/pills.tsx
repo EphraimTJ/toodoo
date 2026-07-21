@@ -188,8 +188,8 @@ export function FocusPillWindow() {
       onMouseLeave={onLeave}
     >
       <div
-        className="flex shrink-0 items-center gap-2 rounded-full bg-[#1f1e1a]/95 pl-1.5 pr-3 text-white"
-        style={{ height: PILL_H - 4, marginTop: 2 }}
+        className="flex w-full shrink-0 items-center gap-2 rounded-xl bg-[#1f1e1a] pl-1.5 pr-3 text-white"
+        style={{ height: PILL_H }}
         data-testid="focus-pill"
         data-tauri-drag-region
       >
