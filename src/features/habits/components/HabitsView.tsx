@@ -1,6 +1,17 @@
-import { useState } from "react";
-import { Check, Plus } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { differenceInCalendarDays, parseISO } from "date-fns";
+import { Check, Flame, Plus } from "lucide-react";
 import { localDateParams, type Habit, type HabitToday } from "../../../lib/api";
+
+/** "Day X / N" for a habit with a goal-days duration, else null. */
+function goalProgress(h: HabitToday): string | null {
+  if (!h.habit.goalDays || !h.habit.startDate) return null;
+  const day = Math.min(
+    h.habit.goalDays,
+    Math.max(1, differenceInCalendarDays(new Date(), parseISO(h.habit.startDate)) + 1),
+  );
+  return `Day ${day}/${h.habit.goalDays}`;
+}
 import { useHabitMutations, useHabits, useTodayHabits } from "../hooks/useHabits";
 import { HabitDialog } from "./HabitDialog";
 import { HabitDetail } from "./HabitDetail";
@@ -16,6 +27,20 @@ export function HabitsView() {
   const [showArchived, setShowArchived] = useState(false);
   const { data: archivedList } = useHabits(true);
   const archived = (archivedList ?? []).filter((h) => h.archived);
+
+  // Auto pop-up: open the check-in log for the first due habit that opted in
+  // (once per mount, only if not already checked in / skipped today).
+  const autoPopped = useRef(false);
+  useEffect(() => {
+    if (autoPopped.current) return;
+    const due = (todayHabits ?? []).find(
+      (h) => h.habit.autoLogPopup && h.status !== "DONE" && h.status !== "SKIP",
+    );
+    if (due) {
+      autoPopped.current = true;
+      setSelected(due.habit);
+    }
+  }, [todayHabits]);
 
   if (selected) {
     return (
@@ -65,14 +90,14 @@ export function HabitsView() {
             setEditing(null);
             setDialogOpen(true);
           }}
-          className="ml-auto rounded-md border border-border px-2 py-1 text-xs hover:border-accent"
+          className="ml-auto rounded-full border border-border px-3 py-1 text-xs hover:border-accent"
         >
           + New habit
         </button>
         <button
           type="button"
           onClick={() => setShowArchived((v) => !v)}
-          className="rounded-md px-2 py-1 text-xs text-text-muted hover:bg-surface"
+          className="rounded-full px-3 py-1 text-xs text-text-muted hover:bg-surface"
         >
           {showArchived ? "Hide archived" : "Archived"}
         </button>
@@ -87,7 +112,7 @@ export function HabitsView() {
                 <li
                   key={h.habit.id}
                   data-testid="habit-row"
-                  className="flex items-center gap-3 rounded-md px-2 py-2 hover:bg-surface"
+                  className="flex items-center gap-3 rounded-xl px-2.5 py-2 transition-colors hover:bg-surface"
                 >
                   <button
                     type="button"
@@ -115,7 +140,14 @@ export function HabitsView() {
                       </span>
                     )}
                   </button>
-                  {h.streak > 0 && <span className="text-xs text-secondary">🔥 {h.streak}</span>}
+                  {goalProgress(h) && (
+                    <span className="whitespace-nowrap text-xs text-text-muted">{goalProgress(h)}</span>
+                  )}
+                  {h.streak > 0 && (
+                    <span className="flex items-center gap-0.5 text-xs text-secondary">
+                      <Flame size={12} strokeWidth={2} fill="currentColor" /> {h.streak}
+                    </span>
+                  )}
                   <button
                     type="button"
                     aria-label={`Skip ${h.habit.name}`}
