@@ -1511,19 +1511,9 @@ fn show_tray_notice(app: &tauri::AppHandle) {
     #[cfg(windows)]
     {
         use tauri_winrt_notification::Toast;
-        let handle = app.clone();
-        let shown = Toast::new(&toast_app_id(app))
-            .title("Toodoo")
-            .text1(BODY)
-            .add_button(
-                "Don't show again",
-                &toast_actions::encode(&toast_actions::ToastAction::AckTrayNotice),
-            )
-            .on_activated(move |arg| {
-                handle_toast_activation(handle.clone(), arg, String::new());
-                Ok(())
-            })
-            .show();
+        // Shown only the very first time the window hides to the tray (the flag
+        // is persisted on that first show), so no "Don't show again" is needed.
+        let shown = Toast::new(&toast_app_id(app)).title("Toodoo").text1(BODY).show();
         match shown {
             Ok(()) => return,
             Err(e) => log::warn!("[tray] winrt notice failed ({e}); using the plain notification"),
@@ -2162,6 +2152,22 @@ pub fn run() {
                         if first_time_notice {
                             state.tray_notice_done.store(true, Ordering::Relaxed);
                             show_tray_notice(&app.clone());
+                            // Persist so the notice is shown once EVER, not once
+                            // per launch — subsequent closes hide silently.
+                            let pool = state.pool.clone();
+                            let bus = state.bus.clone();
+                            tauri::async_runtime::spawn(async move {
+                                if let Err(e) = repo::settings::set_setting(
+                                    &pool,
+                                    &bus,
+                                    desktop::KEY_TRAY_NOTICE,
+                                    serde_json::json!(true),
+                                )
+                                .await
+                                {
+                                    log::warn!("[tray] failed to persist notice-shown: {e}");
+                                }
+                            });
                         }
                     }
                     desktop::CloseDecision::Exit => {
