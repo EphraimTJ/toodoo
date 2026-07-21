@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Trash2 } from "lucide-react";
 import { useUiStore } from "../../../lib/uiStore";
 import { flattenTree, useViewTasks } from "../../tasks/hooks/useTasks";
 import { TaskRow } from "../../tasks/components/TaskRow";
@@ -46,7 +47,7 @@ export function FilterResultsView({ filterId }: { filterId: string }) {
             }}
             className="rounded-md px-2 py-1 text-xs text-text-muted hover:text-destructive"
           >
-            🗑
+            <Trash2 size={14} strokeWidth={1.75} />
           </button>
         </div>
       </header>

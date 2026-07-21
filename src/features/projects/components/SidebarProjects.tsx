@@ -2,6 +2,7 @@ import { useState } from "react";
 import { DndContext, PointerSensor, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
 import { SortableContext, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { ChevronDown, ChevronRight, X } from "lucide-react";
 import { Dialog, DropdownMenu } from "radix-ui";
 import { INBOX_ID, type Folder, type Project } from "../../../lib/api";
 import { useUiStore } from "../../../lib/uiStore";
@@ -133,7 +134,7 @@ function ProjectRow({ project }: { project: Project }) {
                     className="flex h-6 w-6 cursor-pointer items-center justify-center rounded text-xs text-text-muted outline-none hover:bg-bg data-[highlighted]:bg-bg"
                     onSelect={() => updateProject.mutate({ id: project.id, patch: { icon: null } })}
                   >
-                    ✕
+                    <X size={12} strokeWidth={2} />
                   </DropdownMenu.Item>
                 </DropdownMenu.SubContent>
               </DropdownMenu.Portal>
@@ -165,15 +166,16 @@ function FolderGroup({ folder, projects }: { folder: Folder; projects: Project[]
           onClick={() => setOpen(!open)}
           className="flex min-w-0 flex-1 items-center gap-1 rounded-md px-2 py-1 text-left text-xs font-semibold uppercase tracking-wide text-text-muted hover:bg-bg"
         >
-          {open ? "▾" : "▸"} {folder.name}
+          {open ? <ChevronDown size={13} strokeWidth={2} /> : <ChevronRight size={13} strokeWidth={2} />}{" "}
+          {folder.name}
         </button>
         <button
           type="button"
           aria-label={`Delete folder ${folder.name}`}
-          className="mr-1 rounded px-1 text-text-muted opacity-0 hover:bg-bg group-hover:opacity-100"
+          className="mr-1 flex items-center rounded px-1 text-text-muted opacity-0 hover:bg-bg group-hover:opacity-100"
           onClick={() => deleteFolder.mutate(folder.id)}
         >
-          ✕
+          <X size={12} strokeWidth={2} />
         </button>
       </div>
       {open && projects.map((p) => <ProjectRow key={p.id} project={p} />)}

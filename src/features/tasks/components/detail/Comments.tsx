@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { X } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { format, parseISO } from "date-fns";
 import { api, type Task } from "../../../../lib/api";
@@ -36,7 +37,7 @@ export function Comments({ task }: { task: Task }) {
                 className="text-xs text-text-muted opacity-0 hover:text-destructive group-hover:opacity-100"
                 onClick={() => remove.mutate(c.id)}
               >
-                ✕
+                <X size={12} strokeWidth={2} />
               </button>
             </div>
             <time className="text-[10px] text-text-muted">{format(parseISO(c.createdAt), "MMM d, h:mm a")}</time>

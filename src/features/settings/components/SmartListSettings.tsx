@@ -1,3 +1,4 @@
+import { ChevronDown, ChevronUp } from "lucide-react";
 import { useSmartLists } from "../../tasks/hooks/useSmartLists";
 
 const LABELS: Record<string, string> = {
@@ -30,19 +31,19 @@ export function SmartListSettings() {
             type="button"
             aria-label={`Move ${LABELS[item.view]} up`}
             disabled={i === 0}
-            className="rounded border border-border px-1.5 text-xs disabled:opacity-30"
+            className="flex items-center rounded border border-border px-1.5 py-1 disabled:opacity-30"
             onClick={() => move(item.view, -1)}
           >
-            ↑
+            <ChevronUp size={13} strokeWidth={2} />
           </button>
           <button
             type="button"
             aria-label={`Move ${LABELS[item.view]} down`}
             disabled={i === items.length - 1}
-            className="rounded border border-border px-1.5 text-xs disabled:opacity-30"
+            className="flex items-center rounded border border-border px-1.5 py-1 disabled:opacity-30"
             onClick={() => move(item.view, 1)}
           >
-            ↓
+            <ChevronDown size={13} strokeWidth={2} />
           </button>
         </li>
       ))}

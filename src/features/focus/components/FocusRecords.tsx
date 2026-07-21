@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { X } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { useFocusMutations, useFocusSessions } from "../hooks/useFocus";
 
@@ -92,7 +93,7 @@ export function FocusRecords() {
               onClick={() => deleteSession.mutate(s.id)}
               className="text-text-muted opacity-0 hover:text-destructive group-hover:opacity-100"
             >
-              ✕
+              <X size={13} strokeWidth={2} />
             </button>
           </li>
         ))}

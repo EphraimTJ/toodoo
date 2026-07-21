@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
+import { Check, ChevronDown, ChevronRight, Upload } from "lucide-react";
 import { DndContext, PointerSensor, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { DropdownMenu } from "radix-ui";
@@ -181,7 +182,12 @@ export function TaskListView({ view }: { view: ViewSelection }) {
                   }}
                   className="flex h-9 w-full items-end pb-1 pl-2 text-xs font-semibold uppercase tracking-wide text-text-muted hover:text-text"
                 >
-                  {completedOpen ? "▾" : "▸"}&nbsp;Completed ({item.count})
+                  {completedOpen ? (
+                    <ChevronDown size={13} strokeWidth={2} className="inline" />
+                  ) : (
+                    <ChevronRight size={13} strokeWidth={2} className="inline" />
+                  )}{" "}
+                  Completed ({item.count})
                 </button>
               )}
               {item.kind === "task" && (
@@ -231,12 +237,12 @@ export function TaskListView({ view }: { view: ViewSelection }) {
             <button
               type="button"
               aria-label="Share list as markdown"
-              className="rounded-md px-2 py-1 text-xs text-text-muted hover:bg-surface"
+              className="flex items-center rounded-md px-2 py-1 text-text-muted hover:bg-surface"
               onClick={() =>
                 downloadText(`${title}.md`, listToMarkdown(title, tasks ?? []), "text/markdown")
               }
             >
-              ↗
+              <Upload size={15} strokeWidth={1.75} />
             </button>
             <DropdownMenu.Root>
               <DropdownMenu.Trigger asChild>
@@ -258,7 +264,7 @@ export function TaskListView({ view }: { view: ViewSelection }) {
                       className={menuItem}
                       onSelect={() => setOptions({ sort: mode })}
                     >
-                      {label} {options.sort === mode && "✓"}
+                      {label} {options.sort === mode && <Check size={13} strokeWidth={2} />}
                     </DropdownMenu.Item>
                   ))}
                 </DropdownMenu.Content>
@@ -285,7 +291,7 @@ export function TaskListView({ view }: { view: ViewSelection }) {
                       className={menuItem}
                       onSelect={() => setOptions({ group: mode })}
                     >
-                      {label} {options.group === mode && "✓"}
+                      {label} {options.group === mode && <Check size={13} strokeWidth={2} />}
                     </DropdownMenu.Item>
                   ))}
                   <DropdownMenu.Separator className="my-1 h-px bg-border" />
@@ -295,7 +301,7 @@ export function TaskListView({ view }: { view: ViewSelection }) {
                       className={menuItem}
                       onSelect={() => setOptions({ density: d })}
                     >
-                      <span className="capitalize">{d}</span> density {options.density === d && "✓"}
+                      <span className="capitalize">{d}</span> density {options.density === d && <Check size={13} strokeWidth={2} />}
                     </DropdownMenu.Item>
                   ))}
                   <DropdownMenu.Separator className="my-1 h-px bg-border" />
@@ -303,7 +309,7 @@ export function TaskListView({ view }: { view: ViewSelection }) {
                     className={menuItem}
                     onSelect={() => setOptions({ showCompleted: !options.showCompleted })}
                   >
-                    Show completed {options.showCompleted && "✓"}
+                    Show completed {options.showCompleted && <Check size={13} strokeWidth={2} />}
                   </DropdownMenu.Item>
                 </DropdownMenu.Content>
               </DropdownMenu.Portal>

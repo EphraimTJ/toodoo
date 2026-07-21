@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { Check, Circle, X } from "lucide-react";
 import type { SearchFilters } from "../../../lib/api";
 import { useUiStore } from "../../../lib/uiStore";
 import { useProjects } from "../../projects/hooks/useProjects";
@@ -189,10 +190,10 @@ export function SearchView() {
                   <button
                     type="button"
                     aria-label={`Delete saved search ${s.query}`}
-                    className="rounded border border-border px-1.5 py-0.5 text-xs text-text-muted hover:text-destructive"
+                    className="flex items-center rounded border border-border px-1.5 py-1 text-text-muted hover:text-destructive"
                     onClick={() => saved.remove.mutate(s.id)}
                   >
-                    ✕
+                    <X size={12} strokeWidth={2} />
                   </button>
                 </li>
               ))}
@@ -215,8 +216,8 @@ export function SearchView() {
                 onClick={() => openTask(t.id, t.projectId)}
                 className="flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-bg"
               >
-                <span className={`text-xs ${t.status === "COMPLETED" ? "text-accent" : "text-text-muted"}`}>
-                  {t.status === "COMPLETED" ? "✓" : "○"}
+                <span className={`flex items-center ${t.status === "COMPLETED" ? "text-accent" : "text-text-muted"}`}>
+                  {t.status === "COMPLETED" ? <Check size={13} strokeWidth={2} /> : <Circle size={13} strokeWidth={1.75} />}
                 </span>
                 <span className="min-w-0 truncate">{t.title}</span>
                 <span className="ml-auto truncate text-xs text-text-muted">

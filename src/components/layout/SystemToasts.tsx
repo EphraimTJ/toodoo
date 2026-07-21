@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { X } from "lucide-react";
 
 interface AppError {
   message: string;
@@ -56,7 +57,7 @@ export function SystemToasts() {
               className="text-xs text-text-muted hover:text-text"
               onClick={() => dismiss(idx)}
             >
-              ✕
+              <X size={13} strokeWidth={2} />
             </button>
           </div>
         </div>

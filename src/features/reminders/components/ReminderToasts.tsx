@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { X } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { api } from "../../../lib/api";
 import { playChirp, useNotifSound } from "../hooks/useNotifSound";
@@ -86,7 +87,7 @@ export function ReminderToasts() {
               className="text-xs text-text-muted hover:text-text"
               onClick={() => dismiss(idx)}
             >
-              ✕
+              <X size={13} strokeWidth={2} />
             </button>
           </div>
           {f.reminderId === "test" ? (

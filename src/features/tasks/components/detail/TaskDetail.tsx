@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { DropdownMenu, Popover } from "radix-ui";
+import { ArrowUp, Flag, Pin, X } from "lucide-react";
 import { api, type Priority, type Task } from "../../../../lib/api";
 import { downloadText } from "../../../../lib/download";
 import { taskToMarkdown, taskToText } from "../../../share/lib/shareText";
@@ -64,18 +65,18 @@ function CheckItems({ task }: { task: Task }) {
               type="button"
               aria-label={`Convert ${item.title} to subtask`}
               title="Promote to subtask"
-              className="ml-auto text-xs text-text-muted opacity-0 hover:text-accent group-hover:opacity-100"
+              className="ml-auto flex items-center text-text-muted opacity-0 hover:text-accent group-hover:opacity-100"
               onClick={() => void promote(item.id)}
             >
-              ↥
+              <ArrowUp size={13} strokeWidth={1.75} />
             </button>
             <button
               type="button"
               aria-label={`Delete ${item.title}`}
-              className="text-xs text-text-muted opacity-0 hover:text-destructive group-hover:opacity-100"
+              className="flex items-center text-text-muted opacity-0 hover:text-destructive group-hover:opacity-100"
               onClick={() => void api.deleteCheckItem(item.id)}
             >
-              ✕
+              <X size={12} strokeWidth={2} />
             </button>
           </li>
         ))}
@@ -176,9 +177,9 @@ function TagPicker({ task }: { task: Task }) {
             type="button"
             aria-label={`Remove tag ${tag.name}`}
             onClick={() => unassignTag.mutate({ taskId: task.id, tagId: tag.id })}
-            className="opacity-60 hover:opacity-100"
+            className="flex items-center opacity-60 hover:opacity-100"
           >
-            ✕
+            <X size={11} strokeWidth={2} />
           </button>
         </span>
       ))}
@@ -321,11 +322,11 @@ export function TaskDetail() {
             aria-pressed={task.pinned}
             disabled={trashed}
             onClick={() => setPinned.mutate({ id: task.id, pinned: !task.pinned })}
-            className={`mt-1 shrink-0 rounded-full border px-2 py-1 text-xs ${
+            className={`mt-1 flex shrink-0 items-center rounded-full border p-1.5 ${
               task.pinned ? "border-accent text-accent" : "border-border text-text-muted hover:text-text"
             }`}
           >
-            📌
+            <Pin size={14} strokeWidth={1.75} />
           </button>
         </div>
 
@@ -345,9 +346,9 @@ export function TaskDetail() {
             <DropdownMenu.Trigger asChild>
               <button
                 type="button"
-                className={`rounded-full border border-border px-2.5 py-1 text-xs ${priority[2]}`}
+                className={`flex items-center gap-1 rounded-full border border-border px-2.5 py-1 text-xs ${priority[2]}`}
               >
-                ⚑ {priority[1]}
+                <Flag size={12} strokeWidth={1.75} /> {priority[1]}
               </button>
             </DropdownMenu.Trigger>
             <DropdownMenu.Portal>
@@ -358,10 +359,10 @@ export function TaskDetail() {
                 {PRIORITIES.map(([value, label, cls]) => (
                   <DropdownMenu.Item
                     key={value}
-                    className={`flex cursor-pointer select-none rounded-md px-2 py-1 outline-none hover:bg-bg data-[highlighted]:bg-bg ${cls}`}
+                    className={`flex cursor-pointer select-none items-center gap-1.5 rounded-md px-2 py-1 outline-none hover:bg-bg data-[highlighted]:bg-bg ${cls}`}
                     onSelect={() => updateTask.mutate({ id: task.id, patch: { priority: value } })}
                   >
-                    ⚑ {label}
+                    <Flag size={12} strokeWidth={1.75} /> {label}
                   </DropdownMenu.Item>
                 ))}
               </DropdownMenu.Content>

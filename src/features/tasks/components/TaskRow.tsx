@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import { Check, GripVertical, Pin, Repeat } from "lucide-react";
 import type { Tag, Task } from "../../../lib/api";
 import { useUiStore } from "../../../lib/uiStore";
 import { useTaskMutations } from "../hooks/useTasks";
@@ -83,12 +84,12 @@ export function TaskRow({ task, depth, tags, draggable, inTrash }: Props) {
         <button
           type="button"
           aria-label="Drag to reorder"
-          className="cursor-grab text-text-muted opacity-0 group-hover:opacity-60"
+          className="flex cursor-grab items-center text-text-muted opacity-0 group-hover:opacity-60"
           {...attributes}
           {...listeners}
           onClick={(e) => e.stopPropagation()}
         >
-          ⠿
+          <GripVertical size={14} strokeWidth={1.75} />
         </button>
       )}
       <button
@@ -104,7 +105,7 @@ export function TaskRow({ task, depth, tags, draggable, inTrash }: Props) {
           PRIORITY_COLOR[task.priority] ?? PRIORITY_COLOR[0]
         } ${done || completing ? "bg-current" : "bg-transparent"}`}
       >
-        {(done || completing) && <span className="text-[10px] leading-none text-surface">✓</span>}
+        {(done || completing) && <Check size={11} strokeWidth={3} className="text-surface" />}
       </button>
 
       {editing ? (
@@ -139,17 +140,17 @@ export function TaskRow({ task, depth, tags, draggable, inTrash }: Props) {
       )}
 
       {task.pinned && (
-        <span aria-label="Pinned" title="Pinned" className="text-xs text-accent">
-          📌
+        <span aria-label="Pinned" title="Pinned" className="flex items-center text-accent">
+          <Pin size={12} strokeWidth={1.75} />
         </span>
       )}
       {task.rrule && (
         <span
           aria-label="Repeats"
           title={describeRrule(task.rrule) ?? "Repeats"}
-          className="text-xs text-text-muted"
+          className="flex items-center text-text-muted"
         >
-          ↻
+          <Repeat size={12} strokeWidth={1.75} />
         </span>
       )}
       {rowTags.map((tag) => (

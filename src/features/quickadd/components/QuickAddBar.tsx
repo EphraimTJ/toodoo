@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { X } from "lucide-react";
 import { parseQuickAdd, type ParsedToken } from "../lib/parse";
 import { useQuickAdd, type QuickAddDefaults } from "../hooks/useQuickAdd";
 
@@ -52,7 +53,9 @@ export function QuickAddBar({ defaults }: { defaults: QuickAddDefaults }) {
               className="flex items-center gap-1 rounded-full border border-border bg-bg px-2 py-0.5 text-xs hover:border-accent"
             >
               <span className={CHIP_COLOR[token.kind]}>{token.label}</span>
-              <span className="text-text-muted">✕</span>
+              <span className="flex items-center text-text-muted">
+                <X size={11} strokeWidth={2} />
+              </span>
             </button>
           ))}
         </div>

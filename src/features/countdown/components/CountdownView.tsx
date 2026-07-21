@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Trash2 } from "lucide-react";
 import { localDateParams, type Countdown, type CountdownStyle } from "../../../lib/api";
 import { countdownView } from "../lib/countdown";
 import { useCountdowns } from "../hooks/useCountdowns";
@@ -60,9 +61,9 @@ export function CountdownView() {
                   type="button"
                   aria-label={`Delete ${c.title}`}
                   onClick={() => deleteCountdown.mutate(c.id)}
-                  className="absolute bottom-2 right-2 text-xs opacity-0 group-hover:opacity-80"
+                  className="absolute bottom-2 right-2 flex items-center opacity-0 group-hover:opacity-80"
                 >
-                  🗑
+                  <Trash2 size={14} strokeWidth={1.75} />
                 </button>
               </div>
             );

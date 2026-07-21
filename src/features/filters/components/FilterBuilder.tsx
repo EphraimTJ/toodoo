@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { X } from "lucide-react";
 import { api, type Condition, type Filter, type Rule, type RuleMatch } from "../../../lib/api";
 import { useProjects } from "../../projects/hooks/useProjects";
 import { useTags } from "../../tags/hooks/useTags";
@@ -225,7 +226,7 @@ export function FilterBuilder({ filter, onClose, onSaved }: Props) {
               onClick={() => setConditions((cs) => cs.filter((_, idx) => idx !== i))}
               className="ml-auto text-text-muted hover:text-destructive"
             >
-              ✕
+              <X size={13} strokeWidth={2} />
             </button>
           </li>
         ))}

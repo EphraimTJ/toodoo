@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Repeat } from "lucide-react";
 import { Popover } from "radix-ui";
 import type { RepeatFrom, Task } from "../../../../lib/api";
 import { useTaskMutations } from "../../hooks/useTasks";
@@ -49,11 +50,11 @@ export function RepeatPicker({ task }: { task: Task }) {
         <button
           type="button"
           aria-label="Repeat"
-          className={`rounded-md border border-border px-2 py-1 text-xs hover:border-accent ${
+          className={`flex items-center gap-1 rounded-full border border-border px-2.5 py-1 text-xs hover:border-accent ${
             summary ? "text-accent" : "text-text-muted hover:text-text"
           }`}
         >
-          ↻ {summary ?? "Repeat"}
+          <Repeat size={12} strokeWidth={1.75} /> {summary ?? "Repeat"}
         </button>
       </Popover.Trigger>
       <Popover.Portal>

@@ -1,3 +1,4 @@
+import { X } from "lucide-react";
 import { DropdownMenu } from "radix-ui";
 import { localDateParams, type Priority } from "../../../lib/api";
 import { useUiStore } from "../../../lib/uiStore";
@@ -132,7 +133,7 @@ export function BatchToolbar() {
         className="rounded-md px-2 py-1 text-xs text-accent-fg/70 hover:bg-white/15"
         onClick={clearMultiSelect}
       >
-        ✕
+        <X size={14} strokeWidth={2} />
       </button>
     </div>
   );

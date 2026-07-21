@@ -1,4 +1,5 @@
 import { format, parseISO } from "date-fns";
+import { X } from "lucide-react";
 import { DropdownMenu } from "radix-ui";
 import type { Reminder, Task } from "../../../../lib/api";
 import { useReminders } from "../../hooks/useTaskExtras";
@@ -62,7 +63,7 @@ export function Reminders({ task }: { task: Task }) {
               className="text-xs text-text-muted opacity-0 hover:text-destructive group-hover:opacity-100"
               onClick={() => deleteReminder.mutate(r.id)}
             >
-              ✕
+              <X size={12} strokeWidth={2} />
             </button>
           </li>
         ))}

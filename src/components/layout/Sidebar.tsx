@@ -1,4 +1,5 @@
 import { useTranslation } from "react-i18next";
+import { Search } from "lucide-react";
 import type { SmartView } from "../../lib/api";
 import { useUiStore } from "../../lib/uiStore";
 import { SettingsDialog } from "../../features/settings/components/SettingsDialog";
@@ -58,7 +59,9 @@ export function Sidebar({ width }: { width?: number } = {}) {
               onClick={() => useUiStore.getState().openSearch()}
               className={navCls(view.kind === "search")}
             >
-              <span className="flex items-center gap-2">🔍 Search</span>
+              <span className="flex items-center gap-2">
+                <Search size={15} strokeWidth={1.75} /> Search
+              </span>
             </button>
           </li>
           <li>
