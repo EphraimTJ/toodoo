@@ -1,5 +1,6 @@
 import { useQueryClient } from "@tanstack/react-query";
 import { api, type Priority } from "../../../lib/api";
+import { allDayToLocal } from "../../../lib/date";
 import type { ParsedQuickAdd } from "../lib/parse";
 
 export interface QuickAddDefaults {
@@ -37,6 +38,19 @@ export function useQuickAdd() {
       rrule: parsed.rrule ?? undefined,
       repeatFrom: parsed.rrule ? "DUE" : undefined,
     });
+
+    // "remind me …" → add a reminder at the due time (on-time for a timed due,
+    // 9am local on the day for an all-day due). No due date → no reminder.
+    const due = parsed.dueAt ?? defaults.dueAt;
+    if (parsed.remind && due) {
+      if (parsed.dueAt && !parsed.isAllDay) {
+        await api.addReminder(task.id, "REL", { offsetMin: 0 });
+      } else {
+        const at = allDayToLocal(due);
+        at.setHours(9, 0, 0, 0);
+        await api.addReminder(task.id, "ABS", { at: at.toISOString() });
+      }
+    }
 
     const tagNames = [...parsed.tags];
     if (tagNames.length > 0 || defaults.tagId) {

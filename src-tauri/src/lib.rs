@@ -1259,6 +1259,10 @@ async fn set_quick_add_hotkey(
     let gs = app.global_shortcut();
     let _ = gs.unregister_all();
     let _ = gs.register(cfg.quick_add_hotkey.as_str());
+    // unregister_all() also dropped the fixed focus hotkey — restore it.
+    if cfg.quick_add_hotkey != "CommandOrControl+Shift+F" {
+        let _ = gs.register("CommandOrControl+Shift+F");
+    }
     Ok(cfg)
 }
 
@@ -1654,10 +1658,20 @@ pub fn run() {
         ))
         .plugin(
             tauri_plugin_global_shortcut::Builder::new()
-                .with_handler(|app, _shortcut, event| {
-                    // We register a single shortcut (quick-add), so any press opens it.
-                    if event.state == tauri_plugin_global_shortcut::ShortcutState::Pressed {
-                        desktop::request_popout(app, "quickadd", "win=quickadd", "Quick add", 520.0, 180.0, desktop::PopoutStyle::Decorated);
+                .with_handler(|app, shortcut, event| {
+                    if event.state != tauri_plugin_global_shortcut::ShortcutState::Pressed {
+                        return;
+                    }
+                    use tauri_plugin_global_shortcut::{Code, Modifiers};
+                    // Ctrl+Shift+F → focus the current task: open the pill and let
+                    // the main window pick the task, start the timer, and (opt-in)
+                    // play the lo-fi track.
+                    if shortcut.matches(Modifiers::CONTROL | Modifiers::SHIFT, Code::KeyF) {
+                        open_focus_popout(app);
+                        let _ = app.emit("focus-hotkey", ());
+                    } else {
+                        // The configurable quick-add hotkey (default Ctrl+Space).
+                        desktop::request_popout(app, "quickadd", "win=quickadd", "Quick add", 520.0, 220.0, desktop::PopoutStyle::Decorated);
                     }
                 })
                 .build(),
@@ -2039,6 +2053,13 @@ pub fn run() {
                 if let Err(e) = app.global_shortcut().register(accel.as_str()) {
                     log::error!("global shortcut register failed: {e}");
                 }
+                // Fixed focus hotkey (Ctrl+Shift+F) — open the focus pill for the
+                // task scheduled for now. Ignore a conflict with the quick-add key.
+                if accel != "CommandOrControl+Shift+F" {
+                    if let Err(e) = app.global_shortcut().register("CommandOrControl+Shift+F") {
+                        log::error!("focus shortcut register failed: {e}");
+                    }
+                }
             }
 
             // System tray: quick actions + a Today-count tooltip.
@@ -2075,7 +2096,7 @@ pub fn run() {
                     })
                     .on_menu_event(|app, event| match event.id.as_ref() {
                         "quick_add" => {
-                            desktop::request_popout(app, "quickadd", "win=quickadd", "Quick add", 520.0, 180.0, desktop::PopoutStyle::Decorated);
+                            desktop::request_popout(app, "quickadd", "win=quickadd", "Quick add", 520.0, 220.0, desktop::PopoutStyle::Decorated);
                         }
                         "start_focus" => {
                             open_focus_popout(app);

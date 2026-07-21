@@ -1,11 +1,13 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { DropdownMenu, Popover } from "radix-ui";
-import { ArrowUp, Flag, Pin, X } from "lucide-react";
+import { ArrowUp, Flag, Pin, Trash2, X } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { api, type Priority, type Task } from "../../../../lib/api";
 import { allDayToLocal } from "../../../../lib/date";
 import { downloadText } from "../../../../lib/download";
+import { openPopout } from "../../../../lib/popout";
+import { toast } from "../../../../lib/toast";
 import { taskToMarkdown, taskToText } from "../../../share/lib/shareText";
 import { downloadTaskImage } from "../../../share/lib/shareImage";
 import { useUiStore } from "../../../../lib/uiStore";
@@ -288,6 +290,8 @@ export function TaskDetail() {
   }
 
   const done = task.status === "COMPLETED";
+  const wontDo = task.status === "WONT_DO";
+  const closed = done || wontDo;
   const trashed = task.status === "TRASHED";
   const priority = PRIORITIES.find(([p]) => p === task.priority) ?? PRIORITIES[3];
 
@@ -297,9 +301,9 @@ export function TaskDetail() {
         <div className="flex items-start gap-2.5">
           <input
             type="checkbox"
-            checked={done}
+            checked={closed}
             disabled={trashed}
-            aria-label={done ? "Reopen task" : "Complete task"}
+            aria-label={closed ? "Reopen task" : "Complete task"}
             onChange={(e) =>
               e.target.checked ? completeTask.mutate(task) : reopenTask.mutate(task.id)
             }
@@ -315,7 +319,7 @@ export function TaskDetail() {
               if (title && title !== task.title) updateTask.mutate({ id: task.id, patch: { title } });
             }}
             className={`w-full resize-none bg-transparent pt-1 text-lg font-semibold leading-snug outline-none ${
-              done ? "text-text-muted line-through" : ""
+              closed ? "text-text-muted line-through" : ""
             }`}
           />
           <button
@@ -456,33 +460,66 @@ export function TaskDetail() {
             >
               <DropdownMenu.Item
                 className={menuItem}
-                onSelect={() =>
-                  void api.setTaskKind(task.id, task.kind === "NOTE" ? "TASK" : "NOTE").then(() => {
+                onSelect={() => {
+                  const toNote = task.kind !== "NOTE";
+                  void api.setTaskKind(task.id, toNote ? "NOTE" : "TASK").then(() => {
                     void queryClient.invalidateQueries({ queryKey: ["tasks"] });
-                  })
-                }
+                    void queryClient.invalidateQueries({ queryKey: ["tasks", "detail", task.id] });
+                    toast(toNote ? "Converted to note" : "Converted to task");
+                  });
+                }}
               >
                 {task.kind === "NOTE" ? "Convert to task" : "Convert to note"}
               </DropdownMenu.Item>
-              <DropdownMenu.Item className={menuItem} onSelect={() => void api.stickyFromTask(task.id)}>
+              <DropdownMenu.Item
+                className={menuItem}
+                onSelect={() =>
+                  void api
+                    .stickyFromTask(task.id)
+                    .then(async (id) => {
+                      await openPopout({ kind: "sticky", id });
+                      void queryClient.invalidateQueries({ queryKey: ["stickies"] });
+                      toast("Popped out as sticky");
+                    })
+                    .catch(() => toast("Couldn’t create the sticky"))
+                }
+              >
                 Pop out as sticky
               </DropdownMenu.Item>
-              <DropdownMenu.Item className={menuItem} onSelect={() => void copyLink(task.id)}>
+              <DropdownMenu.Item
+                className={menuItem}
+                onSelect={() => void copyLink(task.id).then(() => toast("Link copied"))}
+              >
                 Copy link
               </DropdownMenu.Item>
               <DropdownMenu.Item
                 className={menuItem}
-                onSelect={() => void navigator.clipboard.writeText(taskToText(task)).catch(() => {})}
+                onSelect={() =>
+                  void navigator.clipboard
+                    .writeText(taskToText(task))
+                    .then(() => toast("Copied to clipboard"))
+                    .catch(() => toast("Clipboard unavailable"))
+                }
               >
                 Copy as text
               </DropdownMenu.Item>
               <DropdownMenu.Item
                 className={menuItem}
-                onSelect={() => downloadText(`${task.title || "task"}.md`, taskToMarkdown(task), "text/markdown")}
+                onSelect={() => {
+                  downloadText(`${task.title || "task"}.md`, taskToMarkdown(task), "text/markdown");
+                  toast("Markdown downloaded");
+                }}
               >
                 Download markdown
               </DropdownMenu.Item>
-              <DropdownMenu.Item className={menuItem} onSelect={() => void downloadTaskImage(task)}>
+              <DropdownMenu.Item
+                className={menuItem}
+                onSelect={() =>
+                  void downloadTaskImage(task)
+                    .then(() => toast("Image downloaded"))
+                    .catch(() => toast("Couldn’t render the image"))
+                }
+              >
                 Download image
               </DropdownMenu.Item>
               <DropdownMenu.Separator className="my-1 h-px bg-border" />
@@ -491,6 +528,7 @@ export function TaskDetail() {
                 onSelect={() =>
                   void api.duplicateTask(task.id).then(() => {
                     void queryClient.invalidateQueries({ queryKey: ["tasks"] });
+                    toast("Task duplicated");
                   })
                 }
               >
@@ -507,6 +545,7 @@ export function TaskDetail() {
                     if (name?.trim())
                       void api.saveTaskAsTemplate(task.id, name.trim()).then(() => {
                         void queryClient.invalidateQueries({ queryKey: ["templates"] });
+                        toast("Saved as template");
                       });
                   });
                 }}
@@ -549,7 +588,7 @@ export function TaskDetail() {
         </DropdownMenu.Root>
 
         <div className="ml-auto flex items-center gap-1">
-          {!done && !trashed && (
+          {!closed && !trashed && (
             <button
               type="button"
               aria-label="Mark won't do"
@@ -576,13 +615,13 @@ export function TaskDetail() {
             <button
               type="button"
               aria-label="Move task to trash"
-              className="rounded-full border border-border px-3 py-1 text-xs text-text-muted hover:text-destructive"
+              className="flex items-center gap-1 rounded-full border border-border px-3 py-1 text-xs text-text-muted hover:text-destructive"
               onClick={() => {
                 trashTask.mutate(task.id);
                 selectTask(null);
               }}
             >
-              🗑 Trash
+              <Trash2 size={12} strokeWidth={1.75} /> Trash
             </button>
           )}
         </div>
