@@ -259,6 +259,10 @@ pub struct Habit {
     pub section: Option<String>,
     pub reminders_json: Option<String>,
     pub start_date: Option<String>,
+    /// Target duration in days; NULL/None = run forever.
+    pub goal_days: Option<i64>,
+    /// Auto-open the check-in log for this habit when it's due.
+    pub auto_log_popup: bool,
     pub archived: bool,
     pub sort_order: i64,
 }
@@ -296,10 +300,14 @@ pub struct HabitInput {
     pub reminders: Vec<String>, // "HH:MM"
     #[serde(default)]
     pub start_date: Option<String>,
+    #[serde(default)]
+    pub goal_days: Option<i64>,
+    #[serde(default)]
+    pub auto_log_popup: bool,
 }
 
 const COLUMNS: &str = "id, name, icon, color, quote, goal_kind, goal_amount, unit, freq_json, \
-     section, reminders_json, start_date, archived, sort_order";
+     section, reminders_json, start_date, goal_days, auto_log_popup, archived, sort_order";
 
 fn check_goal_kind(kind: &str) -> Result<()> {
     match kind {
@@ -338,9 +346,9 @@ pub async fn create_habit(pool: &SqlitePool, bus: &EventBus, input: HabitInput) 
     let mut tx = pool.begin().await?;
     sqlx::query(
         "INSERT INTO habits (id, name, icon, color, quote, goal_kind, goal_amount, unit, freq_json,
-                             section, reminders_json, start_date, archived, sort_order,
+                             section, reminders_json, start_date, goal_days, auto_log_popup, archived, sort_order,
                              created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)",
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?, ?)",
     )
     .bind(&id)
     .bind(&input.name)
@@ -354,6 +362,8 @@ pub async fn create_habit(pool: &SqlitePool, bus: &EventBus, input: HabitInput) 
     .bind(&input.section)
     .bind(&reminders_json)
     .bind(&input.start_date)
+    .bind(input.goal_days)
+    .bind(input.auto_log_popup)
     .bind(next_order)
     .bind(&ts)
     .bind(&ts)
@@ -375,7 +385,8 @@ pub async fn update_habit(pool: &SqlitePool, bus: &EventBus, id: &str, input: Ha
     let res = sqlx::query(
         "UPDATE habits SET name = ?, icon = ?, color = ?, quote = ?, goal_kind = ?,
                            goal_amount = ?, unit = ?, freq_json = ?, section = ?,
-                           reminders_json = ?, start_date = ?, updated_at = ?
+                           reminders_json = ?, start_date = ?, goal_days = ?,
+                           auto_log_popup = ?, updated_at = ?
          WHERE id = ? AND deleted_at IS NULL",
     )
     .bind(&input.name)
@@ -389,6 +400,8 @@ pub async fn update_habit(pool: &SqlitePool, bus: &EventBus, id: &str, input: Ha
     .bind(&input.section)
     .bind(&reminders_json)
     .bind(&input.start_date)
+    .bind(input.goal_days)
+    .bind(input.auto_log_popup)
     .bind(&ts)
     .bind(id)
     .execute(&mut *tx)
@@ -821,6 +834,8 @@ mod db_tests {
             section: None,
             reminders: vec![],
             start_date: None,
+            goal_days: None,
+            auto_log_popup: false,
         }
     }
 
