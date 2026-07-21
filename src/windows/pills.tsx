@@ -10,6 +10,7 @@ import {
   emitFocusCmd,
   pinWindowTop,
   setWindowSize,
+  useNoWindowShadow,
   usePersistedWindowBox,
   useWindowBackground,
 } from "./pillUtils";
@@ -60,7 +61,7 @@ function Ring({ progress, size = 40 }: { progress: number; size?: number }) {
   const r = (size - 5) / 2;
   const c = 2 * Math.PI * r;
   return (
-    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} aria-hidden data-tauri-drag-region>
+    <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} aria-hidden>
       <circle
         cx={size / 2}
         cy={size / 2}
@@ -94,6 +95,7 @@ function Ring({ progress, size = 40 }: { progress: number; size?: number }) {
  */
 export function FocusPillWindow() {
   useWindowBackground(usePillBackground("#1f1e1a"));
+  useNoWindowShadow();
   const state = useFocusState();
   const [hover, setHover] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -186,49 +188,50 @@ export function FocusPillWindow() {
       onMouseLeave={onLeave}
     >
       <div
-        className="flex shrink-0 items-center rounded-full bg-[#1f1e1a]/95 px-2.5 text-white"
+        className="flex shrink-0 items-center gap-2 rounded-full bg-[#1f1e1a]/95 pl-1.5 pr-3 text-white"
         style={{ height: PILL_H - 4, marginTop: 2 }}
         data-testid="focus-pill"
         data-tauri-drag-region
       >
-        <div className="relative flex shrink-0 items-center justify-center" data-tauri-drag-region>
+        {/* Ring with the play/pause control at its centre. */}
+        <button
+          type="button"
+          aria-label={state?.running ? "Pause" : state?.active ? "Resume" : "Start"}
+          onClick={() =>
+            emitFocusCmd(state?.running ? "pause" : state?.active ? "resume" : "start")
+          }
+          className="relative flex shrink-0 items-center justify-center rounded-full hover:bg-white/5"
+        >
           <Ring progress={progress} />
           <span
-            className="absolute font-mono text-[11px] tabular-nums"
-            data-tauri-drag-region
+            className="absolute flex items-center justify-center"
             style={{ pointerEvents: "none" }}
           >
-            {clock}
+            {state?.running ? (
+              <svg width="13" height="13" viewBox="0 0 12 12" fill="currentColor" aria-hidden>
+                <rect x="2.4" y="2" width="2.5" height="8" rx="1" />
+                <rect x="7.1" y="2" width="2.5" height="8" rx="1" />
+              </svg>
+            ) : (
+              <svg width="13" height="13" viewBox="0 0 12 12" fill="currentColor" aria-hidden>
+                <path d="M3.4 2.2v7.6L9.4 6z" />
+              </svg>
+            )}
           </span>
-        </div>
+        </button>
+
+        {/* mm:ss, outside the ring. */}
+        <span
+          className="font-mono text-base tabular-nums"
+          data-tauri-drag-region
+          style={{ pointerEvents: "none" }}
+        >
+          {clock}
+        </span>
 
         <div
-          className={`ml-2 flex items-center gap-1 ${pillTransition} ${hover ? "opacity-100" : "opacity-0"}`}
+          className={`ml-auto flex items-center gap-0.5 ${pillTransition} ${hover ? "opacity-100" : "pointer-events-none opacity-0"}`}
         >
-          {state?.running ? (
-            <button
-              type="button"
-              aria-label="Pause"
-              className="rounded-full p-1.5 text-accent hover:bg-white/10"
-              onClick={() => emitFocusCmd("pause")}
-            >
-              <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor" aria-hidden>
-                <rect x="1.5" y="1" width="3.2" height="10" rx="1" />
-                <rect x="7.3" y="1" width="3.2" height="10" rx="1" />
-              </svg>
-            </button>
-          ) : (
-            <button
-              type="button"
-              aria-label={state?.active ? "Resume" : "Start"}
-              className="rounded-full p-1.5 text-accent hover:bg-white/10"
-              onClick={() => emitFocusCmd(state?.active ? "resume" : "start")}
-            >
-              <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor" aria-hidden>
-                <path d="M2.5 1.2v9.6L10.6 6z" />
-              </svg>
-            </button>
-          )}
           <button
             type="button"
             aria-label="More"
