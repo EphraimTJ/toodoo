@@ -1,8 +1,8 @@
 import { useState } from "react";
 import { ExternalLink } from "lucide-react";
 import { openPopout } from "../../../lib/popout";
-import { useAmbient } from "../hooks/useAmbient";
 import { useFocusSettings } from "../hooks/useFocusSettings";
+import { AmbientControls } from "./AmbientControls";
 import { FocusTimer } from "./FocusTimer";
 import { FocusStats } from "./FocusStats";
 import { FocusRecords } from "./FocusRecords";
@@ -19,7 +19,6 @@ const TABS: [Tab, string][] = [
 export function FocusView() {
   const [tab, setTab] = useState<Tab>("timer");
   const { config } = useFocusSettings();
-  const ambient = useAmbient();
 
   return (
     <div className="flex h-full min-w-0 flex-1 flex-col">
@@ -50,10 +49,15 @@ export function FocusView() {
       </header>
 
       <div className="min-h-0 flex-1 overflow-y-auto">
-        {tab === "timer" && <FocusTimer config={config} />}
+        {tab === "timer" && (
+          <>
+            <FocusTimer config={config} />
+            <AmbientControls />
+          </>
+        )}
         {tab === "stats" && <FocusStats />}
         {tab === "records" && <FocusRecords />}
-        {tab === "settings" && <FocusSettings ambient={ambient} />}
+        {tab === "settings" && <FocusSettings />}
       </div>
     </div>
   );

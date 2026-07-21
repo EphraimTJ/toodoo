@@ -38,13 +38,21 @@ function shuffled<T>(arr: readonly T[]): T[] {
   return a;
 }
 
-/** Plays a bundled focus track/playlist at a volume; `null` track = silence. */
+/** Plays a bundled focus track/playlist at a volume; `null` track = silence.
+ *  `playing` pauses/resumes without losing the selected track. */
 export function useAmbient() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const playlist = useRef<string[]>([]);
   const idx = useRef(0);
-  const [track, setTrack] = useState<AmbientTrack | null>(null);
+  const [track, setTrackState] = useState<AmbientTrack | null>(null);
+  const [playing, setPlaying] = useState(true);
   const [volume, setVolume] = useState(0.5);
+
+  // Selecting a track always (re)starts it playing.
+  const setTrack = (t: AmbientTrack | null) => {
+    setTrackState(t);
+    if (t) setPlaying(true);
+  };
 
   useEffect(() => {
     const audio = audioRef.current ?? new Audio();
@@ -72,10 +80,19 @@ export function useAmbient() {
       audio.loop = true;
       audio.src = LOOP_URLS[track];
     }
-    void audio.play().catch(() => {});
-    // volume is applied in its own effect; re-running on it would restart audio.
+    if (playing) void audio.play().catch(() => {});
+    // volume/playing are applied in their own effects; re-running here would
+    // restart audio from the top.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [track]);
+
+  // Pause / resume the current track without reloading it.
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (!audio || !track) return;
+    if (playing) void audio.play().catch(() => {});
+    else audio.pause();
+  }, [playing, track]);
 
   useEffect(() => {
     if (audioRef.current) audioRef.current.volume = volume;
@@ -83,5 +100,5 @@ export function useAmbient() {
 
   useEffect(() => () => audioRef.current?.pause(), []);
 
-  return { track, setTrack, volume, setVolume };
+  return { track, setTrack, playing, setPlaying, volume, setVolume };
 }

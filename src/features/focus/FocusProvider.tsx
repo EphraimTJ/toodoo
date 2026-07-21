@@ -47,10 +47,24 @@ export interface FocusBroadcast {
 export type FocusCmd = "pause" | "resume" | "stop" | "start" | "toggle-mode" | "ping";
 
 type FocusTimerApi = ReturnType<typeof usePomodoro>;
+type AmbientApi = ReturnType<typeof useAmbient>;
 
 const FocusCtx = createContext<FocusTimerApi | null>(null);
+const AmbientCtx = createContext<AmbientApi | null>(null);
 
 const IS_TAURI = "__TAURI_INTERNALS__" in window;
+
+/**
+ * The single ambient-audio controller when a `FocusProvider` is mounted (the
+ * app), else a local instance (bare-component tests). Sharing one instance is
+ * what lets the Ctrl+Shift+F hotkey and the Focus page's music controls drive
+ * the *same* audio. The local instance keeps hook order stable and stays silent.
+ */
+export function useSharedAmbient(): AmbientApi {
+  const ctx = useContext(AmbientCtx);
+  const local = useAmbient();
+  return ctx ?? local;
+}
 
 /**
  * Owns the single focus timer for the main window: always mounted (the timer
@@ -196,7 +210,11 @@ export function FocusProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  return <FocusCtx.Provider value={p}>{children}</FocusCtx.Provider>;
+  return (
+    <AmbientCtx.Provider value={ambient}>
+      <FocusCtx.Provider value={p}>{children}</FocusCtx.Provider>
+    </AmbientCtx.Provider>
+  );
 }
 
 /**
