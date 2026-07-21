@@ -1,7 +1,8 @@
 import { useState } from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import { Check, GripVertical, Pin, Repeat } from "lucide-react";
+import { Check, GripVertical, Pin, Repeat, X as XIcon } from "lucide-react";
+import { formatDistanceToNow, parseISO } from "date-fns";
 import type { Tag, Task } from "../../../lib/api";
 import { useUiStore } from "../../../lib/uiStore";
 import { useTaskMutations } from "../hooks/useTasks";
@@ -39,12 +40,16 @@ export function TaskRow({ task, depth, tags, draggable, inTrash }: Props) {
   });
 
   const done = task.status === "COMPLETED";
+  const wontDo = task.status === "WONT_DO";
+  // "Won't do" is a closed state too — its row should read as struck-through /
+  // ticked (with a distinct × mark), and clicking the box reopens it.
+  const closed = done || wontDo;
   const chip = dueChip(task);
   const rowTags = tags.filter((t) => task.tagIds.includes(t.id));
 
   const toggle = () => {
     if (inTrash) return;
-    if (done) {
+    if (closed) {
       reopenTask.mutate(task.id);
     } else {
       // Let the fill/strike animation play before the row moves away.
@@ -92,21 +97,28 @@ export function TaskRow({ task, depth, tags, draggable, inTrash }: Props) {
           <GripVertical size={14} strokeWidth={1.75} />
         </button>
       )}
-      <button
-        type="button"
-        role="checkbox"
-        aria-checked={done || completing}
-        aria-label={done ? `Reopen ${task.title}` : `Complete ${task.title}`}
-        onClick={(e) => {
-          e.stopPropagation();
-          toggle();
-        }}
-        className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-md border-2 transition-all duration-300 ${
-          PRIORITY_COLOR[task.priority] ?? PRIORITY_COLOR[0]
-        } ${done || completing ? "bg-current" : "bg-transparent"}`}
-      >
-        {(done || completing) && <Check size={11} strokeWidth={3} className="text-surface" />}
-      </button>
+      {/* Trashed rows carry no checkbox — only restore / delete apply. */}
+      {!inTrash && (
+        <button
+          type="button"
+          role="checkbox"
+          aria-checked={closed || completing}
+          aria-label={closed ? `Reopen ${task.title}` : `Complete ${task.title}`}
+          onClick={(e) => {
+            e.stopPropagation();
+            toggle();
+          }}
+          className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-md border-2 transition-all duration-300 ${
+            PRIORITY_COLOR[task.priority] ?? PRIORITY_COLOR[0]
+          } ${closed || completing ? "bg-current" : "bg-transparent"}`}
+        >
+          {wontDo && !completing ? (
+            <XIcon size={11} strokeWidth={3} className="text-surface" />
+          ) : (
+            (done || completing) && <Check size={11} strokeWidth={3} className="text-surface" />
+          )}
+        </button>
+      )}
 
       {editing ? (
         <input
@@ -132,7 +144,7 @@ export function TaskRow({ task, depth, tags, draggable, inTrash }: Props) {
             if (!inTrash) setEditing(true);
           }}
           className={`min-w-0 flex-1 truncate transition-all duration-300 ${
-            done || completing ? "text-text-muted line-through" : ""
+            closed || completing ? "text-text-muted line-through" : ""
           }`}
         >
           {task.title}
@@ -169,28 +181,36 @@ export function TaskRow({ task, depth, tags, draggable, inTrash }: Props) {
       )}
 
       {inTrash && (
-        <span className="flex gap-1 opacity-0 group-hover:opacity-100">
-          <button
-            type="button"
-            className="rounded-full px-1.5 py-0.5 text-xs text-accent hover:bg-accent/10"
-            onClick={(e) => {
-              e.stopPropagation();
-              restoreTask.mutate(task.id);
-            }}
+        <>
+          <span
+            className="whitespace-nowrap text-xs text-text-muted"
+            title={`Moved to trash ${parseISO(task.updatedAt).toLocaleString()}`}
           >
-            Restore
-          </button>
-          <button
-            type="button"
-            className="rounded-full px-1.5 py-0.5 text-xs text-destructive hover:bg-destructive/10"
-            onClick={(e) => {
-              e.stopPropagation();
-              deleteTaskForever.mutate(task.id);
-            }}
-          >
-            Delete forever
-          </button>
-        </span>
+            Trashed {formatDistanceToNow(parseISO(task.updatedAt), { addSuffix: true })}
+          </span>
+          <span className="flex gap-1">
+            <button
+              type="button"
+              className="rounded-full px-1.5 py-0.5 text-xs text-accent hover:bg-accent/10"
+              onClick={(e) => {
+                e.stopPropagation();
+                restoreTask.mutate(task.id);
+              }}
+            >
+              Restore
+            </button>
+            <button
+              type="button"
+              className="rounded-full px-1.5 py-0.5 text-xs text-destructive hover:bg-destructive/10"
+              onClick={(e) => {
+                e.stopPropagation();
+                deleteTaskForever.mutate(task.id);
+              }}
+            >
+              Delete
+            </button>
+          </span>
+        </>
       )}
     </div>
   );

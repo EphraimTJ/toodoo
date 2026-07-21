@@ -14,6 +14,7 @@ export interface PomoConfig {
   longEvery: number; // long break after every N pomos
   autoStart: boolean; // auto-start the next phase when one ends
   dailyGoal: number; // target completed pomos per day
+  autoMusic: boolean; // play the lo-fi track when the focus hotkey starts a session
 }
 
 export const DEFAULT_POMO_CONFIG: PomoConfig = {
@@ -23,6 +24,7 @@ export const DEFAULT_POMO_CONFIG: PomoConfig = {
   longEvery: 4,
   autoStart: false,
   dailyGoal: 8,
+  autoMusic: true,
 };
 
 export function phaseDurationSec(phase: Phase, config: PomoConfig): number {

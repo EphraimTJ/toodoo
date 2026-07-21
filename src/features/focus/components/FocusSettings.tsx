@@ -44,6 +44,21 @@ export function FocusSettings({ ambient }: { ambient: AmbientProps }) {
             className="accent-(--color-accent)"
           />
         </label>
+        <label className="flex items-center justify-between text-sm">
+          <span>
+            Play lo-fi with focus hotkey
+            <span className="block text-xs text-text-muted">
+              Ctrl+Shift+F starts the current task’s timer
+            </span>
+          </span>
+          <input
+            type="checkbox"
+            checked={config.autoMusic}
+            aria-label="Play lo-fi with focus hotkey"
+            onChange={(e) => setConfig({ autoMusic: e.target.checked })}
+            className="accent-(--color-accent)"
+          />
+        </label>
       </div>
 
       <div className="space-y-2 border-t border-border pt-3">

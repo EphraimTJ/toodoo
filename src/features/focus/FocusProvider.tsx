@@ -1,9 +1,36 @@
 import { createContext, useContext, useEffect, useRef, type ReactNode } from "react";
+import { api, type Task } from "../../lib/api";
 import { useUiStore } from "../../lib/uiStore";
+import { useAmbient } from "./hooks/useAmbient";
 import { useFocusSettings } from "./hooks/useFocusSettings";
 import { usePomodoro } from "./hooks/usePomodoro";
 import { type Phase, type PomoConfig } from "./lib/pomodoro";
 import type { Mode } from "./hooks/usePomodoro";
+
+/**
+ * Pick the task scheduled for `now` — a timed task whose [start, end] window
+ * contains the moment — else the next upcoming timed task today. Used by the
+ * focus hotkey so "work on project from 2–3pm" is auto-selected at 2:05.
+ */
+function chooseCurrentTask(tasks: Task[], now: number): Task | null {
+  const timed = tasks.filter(
+    (t) => t.status === "ACTIVE" && !t.isAllDay && (t.startAt || t.dueAt),
+  );
+  const startOf = (t: Task) => Date.parse((t.startAt ?? t.dueAt) as string);
+  const endOf = (t: Task) => {
+    if (t.dueAt) return Date.parse(t.dueAt);
+    if (t.startAt && t.durationMin) return Date.parse(t.startAt) + t.durationMin * 60_000;
+    return startOf(t) + 60 * 60_000; // assume an hour if only a start is known
+  };
+  const ongoing = timed.find((t) => startOf(t) <= now && now <= endOf(t));
+  if (ongoing) return ongoing;
+  return (
+    timed
+      .map((t) => ({ t, s: startOf(t) }))
+      .filter((x) => x.s >= now)
+      .sort((a, b) => a.s - b.s)[0]?.t ?? null
+  );
+}
 
 /** Timer state mirrored to pill windows once per second (Tauri event bus). */
 export interface FocusBroadcast {
@@ -35,12 +62,63 @@ export function FocusProvider({ children }: { children: ReactNode }) {
   const { config } = useFocusSettings();
   const focusTaskId = useUiStore((s) => s.focusTaskId);
   const p = usePomodoro(config);
+  const ambient = useAmbient();
 
   // "Focus on this task" (tray, task row) targets the shared timer when idle.
   const { active, setTaskId } = p;
   useEffect(() => {
     if (focusTaskId && !active) setTaskId(focusTaskId);
   }, [focusTaskId, active, setTaskId]);
+
+  // Ctrl+Shift+F: the Rust side opened the pill and emitted "focus-hotkey".
+  // Here we pick the current task, start the timer, and (opt-in) play lo-fi.
+  const ambientRef = useRef(ambient);
+  ambientRef.current = ambient;
+  const autoMusicRef = useRef(config.autoMusic);
+  autoMusicRef.current = config.autoMusic;
+  const musicByHotkey = useRef(false);
+  useEffect(() => {
+    if (!IS_TAURI) return;
+    let unlisten: (() => void) | undefined;
+    let disposed = false;
+    void import("@tauri-apps/api/event").then(({ listen }) =>
+      listen("focus-hotkey", () => {
+        void (async () => {
+          const t = pRef.current;
+          if (t.active) return; // a session is already running — don't disturb it
+          try {
+            const pick = chooseCurrentTask(await api.listSmart("today"), Date.now());
+            if (pick) {
+              t.setTaskId(pick.id);
+              useUiStore.getState().selectTask(pick.id);
+            }
+          } catch {
+            // No task match — still start a plain focus session.
+          }
+          await t.start();
+          if (autoMusicRef.current) {
+            ambientRef.current.setTrack("lofi");
+            musicByHotkey.current = true;
+          }
+        })();
+      }).then((fn) => {
+        if (disposed) fn();
+        else unlisten = fn;
+      }),
+    );
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  }, []);
+
+  // Stop the hotkey-started music once the session ends.
+  useEffect(() => {
+    if (!p.active && musicByHotkey.current) {
+      ambient.setTrack(null);
+      musicByHotkey.current = false;
+    }
+  }, [p.active, ambient]);
 
   // Broadcast to pill windows.
   const configRef = useRef(config);

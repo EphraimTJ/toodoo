@@ -29,7 +29,7 @@ const UNIT_FREQ: Record<string, Freq> = {
   year: "YEARLY",
 };
 
-export type TokenKind = "tag" | "list" | "priority" | "date" | "repeat";
+export type TokenKind = "tag" | "list" | "priority" | "date" | "repeat" | "remind";
 
 export interface ParsedToken {
   kind: TokenKind;
@@ -45,6 +45,8 @@ export interface ParsedQuickAdd {
   dueAt: string | null;
   isAllDay: boolean;
   rrule: string | null;
+  /** "remind me …" was used — add a reminder at the due time. */
+  remind: boolean;
   tokens: ParsedToken[];
 }
 
@@ -102,10 +104,20 @@ export function parseQuickAdd(input: string, ref: Date = new Date()): ParsedQuic
   let rrule: string | null = null;
 
   let rest = input;
+  let remind = false;
   const consume = (kind: TokenKind, label: string, text: string) => {
     tokens.push({ kind, label, text });
     rest = rest.replace(text, " ");
   };
+
+  // "remind me [to] …" — TickTick treats this as a reminder request. Strip the
+  // phrase and flag it; the linking "to" before the task text is removed after
+  // the date is parsed out (e.g. "remind me in 2 days to ship" → "ship").
+  const remindMatch = input.match(/\bremind me\b/i);
+  if (remindMatch) {
+    remind = true;
+    consume("remind", "Reminder", remindMatch[0]);
+  }
 
   // #tag (may repeat)
   for (const m of input.matchAll(/(?:^|\s)(#[\p{L}\p{N}_-]+)/gu)) {
@@ -165,6 +177,8 @@ export function parseQuickAdd(input: string, ref: Date = new Date()): ParsedQuic
     consume("date", `Due: ${matched.trim()}`, matched);
   }
 
-  const title = rest.replace(/\s+/g, " ").trim();
-  return { title, tags, listName, priority, dueAt, isAllDay, rrule, tokens };
+  // Strip a leading connective "to"/"that" left behind by "remind me … to <task>".
+  let title = rest.replace(/\s+/g, " ").trim();
+  if (remind) title = title.replace(/^(?:to|that)\s+/i, "");
+  return { title, tags, listName, priority, dueAt, isAllDay, rrule, remind, tokens };
 }
