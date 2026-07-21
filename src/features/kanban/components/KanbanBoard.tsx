@@ -71,45 +71,45 @@ export function KanbanBoard({ projectId }: { projectId: string }) {
   };
 
   return (
-    <div className="flex h-full min-h-0 flex-1 gap-3 overflow-x-auto p-3" data-testid="kanban-board">
-      <KanbanColumn
-        projectId={projectId}
-        section={null}
-        tasks={bySection(null)}
-        tags={tags ?? []}
-        collapsed={collapsed.has("none")}
-        onToggleCollapse={() => toggle("none")}
-        childCount={childCount}
-      />
-      <DndContext sensors={sensors} onDragEnd={onDragEnd}>
-        <div className="flex gap-3">
-          {sections.map((section) => (
-            <KanbanColumn
-              key={section.id}
-              projectId={projectId}
-              section={section}
-              tasks={bySection(section.id)}
-              tags={tags ?? []}
-              collapsed={collapsed.has(section.id)}
-              onToggleCollapse={() => toggle(section.id)}
-              childCount={childCount}
-            />
-          ))}
-        </div>
-      </DndContext>
-
-      <div className="w-56 shrink-0">
-        <input
-          value={newColumn}
-          onChange={(e) => setNewColumn(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") addColumn();
-          }}
-          placeholder="+ Add column"
-          aria-label="Add column"
-          className="w-full rounded-lg border border-dashed border-border bg-transparent px-3 py-2 text-sm outline-none placeholder:text-text-muted hover:border-accent"
+    // One DndContext around EVERY column — the "No Section" column used to sit
+    // outside it, so cards couldn't be dragged to/from it.
+    <DndContext sensors={sensors} onDragEnd={onDragEnd}>
+      <div className="flex h-full min-h-0 flex-1 gap-3 overflow-x-auto p-3" data-testid="kanban-board">
+        <KanbanColumn
+          projectId={projectId}
+          section={null}
+          tasks={bySection(null)}
+          tags={tags ?? []}
+          collapsed={collapsed.has("none")}
+          onToggleCollapse={() => toggle("none")}
+          childCount={childCount}
         />
+        {sections.map((section) => (
+          <KanbanColumn
+            key={section.id}
+            projectId={projectId}
+            section={section}
+            tasks={bySection(section.id)}
+            tags={tags ?? []}
+            collapsed={collapsed.has(section.id)}
+            onToggleCollapse={() => toggle(section.id)}
+            childCount={childCount}
+          />
+        ))}
+
+        <div className="w-56 shrink-0">
+          <input
+            value={newColumn}
+            onChange={(e) => setNewColumn(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") addColumn();
+            }}
+            placeholder="+ Add column"
+            aria-label="Add column"
+            className="w-full rounded-lg border border-dashed border-border bg-transparent px-3 py-2 text-sm outline-none placeholder:text-text-muted hover:border-accent"
+          />
+        </div>
       </div>
-    </div>
+    </DndContext>
   );
 }
