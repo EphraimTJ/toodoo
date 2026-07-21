@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import { X } from "lucide-react";
+import { Bell, X } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { api } from "../../../lib/api";
-import { playChirp, useNotifSound } from "../hooks/useNotifSound";
+import { playNotif, useNotifSounds } from "../hooks/useNotifSound";
 import { useDesktopConfig } from "../../settings/hooks/useDesktopConfig";
 
 interface Fired {
@@ -22,18 +22,36 @@ interface Fired {
 export function ReminderToasts() {
   const queryClient = useQueryClient();
   const [items, setItems] = useState<Fired[]>([]);
-  const { sound } = useNotifSound();
+  const { sounds } = useNotifSounds();
   const snoozeMin = useDesktopConfig().query.data?.notifSnoozeMin ?? 10;
 
-  // The "toodoo" chirp plays once per newly-appended toast (in-app path only;
+  // The reminder chirp plays once per newly-appended toast (in-app path only;
   // native toasts keep the OS sound — docs/decisions.md).
   const prevCount = useRef(0);
-  const soundRef = useRef(sound);
-  soundRef.current = sound;
+  const soundsRef = useRef(sounds);
+  soundsRef.current = sounds;
   useEffect(() => {
-    if (items.length > prevCount.current) playChirp(soundRef.current);
+    if (items.length > prevCount.current) playNotif("reminder", soundsRef.current);
     prevCount.current = items.length;
   }, [items.length]);
+
+  // Habit reminders only fire a native OS notification (no in-app toast); play
+  // their distinct in-app sound when the backend emits the event.
+  useEffect(() => {
+    if (!("__TAURI_INTERNALS__" in window)) return;
+    let unlisten: (() => void) | undefined;
+    let disposed = false;
+    void import("@tauri-apps/api/event").then(({ listen }) =>
+      listen("habit-reminder-fired", () => playNotif("habit", soundsRef.current)).then((fn) => {
+        if (disposed) fn();
+        else unlisten = fn;
+      }),
+    );
+    return () => {
+      disposed = true;
+      unlisten?.();
+    };
+  }, []);
 
   useEffect(() => {
     const onCustom = (e: Event) => setItems((prev) => [...prev, (e as CustomEvent<Fired>).detail]);
@@ -79,7 +97,7 @@ export function ReminderToasts() {
           data-testid="reminder-toast"
         >
           <div className="flex items-start gap-2">
-            <span aria-hidden>🔔</span>
+            <Bell size={14} strokeWidth={1.75} className="mt-0.5 shrink-0 text-accent" aria-hidden />
             <span className="min-w-0 flex-1 truncate text-sm font-medium">{f.title}</span>
             <button
               type="button"

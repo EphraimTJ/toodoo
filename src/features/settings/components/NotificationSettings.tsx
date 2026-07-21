@@ -1,12 +1,18 @@
 import { useDesktopConfig } from "../hooks/useDesktopConfig";
-import { playChirp, useNotifSound } from "../../reminders/hooks/useNotifSound";
+import {
+  NOTIF_META,
+  playNotif,
+  useNotifSounds,
+  type NotifKind,
+} from "../../reminders/hooks/useNotifSound";
 
-/** Notifications panel: action buttons, snooze duration, and the "toodoo"
- *  chirp. The toggles apply natively in the Tauri app; the browser mirrors
- *  the config. */
+const KINDS: NotifKind[] = ["reminder", "habit", "focusDone", "breakOver"];
+
+/** Notifications panel: action buttons, snooze duration, and a distinct sound
+ *  per notification type. Toggles apply natively in Tauri; browser mirrors. */
 export function NotificationSettings() {
   const { query, setNotifActions, setNotifSnoozeMin } = useDesktopConfig();
-  const { sound, setSound } = useNotifSound();
+  const { sounds, setSounds } = useNotifSounds();
   const cfg = query.data;
 
   if (!cfg) return <div className="p-1 text-sm text-text-muted">Loading…</div>;
@@ -36,7 +42,7 @@ export function NotificationSettings() {
           data-testid="snooze-duration-select"
           value={cfg.notifSnoozeMin}
           onChange={(e) => setNotifSnoozeMin.mutate(Number(e.target.value))}
-          className="rounded border border-border bg-bg px-1.5 py-0.5 text-sm"
+          className="rounded-full border border-border bg-bg px-2 py-0.5 text-sm"
         >
           <option value={5}>5 minutes</option>
           <option value={10}>10 minutes</option>
@@ -45,56 +51,78 @@ export function NotificationSettings() {
         </select>
       </label>
 
-      <div className="space-y-2" data-testid="notif-sound-settings">
-        <label className="flex items-center gap-2 text-sm">
-          <input
-            type="checkbox"
-            role="switch"
-            aria-label="Notification sound"
-            checked={sound.enabled}
-            onChange={(e) => setSound.mutate({ enabled: e.target.checked })}
-          />
-          Notification sound (the &quot;toodoo&quot; chirp on in-app reminder toasts)
-        </label>
-        {sound.enabled && (
-          <div className="flex flex-wrap items-center gap-3 pl-6 text-sm">
-            <label className="flex items-center gap-2">
-              <span className="text-xs text-text-muted">Volume</span>
-              <input
-                type="range"
-                min={0}
-                max={100}
-                aria-label="Notification sound volume"
-                value={Math.round(sound.volume * 100)}
-                onChange={(e) => setSound.mutate({ volume: Number(e.target.value) / 100 })}
-              />
-            </label>
-            <label className="flex items-center gap-2">
-              <span className="text-xs text-text-muted">Variant</span>
-              <select
-                aria-label="Chirp variant"
-                value={sound.variant}
-                onChange={(e) => setSound.mutate({ variant: Number(e.target.value) })}
-                className="rounded border border-border bg-bg px-1.5 py-0.5 text-sm"
-              >
-                <option value={1}>Toodoo 1 (soft)</option>
-                <option value={2}>Toodoo 2 (bright)</option>
-                <option value={3}>Toodoo 3 (mellow)</option>
-              </select>
-            </label>
-            <button
-              type="button"
-              className="rounded border border-border px-2 py-1 text-xs hover:bg-bg"
-              onClick={() => playChirp({ ...sound, enabled: true })}
-              data-testid="chirp-preview"
-            >
-              Preview
-            </button>
-          </div>
-        )}
-        <p className="pl-6 text-xs text-text-muted">
-          Native Windows toasts keep the system notification sound; the chirp
-          plays on the in-app toast.
+      <div className="space-y-3" data-testid="notif-sound-settings">
+        <h4 className="text-xs font-medium text-text-muted">Sounds</h4>
+        {KINDS.map((kind) => {
+          const s = sounds[kind];
+          const meta = NOTIF_META[kind];
+          return (
+            <div key={kind} className="space-y-1">
+              <label className="flex items-center gap-2 text-sm">
+                <input
+                  type="checkbox"
+                  role="switch"
+                  aria-label={`${meta.label} sound`}
+                  checked={s.enabled}
+                  onChange={(e) =>
+                    setSounds.mutate({ [kind]: { ...s, enabled: e.target.checked } } as Partial<
+                      typeof sounds
+                    >)
+                  }
+                />
+                {meta.label}
+              </label>
+              {s.enabled && (
+                <div className="flex flex-wrap items-center gap-3 pl-6 text-sm">
+                  <label className="flex items-center gap-2">
+                    <span className="text-xs text-text-muted">Volume</span>
+                    <input
+                      type="range"
+                      min={0}
+                      max={100}
+                      aria-label={`${meta.label} volume`}
+                      value={Math.round(s.volume * 100)}
+                      onChange={(e) =>
+                        setSounds.mutate({ [kind]: { ...s, volume: Number(e.target.value) / 100 } } as Partial<
+                          typeof sounds
+                        >)
+                      }
+                    />
+                  </label>
+                  {kind === "reminder" && (
+                    <label className="flex items-center gap-2">
+                      <span className="text-xs text-text-muted">Chime</span>
+                      <select
+                        aria-label="Chirp variant"
+                        value={s.variant}
+                        onChange={(e) =>
+                          setSounds.mutate({ reminder: { ...s, variant: Number(e.target.value) } })
+                        }
+                        className="rounded-full border border-border bg-bg px-2 py-0.5 text-sm"
+                      >
+                        <option value={1}>Soft</option>
+                        <option value={2}>Bright</option>
+                        <option value={3}>Mellow</option>
+                      </select>
+                    </label>
+                  )}
+                  <button
+                    type="button"
+                    className="rounded-full border border-border px-2.5 py-1 text-xs hover:bg-bg"
+                    onClick={() => playNotif(kind, { ...sounds, [kind]: { ...s, enabled: true } })}
+                    data-testid={kind === "reminder" ? "chirp-preview" : `${kind}-preview`}
+                  >
+                    Preview
+                  </button>
+                </div>
+              )}
+              <p className="pl-6 text-[11px] text-text-muted">{meta.hint}</p>
+            </div>
+          );
+        })}
+        <p className="text-xs text-text-muted">
+          Native Windows toasts keep the system sound; these play on the in-app
+          notifications.
         </p>
       </div>
     </div>

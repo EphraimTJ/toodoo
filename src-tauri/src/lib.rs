@@ -1949,6 +1949,12 @@ pub fn run() {
                                 .title("Toodoo habit")
                                 .body(&h.name)
                                 .show();
+                            // In-app hook so the frontend can play the distinct
+                            // habit-reminder sound (native toasts keep OS sound).
+                            let _ = sched_handle.emit(
+                                "habit-reminder-fired",
+                                serde_json::json!({ "habitId": h.habit_id, "name": h.name }),
+                            );
                         }
                     }
                 }

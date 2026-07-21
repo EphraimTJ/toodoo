@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { FocusKind } from "../../../lib/api";
 import { advancePhase, phaseDurationSec, type Phase, type PomoConfig } from "../lib/pomodoro";
+import { playNotif, useNotifSounds } from "../../reminders/hooks/useNotifSound";
 import { useFocusMutations } from "./useFocus";
 
 export type Mode = "pomo" | "stopwatch";
@@ -12,6 +13,9 @@ export type Mode = "pomo" | "stopwatch";
  */
 export function usePomodoro(config: PomoConfig, initialTaskId: string | null = null) {
   const { startFocus, completeFocus } = useFocusMutations();
+  const { sounds } = useNotifSounds();
+  const soundsRef = useRef(sounds);
+  soundsRef.current = sounds;
 
   const [mode, setMode] = useState<Mode>("pomo");
   const [phase, setPhase] = useState<Phase>("work");
@@ -88,12 +92,14 @@ export function usePomodoro(config: PomoConfig, initialTaskId: string | null = n
     const cfg = configRef.current;
     void (async () => {
       if (phase === "work") {
+        playNotif("focusDone", soundsRef.current); // session complete
         await closeSession("DONE");
         const { phase: next } = advancePhase("work", pomosRef.current, cfg);
         pomosRef.current += 1;
         setPhase(next);
         setRemaining(phaseDurationSec(next, cfg)); // breaks auto-run
       } else {
+        playNotif("breakOver", soundsRef.current); // back to focus
         setPhase("work");
         setRemaining(phaseDurationSec("work", cfg));
         if (cfg.autoStart) {
