@@ -21,6 +21,23 @@ export function useWindowBackground(color: string) {
   }, [color]);
 }
 
+/** Re-assert "no OS drop shadow" from inside the window. The builder flag
+ *  (`.shadow(false)`) is set at creation, but on Windows a transparent
+ *  frameless window can still be composited with a DWM shadow; calling
+ *  `setShadow(false)` in the live window reliably clears it. */
+export function useNoWindowShadow() {
+  useEffect(() => {
+    if (!IS_TAURI) return;
+    void import("@tauri-apps/api/window").then(({ getCurrentWindow }) =>
+      getCurrentWindow()
+        .setShadow(false)
+        .catch(() => {
+          // Best-effort; the builder flag is the primary guard.
+        }),
+    );
+  }, []);
+}
+
 export interface WindowBox {
   x: number;
   y: number;
