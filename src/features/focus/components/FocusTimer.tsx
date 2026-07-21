@@ -146,17 +146,17 @@ export function FocusTimer({ config }: { config: PomoConfig }) {
 
       <div className="flex gap-2">
         {!p.active && (
-          <button type="button" onClick={() => void p.start()} className="rounded-md bg-accent px-6 py-2 text-sm text-accent-fg">
+          <button type="button" onClick={() => void p.start()} className="rounded-full bg-accent px-6 py-2 text-sm text-accent-fg">
             Start
           </button>
         )}
         {p.running && (
-          <button type="button" onClick={p.pause} className="rounded-md border border-border px-6 py-2 text-sm">
+          <button type="button" onClick={p.pause} className="rounded-full border border-border px-6 py-2 text-sm">
             Pause
           </button>
         )}
         {paused && (
-          <button type="button" onClick={p.resume} className="rounded-md bg-accent px-6 py-2 text-sm text-accent-fg">
+          <button type="button" onClick={p.resume} className="rounded-full bg-accent px-6 py-2 text-sm text-accent-fg">
             Resume
           </button>
         )}

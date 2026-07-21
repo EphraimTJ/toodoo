@@ -46,7 +46,7 @@ export function KanbanColumn({
   return (
     <section
       aria-label={`Column ${section?.name ?? "No Section"}`}
-      className="flex max-h-full w-72 shrink-0 flex-col rounded-lg bg-surface"
+      className="flex max-h-full w-72 shrink-0 flex-col rounded-2xl border border-border/50 bg-surface shadow-soft"
     >
       <header className="flex items-center gap-1 px-3 py-2">
         <button

@@ -25,7 +25,7 @@ describe("HabitsView", () => {
     const row = (await screen.findByText(name)).closest("[data-testid='habit-row']") as HTMLElement;
     await user.click(within(row).getByRole("button", { name: `Check ${name}` }));
 
-    // After the check-in, the row shows a streak of 1.
-    expect(await within(row).findByText(/🔥 1/)).toBeInTheDocument();
+    // After the check-in, the row shows a streak of 1 (Flame icon + count).
+    expect(await within(row).findByText("1")).toBeInTheDocument();
   });
 });

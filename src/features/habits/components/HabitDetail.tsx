@@ -53,7 +53,7 @@ export function HabitDetail({ habit, onBack, onEdit }: { habit: Habit; onBack():
         </button>
         <span className="text-lg">{habit.icon}</span>
         <h2 className="flex-1 text-base font-semibold">{habit.name}</h2>
-        <button type="button" onClick={onEdit} className="rounded-md border border-border px-2 py-1 text-xs hover:border-accent">
+        <button type="button" onClick={onEdit} className="rounded-full border border-border px-3 py-1 text-xs hover:border-accent">
           Edit
         </button>
       </header>
