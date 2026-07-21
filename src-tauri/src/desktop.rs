@@ -306,6 +306,31 @@ pub fn request_popout(
     }
 }
 
+/// Clip a frameless pill window to a rounded-rectangle region. A window with a
+/// non-null region is a *shaped* window, and Windows draws no DWM drop shadow
+/// around a shaped window — which is the only reliable way to kill the shadow
+/// here (`.shadow(false)` / `setShadow(false)` go through the frame-margin path
+/// that doesn't take on transparent windows). The region radius is kept a hair
+/// larger than the pill's CSS radius so it never clips the visible corners; the
+/// caller re-applies it on every resize (dock / menu / restore).
+#[cfg(windows)]
+fn shape_pill_window(win: &tauri::WebviewWindow) {
+    use windows::Win32::Graphics::Gdi::{CreateRoundRectRgn, SetWindowRgn};
+
+    let (Ok(hwnd), Ok(size)) = (win.hwnd(), win.inner_size()) else {
+        return;
+    };
+    let scale = win.scale_factor().unwrap_or(1.0);
+    let radius = (14.0 * scale).round() as i32;
+    let (w, h) = (size.width as i32, size.height as i32);
+    unsafe {
+        // GDI region right/bottom edges are exclusive, hence +1. SetWindowRgn
+        // takes ownership of the region, so it must not be deleted here.
+        let rgn = CreateRoundRectRgn(0, 0, w + 1, h + 1, radius, radius);
+        let _ = SetWindowRgn(hwnd, Some(rgn), true);
+    }
+}
+
 /// Open (or focus) an always-on-top pop-out that loads the SPA with a
 /// `?win=<kind>` query the frontend entry branches on. The watchdog is armed
 /// **before** `build()` so no failure mode can bypass it.
@@ -438,7 +463,22 @@ pub fn open_or_focus(
         Ok(_) => log::info!("[window] {label}: builder.build() returned ok"),
         Err(e) => log::error!("[window] {label}: builder.build() FAILED: {e}"),
     }
-    result?;
+    let win = result?;
+
+    // Pill windows: clip to a rounded-rect region so Windows draws no shadow.
+    // Re-apply on every resize — docking, the hover menu, and position/size
+    // restore all change the window's dimensions.
+    #[cfg(windows)]
+    if matches!(style, PopoutStyle::Pill) {
+        shape_pill_window(&win);
+        let reshape = win.clone();
+        win.on_window_event(move |ev| {
+            if matches!(ev, tauri::WindowEvent::Resized(_)) {
+                shape_pill_window(&reshape);
+            }
+        });
+    }
+    let _ = &win;
     Ok(())
 }
 
