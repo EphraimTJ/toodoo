@@ -46,3 +46,13 @@ thiserror = "2"
 # Windows toast action buttons (Complete/Snooze). Already in the tree as
 # notify-rust's Windows backend — this direct dep adds nothing transitive.
 tauri-winrt-notification = "0.7"
+# Direct win32 access to strip the DWM drop shadow from the frameless pill
+# windows (the builder `.shadow(false)` / JS `setShadow(false)` don't take on
+# transparent windows). Version pinned to match Tauri's `windows` in-tree so
+# `WebviewWindow::hwnd()`'s HWND type lines up.
+windows = { version = "0.61", features = [
+    "Win32_Foundation",
+    "Win32_Graphics_Dwm",
+    "Win32_Graphics_Gdi",
+    "Win32_UI_WindowsAndMessaging",
+] }
