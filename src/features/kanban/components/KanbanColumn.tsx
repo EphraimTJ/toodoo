@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { ChevronDown, ChevronRight } from "lucide-react";
 import { useDroppable } from "@dnd-kit/core";
 import { DropdownMenu } from "radix-ui";
 import type { Section, Tag, Task } from "../../../lib/api";
@@ -52,9 +53,9 @@ export function KanbanColumn({
           type="button"
           aria-label={collapsed ? "Expand column" : "Collapse column"}
           onClick={onToggleCollapse}
-          className="text-text-muted hover:text-text"
+          className="flex items-center text-text-muted hover:text-text"
         >
-          {collapsed ? "▸" : "▾"}
+          {collapsed ? <ChevronRight size={15} strokeWidth={2} /> : <ChevronDown size={15} strokeWidth={2} />}
         </button>
         {renaming && section ? (
           <input

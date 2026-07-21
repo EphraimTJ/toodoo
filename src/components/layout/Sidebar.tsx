@@ -1,7 +1,7 @@
 import { useTranslation } from "react-i18next";
+import { Search } from "lucide-react";
 import type { SmartView } from "../../lib/api";
 import { useUiStore } from "../../lib/uiStore";
-import { ThemeToggle } from "../../features/settings/components/ThemeToggle";
 import { SettingsDialog } from "../../features/settings/components/SettingsDialog";
 import { SidebarProjects } from "../../features/projects/components/SidebarProjects";
 import { SidebarTags } from "../../features/tags/components/SidebarTags";
@@ -38,23 +38,17 @@ export function Sidebar({ width }: { width?: number } = {}) {
       style={{ width: width ?? 240 }}
     >
       <div className="flex items-center justify-between px-4 py-3">
-        <div className="flex items-center gap-2">
-          <span
-            aria-hidden="true"
-            className="flex h-8 w-8 items-center justify-center bg-accent text-accent-fg shadow-soft"
-            style={{ borderRadius: "62% 38% 45% 55% / 58% 52% 48% 42%" }}
-          >
-            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M11 20A7 7 0 0 1 4 13c0-3 2-6 7-9 5 3 7 6 7 9a7 7 0 0 1-7 7Z" />
-              <path d="M11 20v-8" />
-            </svg>
-          </span>
-          <h1 className="font-display text-xl font-semibold text-text">Toodoo</h1>
-        </div>
-        <div className="flex items-center gap-1">
-          <SettingsDialog />
-          <ThemeToggle />
-        </div>
+        <span
+          aria-hidden="true"
+          className="flex h-8 w-8 items-center justify-center bg-accent text-accent-fg shadow-soft"
+          style={{ borderRadius: "62% 38% 45% 55% / 58% 52% 48% 42%" }}
+        >
+          <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M11 20A7 7 0 0 1 4 13c0-3 2-6 7-9 5 3 7 6 7 9a7 7 0 0 1-7 7Z" />
+            <path d="M11 20v-8" />
+          </svg>
+        </span>
+        <SettingsDialog />
       </div>
 
       <nav className="flex-1 overflow-y-auto px-2 pb-4">
@@ -65,7 +59,9 @@ export function Sidebar({ width }: { width?: number } = {}) {
               onClick={() => useUiStore.getState().openSearch()}
               className={navCls(view.kind === "search")}
             >
-              <span className="flex items-center gap-2">🔍 Search</span>
+              <span className="flex items-center gap-2">
+                <Search size={15} strokeWidth={1.75} /> Search
+              </span>
             </button>
           </li>
           <li>

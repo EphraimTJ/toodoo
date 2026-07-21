@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { Home, X } from "lucide-react";
 import { api } from "../lib/api";
 import type { FocusBroadcast } from "../features/focus/FocusProvider";
 import { formatClock } from "../features/focus/lib/pomodoro";
@@ -98,18 +99,26 @@ export function FocusPillWindow() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [docked, setDocked] = useState(false);
   const collapseTimer = useRef<number | undefined>(undefined);
+  const dockTimer = useRef<number | undefined>(undefined);
   const dockedRef = useRef(docked);
   dockedRef.current = docked;
 
   usePersistedWindowBox(
     "popout:focus",
     (y) => {
-      // Touching the top screen edge docks the pill into the slim bar.
-      if (y <= 0 && !dockedRef.current) {
-        setDocked(true);
-        setMenuOpen(false);
-        void setWindowSize(DOCK_W, DOCK_H);
-        void pinWindowTop(0);
+      if (dockedRef.current) return;
+      // Dock into the slim bar only once the drag settles at the top edge.
+      // Resizing/repinning the window WHILE an OS drag is in flight fights the
+      // move and makes dragging feel glitchy — so debounce until movement stops.
+      window.clearTimeout(dockTimer.current);
+      if (y <= 4) {
+        dockTimer.current = window.setTimeout(() => {
+          if (dockedRef.current) return;
+          setDocked(true);
+          setMenuOpen(false);
+          void setWindowSize(DOCK_W, DOCK_H);
+          void pinWindowTop(0);
+        }, 220);
       }
     },
     // The pill manages its own size (menu expansion, docking) — persist
@@ -232,6 +241,16 @@ export function FocusPillWindow() {
               <circle cx="10" cy="6" r="1.2" />
             </svg>
           </button>
+          <button
+            type="button"
+            aria-label="Close focus pill"
+            className="rounded-full p-1.5 hover:bg-white/10 hover:text-[#e88b7d]"
+            onClick={closeThisWindow}
+          >
+            <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden>
+              <path d="M2 2l8 8M10 2l-8 8" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" />
+            </svg>
+          </button>
         </div>
       </div>
 
@@ -343,18 +362,18 @@ export function StickyPillWindow({ id }: { id: string }) {
           <button
             type="button"
             aria-label="Open Toodoo"
-            className="ml-1 rounded p-0.5 text-neutral-700 hover:bg-black/10"
+            className="ml-1 flex items-center rounded p-0.5 text-neutral-700 hover:bg-black/10"
             onClick={() => void api.showMainWindow()}
           >
-            ⌂
+            <Home size={13} strokeWidth={1.75} />
           </button>
           <button
             type="button"
             aria-label="Close sticky"
-            className="rounded p-0.5 text-neutral-700 hover:bg-black/10"
+            className="flex items-center rounded p-0.5 text-neutral-700 hover:bg-black/10"
             onClick={closeThisWindow}
           >
-            ✕
+            <X size={13} strokeWidth={2} />
           </button>
         </div>
       </div>

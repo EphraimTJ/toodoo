@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Check, Plus } from "lucide-react";
 import { localDateParams, type Habit, type HabitToday } from "../../../lib/api";
 import { useHabitMutations, useHabits, useTodayHabits } from "../hooks/useHabits";
 import { HabitDialog } from "./HabitDialog";
@@ -99,7 +100,11 @@ export function HabitsView() {
                       color: h.status === "DONE" ? "#fff" : undefined,
                     }}
                   >
-                    {h.status === "DONE" ? "✓" : h.habit.goalKind === "AMOUNT" ? "+" : ""}
+                    {h.status === "DONE" ? (
+                      <Check size={14} strokeWidth={2.5} />
+                    ) : h.habit.goalKind === "AMOUNT" ? (
+                      <Plus size={14} strokeWidth={2.5} />
+                    ) : null}
                   </button>
                   <button type="button" onClick={() => setSelected(h.habit)} className="flex min-w-0 flex-1 items-center gap-2 text-left">
                     <span>{h.habit.icon}</span>

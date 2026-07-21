@@ -1,5 +1,6 @@
 import { useDraggable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
+import { Pin, Repeat } from "lucide-react";
 import type { Tag, Task } from "../../../lib/api";
 import { useUiStore } from "../../../lib/uiStore";
 import { useTaskMutations } from "../../tasks/hooks/useTasks";
@@ -54,8 +55,16 @@ export function KanbanCard({ task, tags, subtaskTotal, subtaskDone }: Props) {
           }`}
         />
         <span className="min-w-0 flex-1 break-words">{task.title}</span>
-        {task.pinned && <span aria-label="Pinned">📌</span>}
-        {task.rrule && <span aria-label="Repeats">↻</span>}
+        {task.pinned && (
+          <span aria-label="Pinned" className="flex items-center text-accent">
+            <Pin size={11} strokeWidth={1.75} />
+          </span>
+        )}
+        {task.rrule && (
+          <span aria-label="Repeats" className="flex items-center text-text-muted">
+            <Repeat size={11} strokeWidth={1.75} />
+          </span>
+        )}
       </div>
       <div className="mt-1 flex flex-wrap items-center gap-2 pl-5 text-xs text-text-muted">
         {chip && <span className={chip.overdue ? "text-destructive" : ""}>{chip.text}</span>}

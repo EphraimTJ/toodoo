@@ -1,4 +1,5 @@
 import { useRef, useState, type ReactNode } from "react";
+import { X } from "lucide-react";
 
 /**
  * A draggable always-on-top-within-the-app floating panel — the in-app
@@ -53,7 +54,7 @@ export function FloatingPanel({
           className="text-xs text-text-muted hover:text-text"
           onClick={onClose}
         >
-          ✕
+          <X size={14} strokeWidth={2} />
         </button>
       </div>
       <div className="max-h-96 overflow-auto">{children}</div>

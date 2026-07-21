@@ -162,10 +162,23 @@ body::after {
   border-color: var(--fc-border-color);
 }
 
+/* Put prev/title/next on one line so the arrows flank the period title. FC wraps
+   them in an unclassed <div> whose block <h2> otherwise stacks the buttons, so
+   the inner wrapper (not just the chunk) must be a flex row. */
+.fc .fc-toolbar-chunk,
+.fc .fc-toolbar-chunk > div {
+  display: flex;
+  flex-direction: row;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 0.4rem;
+}
 .fc .fc-toolbar-title {
   font-family: var(--font-display);
   font-weight: 600;
   letter-spacing: -0.01em;
+  margin: 0;
+  white-space: nowrap;
 }
 
 /* Toolbar buttons → soft pills in the theme, moss when active. */
@@ -226,4 +239,23 @@ body::after {
 }
 .fc a {
   color: inherit;
+}
+
+/* Print: show just the calendar grid, drop the app chrome. */
+@media print {
+  body::after {
+    display: none;
+  }
+  aside[aria-label="Sidebar"],
+  aside[aria-label="Task detail"],
+  aside[aria-label="Unscheduled tasks"],
+  [data-print-hide] {
+    display: none !important;
+  }
+  .fc .fc-button {
+    display: none !important;
+  }
+  .fc .fc-toolbar-title {
+    font-size: 1.4rem;
+  }
 }

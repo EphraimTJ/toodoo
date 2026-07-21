@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { ExternalLink } from "lucide-react";
 import { openPopout } from "../../../lib/popout";
 import { useAmbient } from "../hooks/useAmbient";
 import { useFocusSettings } from "../hooks/useFocusSettings";
@@ -41,9 +42,9 @@ export function FocusView() {
             aria-label="Pop out focus window"
             title="Open an always-on-top focus window"
             onClick={() => void openPopout({ kind: "focus" })}
-            className="ml-auto rounded-md px-2 py-1 text-sm text-text-muted hover:bg-surface"
+            className="ml-auto flex items-center rounded-md px-2 py-1 text-text-muted hover:bg-surface"
           >
-            ↗
+            <ExternalLink size={15} strokeWidth={1.75} />
           </button>
         )}
       </header>

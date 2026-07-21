@@ -11,6 +11,8 @@ import { FocusProvider } from "../../features/focus/FocusProvider";
 import { PaneDivider } from "./PaneDivider";
 import { PANE_LIMITS, usePaneWidths } from "./usePaneWidths";
 import { ShortcutCheatsheet } from "../../features/shortcuts/components/ShortcutCheatsheet";
+import { AppDialogs } from "../ui/AppDialogs";
+import { ResizeEdges, TitleBar } from "./TitleBar";
 import { useShortcuts } from "../../features/shortcuts/useShortcuts";
 import { api } from "../../lib/api";
 import { useUiStore } from "../../lib/uiStore";
@@ -58,38 +60,43 @@ export function AppShell() {
 
   return (
     <FocusProvider>
-      <div className="flex h-full">
-        <Sidebar width={widths.sidebar} />
-        <PaneDivider
-          label="Resize sidebar"
-          value={widths.sidebar}
-          min={PANE_LIMITS.sidebar.min}
-          max={PANE_LIMITS.sidebar.max}
-          direction={1}
-          onResize={(w) => setPane("sidebar", w)}
-          onReset={() => resetPane("sidebar")}
-        />
-        <ListPane />
-        {selectedTaskId && (
-          <>
-            <PaneDivider
-              label="Resize detail pane"
-              value={widths.detail}
-              min={PANE_LIMITS.detail.min}
-              max={PANE_LIMITS.detail.max}
-              direction={-1}
-              onResize={(w) => setPane("detail", w)}
-              onReset={() => resetPane("detail")}
-            />
-            <DetailPane width={widths.detail} />
-          </>
-        )}
+      <div className="flex h-full flex-col">
+        <TitleBar />
+        <div className="flex min-h-0 flex-1">
+          <Sidebar width={widths.sidebar} />
+          <PaneDivider
+            label="Resize sidebar"
+            value={widths.sidebar}
+            min={PANE_LIMITS.sidebar.min}
+            max={PANE_LIMITS.sidebar.max}
+            direction={1}
+            onResize={(w) => setPane("sidebar", w)}
+            onReset={() => resetPane("sidebar")}
+          />
+          <ListPane />
+          {selectedTaskId && (
+            <>
+              <PaneDivider
+                label="Resize detail pane"
+                value={widths.detail}
+                min={PANE_LIMITS.detail.min}
+                max={PANE_LIMITS.detail.max}
+                direction={-1}
+                onResize={(w) => setPane("detail", w)}
+                onReset={() => resetPane("detail")}
+              />
+              <DetailPane width={widths.detail} />
+            </>
+          )}
+        </div>
         <CommandPalette />
         <ReminderToasts />
         <SystemToasts />
         <SampleDataPrompt />
         <PanelHost />
         <ShortcutCheatsheet />
+        <AppDialogs />
+        <ResizeEdges />
       </div>
     </FocusProvider>
   );

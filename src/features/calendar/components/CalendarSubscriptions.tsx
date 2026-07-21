@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { RefreshCw, X } from "lucide-react";
 import { Dialog } from "radix-ui";
 import { useSubscriptions } from "../hooks/useSubscriptions";
 
@@ -51,17 +52,17 @@ export function CalendarSubscriptions({
                   type="button"
                   aria-label={`Refresh ${sub.name}`}
                   onClick={() => refreshSubscription.mutate(sub.id)}
-                  className="text-text-muted hover:text-accent"
+                  className="flex items-center text-text-muted hover:text-accent"
                 >
-                  ↻
+                  <RefreshCw size={13} strokeWidth={1.75} />
                 </button>
                 <button
                   type="button"
                   aria-label={`Delete ${sub.name}`}
                   onClick={() => deleteSubscription.mutate(sub.id)}
-                  className="text-text-muted hover:text-destructive"
+                  className="flex items-center text-text-muted hover:text-destructive"
                 >
-                  ✕
+                  <X size={13} strokeWidth={2} />
                 </button>
               </li>
             ))}

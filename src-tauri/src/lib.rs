@@ -1678,7 +1678,10 @@ pub fn run() {
 
             let data_dir = app.path().app_data_dir()?;
             std::fs::create_dir_all(&data_dir)?;
-            let db_path = data_dir.join("toodoo.db");
+            // Debug builds use a separate database so `tauri dev` never shares
+            // (or migrates) the installed app's real data.
+            let db_name = if cfg!(debug_assertions) { "toodoo-dev.db" } else { "toodoo.db" };
+            let db_path = data_dir.join(db_name);
 
             // Apply a staged restore before opening the pool, so we never swap
             // the database out from under a live connection. The staged file is

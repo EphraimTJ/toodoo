@@ -1,4 +1,5 @@
 import { useRef, useState } from "react";
+import { ExternalLink, X } from "lucide-react";
 import { type StickyView } from "../../../lib/api";
 import { openPopout } from "../../../lib/popout";
 import { useTaskMutations } from "../../tasks/hooks/useTasks";
@@ -69,18 +70,18 @@ function StickyCard({
             aria-label={`Pop out ${sticky.title}`}
             title="Pop out to an always-on-top window"
             onClick={() => void openPopout({ kind: "sticky", id: sticky.id })}
-            className="ml-auto text-xs text-black/50 hover:text-black"
+            className="ml-auto flex items-center text-black/50 hover:text-black"
           >
-            ↗
+            <ExternalLink size={13} strokeWidth={1.75} />
           </button>
         )}
         <button
           type="button"
           aria-label={`Close ${sticky.title}`}
           onClick={() => onClose(sticky.id)}
-          className={`${IS_TAURI ? "" : "ml-auto"} text-xs text-black/50 hover:text-black`}
+          className={`${IS_TAURI ? "" : "ml-auto"} flex items-center text-black/50 hover:text-black`}
         >
-          ✕
+          <X size={13} strokeWidth={2} />
         </button>
       </div>
       <textarea

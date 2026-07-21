@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { Check, Circle, Search } from "lucide-react";
 import { Command } from "cmdk";
 import { api } from "../../../lib/api";
 import { useUiStore } from "../../../lib/uiStore";
@@ -59,7 +60,8 @@ export function CommandPalette() {
             onSelect={() => useUiStore.getState().openSearch(query)}
             className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm font-normal normal-case tracking-normal text-text data-[selected=true]:bg-accent/10"
           >
-            🔍 <span className="truncate">Search everything for “{query}”</span>
+            <Search size={15} strokeWidth={1.75} />{" "}
+            <span className="truncate">Search everything for “{query}”</span>
           </Command.Item>
         )}
 
@@ -76,9 +78,13 @@ export function CommandPalette() {
                 className="flex cursor-pointer items-center gap-2 rounded-md px-2 py-1.5 text-sm font-normal normal-case tracking-normal text-text data-[selected=true]:bg-accent/10"
               >
                 <span
-                  className={`text-xs ${task.status === "COMPLETED" ? "text-accent" : "text-text-muted"}`}
+                  className={`flex items-center ${task.status === "COMPLETED" ? "text-accent" : "text-text-muted"}`}
                 >
-                  {task.status === "COMPLETED" ? "✓" : "○"}
+                  {task.status === "COMPLETED" ? (
+                    <Check size={13} strokeWidth={2} />
+                  ) : (
+                    <Circle size={13} strokeWidth={1.75} />
+                  )}
                 </span>
                 <span className="truncate">{task.title}</span>
                 <span className="ml-auto truncate text-xs text-text-muted">
