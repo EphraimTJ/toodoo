@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Toodoo app icon — "minimal moss bird" (option D).
+       Ink rounded square, moss songbird silhouette, sand beak + eye.
+       Palette matches the app: ink #1f1e1a, moss #5d7052, sand #efe9dd. -->
+  <rect width="512" height="512" rx="115" fill="#1f1e1a"/>
+  <path d="M150 285 L58 235 L95 330 Z" fill="#5d7052"/>
+  <ellipse cx="255" cy="300" rx="115" ry="92" fill="#5d7052"/>
+  <circle cx="340" cy="200" r="60" fill="#5d7052"/>
+  <path d="M395 190 L450 205 L398 226 Z" fill="#efe9dd"/>
+  <circle cx="355" cy="190" r="10" fill="#efe9dd"/>
+</svg>
