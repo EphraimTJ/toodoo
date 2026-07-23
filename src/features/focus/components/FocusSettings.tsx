@@ -38,15 +38,16 @@ export function FocusSettings() {
         </label>
         <label className="flex items-center justify-between text-sm">
           <span>
-            Play lo-fi with focus hotkey
+            Play music when focus starts
             <span className="block text-xs text-text-muted">
-              Ctrl+Shift+F starts the current task’s timer
+              Starting the timer (or Ctrl+Shift+F) plays the selected track;
+              stopping it pauses the music
             </span>
           </span>
           <input
             type="checkbox"
             checked={config.autoMusic}
-            aria-label="Play lo-fi with focus hotkey"
+            aria-label="Play music when focus starts"
             onChange={(e) => setConfig({ autoMusic: e.target.checked })}
             className="accent-(--color-accent)"
           />

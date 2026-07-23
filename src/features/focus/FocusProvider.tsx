@@ -85,9 +85,8 @@ export function FocusProvider({ children }: { children: ReactNode }) {
   }, [focusTaskId, active, setTaskId]);
 
   // Ctrl+Shift+F: the Rust side opened the pill and emitted "focus-hotkey".
-  // Here we pick the current task, start the timer, and (opt-in) play lo-fi.
-  const ambientRef = useRef(ambient);
-  ambientRef.current = ambient;
+  // Here we pick the current task and start the timer; the session-transition
+  // effect below is what starts the music.
   const autoMusicRef = useRef(config.autoMusic);
   autoMusicRef.current = config.autoMusic;
   useEffect(() => {
@@ -109,7 +108,6 @@ export function FocusProvider({ children }: { children: ReactNode }) {
             // No task match — still start a plain focus session.
           }
           await t.start();
-          if (autoMusicRef.current) ambientRef.current.setTrack("lofi");
         })();
       }).then((fn) => {
         if (disposed) fn();
@@ -122,11 +120,14 @@ export function FocusProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  // Stopping the focus session stops the music too — however it was started.
-  // Transition-based so idle listening (music with no session) is untouched.
+  // Music follows the session: starting one (Start button OR the hotkey)
+  // plays the selected track (jazzy lo-fi by default, opt-out in settings);
+  // stopping it pauses the music, keeping the selection for next time.
+  // Transition-based so idle listening (play button, no session) is untouched.
   const prevActive = useRef(false);
   useEffect(() => {
-    if (prevActive.current && !p.active) ambient.setTrack(null);
+    if (!prevActive.current && p.active && autoMusicRef.current) ambient.setPlaying(true);
+    if (prevActive.current && !p.active) ambient.setPlaying(false);
     prevActive.current = p.active;
   }, [p.active, ambient]);
 

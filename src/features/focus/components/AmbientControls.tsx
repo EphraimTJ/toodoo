@@ -1,10 +1,11 @@
-import { Music, Pause, Play, Square, Volume2 } from "lucide-react";
+import { Music, Pause, Play, Volume2 } from "lucide-react";
 import { AMBIENT_TRACKS, type AmbientTrack } from "../hooks/useAmbient";
 import { useSharedAmbient } from "../FocusProvider";
 
-/** Compact focus-music bar for the Timer page: pick a track (or the lo-fi that
- *  the focus hotkey starts), pause/resume, adjust volume, or stop. Drives the
- *  same shared audio as the Ctrl+Shift+F hotkey. */
+/** Compact focus-music bar for the Timer page. Jazzy lo-fi is selected by
+ *  default; the always-present play button starts it with or without a focus
+ *  session, and a session starting/stopping plays/pauses the same shared
+ *  audio (Ctrl+Shift+F included). */
 export function AmbientControls() {
   const { track, setTrack, playing, setPlaying, volume, setVolume } = useSharedAmbient();
 
@@ -28,16 +29,19 @@ export function AmbientControls() {
         ))}
       </select>
 
-      {track && (
-        <button
-          type="button"
-          aria-label={playing ? "Pause music" : "Play music"}
-          onClick={() => setPlaying(!playing)}
-          className="flex shrink-0 items-center rounded-full border border-border p-1.5 text-text-muted hover:text-text"
-        >
-          {playing ? <Pause size={13} strokeWidth={2} /> : <Play size={13} strokeWidth={2} />}
-        </button>
-      )}
+      <button
+        type="button"
+        disabled={!track}
+        aria-label={playing ? "Pause music" : "Play music"}
+        onClick={() => setPlaying(!playing)}
+        className={`flex shrink-0 items-center rounded-full border p-1.5 ${
+          playing
+            ? "border-accent text-accent"
+            : "border-border text-text-muted hover:text-text"
+        } disabled:opacity-40`}
+      >
+        {playing ? <Pause size={13} strokeWidth={2} /> : <Play size={13} strokeWidth={2} />}
+      </button>
 
       <span className="flex shrink-0 items-center gap-1 text-text-muted">
         <Volume2 size={14} strokeWidth={1.75} />
@@ -52,17 +56,6 @@ export function AmbientControls() {
           className="w-20 accent-(--color-accent)"
         />
       </span>
-
-      {track && (
-        <button
-          type="button"
-          aria-label="Stop music"
-          onClick={() => setTrack(null)}
-          className="flex shrink-0 items-center rounded-full border border-border p-1.5 text-text-muted hover:text-destructive"
-        >
-          <Square size={12} strokeWidth={2} />
-        </button>
-      )}
     </div>
   );
 }
