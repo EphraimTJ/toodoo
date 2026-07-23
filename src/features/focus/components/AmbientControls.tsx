@@ -1,4 +1,4 @@
-import { Music, Pause, Play, Volume2 } from "lucide-react";
+import { Music, Pause, Play, Shuffle, Volume2 } from "lucide-react";
 import { AMBIENT_TRACKS, type AmbientTrack } from "../hooks/useAmbient";
 import { useSharedAmbient } from "../FocusProvider";
 
@@ -7,7 +7,7 @@ import { useSharedAmbient } from "../FocusProvider";
  *  session, and a session starting/stopping plays/pauses the same shared
  *  audio (Ctrl+Shift+F included). */
 export function AmbientControls() {
-  const { track, setTrack, playing, setPlaying, volume, setVolume } = useSharedAmbient();
+  const { track, setTrack, playing, setPlaying, volume, setVolume, shuffle } = useSharedAmbient();
 
   return (
     <div
@@ -41,6 +41,17 @@ export function AmbientControls() {
         } disabled:opacity-40`}
       >
         {playing ? <Pause size={13} strokeWidth={2} /> : <Play size={13} strokeWidth={2} />}
+      </button>
+
+      <button
+        type="button"
+        disabled={track !== "lofi"}
+        aria-label="Shuffle to a new track"
+        title={track === "lofi" ? "Shuffle to a new track" : "Shuffle applies to the lo-fi playlist"}
+        onClick={shuffle}
+        className="flex shrink-0 items-center rounded-full border border-border p-1.5 text-text-muted hover:text-text disabled:opacity-40"
+      >
+        <Shuffle size={13} strokeWidth={2} />
       </button>
 
       <span className="flex shrink-0 items-center gap-1 text-text-muted">
