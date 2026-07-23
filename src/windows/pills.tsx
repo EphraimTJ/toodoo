@@ -10,16 +10,9 @@ import {
   emitFocusCmd,
   pinWindowTop,
   setWindowSize,
-  useNoWindowShadow,
   usePersistedWindowBox,
   useWindowBackground,
 } from "./pillUtils";
-
-/** "transparent" only when the window chrome is the true transparent pill. */
-function usePillBackground(solidColor: string): string {
-  const { data: cfg } = useQuery({ queryKey: ["desktopConfig"], queryFn: api.desktopConfig });
-  return cfg && cfg.popoutStyle !== "pill" ? solidColor : "transparent";
-}
 
 const STICKY_COLORS = ["#ffd97d", "#a3e4b7", "#a7c7ff", "#f7a8c4", "#d7bde2", "#e0e0e0"];
 
@@ -94,8 +87,9 @@ function Ring({ progress, size = 40 }: { progress: number; size?: number }) {
  * into a slim progress bar, hovering the bar slides the pill back out.
  */
 export function FocusPillWindow() {
-  useWindowBackground(usePillBackground("#1f1e1a"));
-  useNoWindowShadow();
+  // Opaque ink, always — transparency is what produced the white-corner
+  // artifacts on some machines, so the window itself IS the pill rectangle.
+  useWindowBackground("#1f1e1a");
   const state = useFocusState();
   const [hover, setHover] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -188,7 +182,7 @@ export function FocusPillWindow() {
       onMouseLeave={onLeave}
     >
       <div
-        className="flex w-full shrink-0 items-center gap-2 rounded-xl bg-[#1f1e1a] pl-1.5 pr-3 text-white"
+        className="flex w-full shrink-0 items-center gap-2 bg-[#1f1e1a] pl-1.5 pr-3 text-white"
         style={{ height: PILL_H }}
         data-testid="focus-pill"
         data-tauri-drag-region
@@ -312,7 +306,7 @@ export function StickyPillWindow({ id }: { id: string }) {
   const grip = useRef<{ startX: number; startY: number; w: number; h: number } | null>(null);
   const { data: stickies, refetch } = useQuery({ queryKey: ["stickies"], queryFn: api.listStickies });
   const sticky = (stickies ?? []).find((s) => s.id === id);
-  useWindowBackground(usePillBackground(sticky?.color ?? "#ffd97d"));
+  useWindowBackground(sticky?.color ?? "#ffd97d");
 
   const onGripDown = (e: React.PointerEvent) => {
     grip.current = {
