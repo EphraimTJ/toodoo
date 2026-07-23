@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Dialog } from "radix-ui";
 import type { GoalKind, Habit, HabitFreq, HabitInput } from "../../../lib/api";
+import { EmojiPicker } from "../../../components/ui/EmojiPicker";
 import { useHabitMutations } from "../hooks/useHabits";
 import { HABIT_COLORS, HABIT_PRESETS } from "../lib/presets";
 
@@ -135,7 +136,7 @@ function HabitForm({ habit, onClose, onSaved }: { habit?: Habit | null; onClose(
 
       <div className="space-y-2">
         <div className="flex gap-2">
-          <input value={icon} onChange={(e) => setIcon(e.target.value)} aria-label="Habit icon" className="w-12 text-center" placeholder="✅" />
+          <EmojiPicker value={icon} onChange={setIcon} label="Habit icon" />
           <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Habit name" aria-label="Habit name" autoFocus className={field} />
         </div>
 

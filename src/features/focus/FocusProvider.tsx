@@ -90,7 +90,6 @@ export function FocusProvider({ children }: { children: ReactNode }) {
   ambientRef.current = ambient;
   const autoMusicRef = useRef(config.autoMusic);
   autoMusicRef.current = config.autoMusic;
-  const musicByHotkey = useRef(false);
   useEffect(() => {
     if (!IS_TAURI) return;
     let unlisten: (() => void) | undefined;
@@ -110,10 +109,7 @@ export function FocusProvider({ children }: { children: ReactNode }) {
             // No task match — still start a plain focus session.
           }
           await t.start();
-          if (autoMusicRef.current) {
-            ambientRef.current.setTrack("lofi");
-            musicByHotkey.current = true;
-          }
+          if (autoMusicRef.current) ambientRef.current.setTrack("lofi");
         })();
       }).then((fn) => {
         if (disposed) fn();
@@ -126,12 +122,12 @@ export function FocusProvider({ children }: { children: ReactNode }) {
     };
   }, []);
 
-  // Stop the hotkey-started music once the session ends.
+  // Stopping the focus session stops the music too — however it was started.
+  // Transition-based so idle listening (music with no session) is untouched.
+  const prevActive = useRef(false);
   useEffect(() => {
-    if (!p.active && musicByHotkey.current) {
-      ambient.setTrack(null);
-      musicByHotkey.current = false;
-    }
+    if (prevActive.current && !p.active) ambient.setTrack(null);
+    prevActive.current = p.active;
   }, [p.active, ambient]);
 
   // Broadcast to pill windows.
