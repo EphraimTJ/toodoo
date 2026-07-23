@@ -104,6 +104,20 @@ export interface ReminderSpec {
   offsetMin?: number | null;
 }
 
+export interface Attachment {
+  id: string;
+  taskId: string;
+  fileName: string;
+  /** Path relative to the app's attachments folder (opaque to the UI). */
+  relPath: string;
+  mime: string | null;
+  /** IMAGE | AUDIO | FILE — drives how the gallery renders it. */
+  kind: "IMAGE" | "AUDIO" | "FILE";
+  sizeBytes: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface ActivityEntry {
   id: string;
   entityKind: string;
@@ -577,6 +591,17 @@ export interface Api {
   listComments(taskId: string): Promise<Comment[]>;
   addComment(taskId: string, body: string): Promise<Comment>;
   deleteComment(id: string): Promise<void>;
+
+  listAttachments(taskId: string): Promise<Attachment[]>;
+  addAttachment(
+    taskId: string,
+    fileName: string,
+    mime: string | null,
+    dataBase64: string,
+  ): Promise<Attachment>;
+  readAttachmentDataUrl(id: string): Promise<string>;
+  deleteAttachment(id: string): Promise<void>;
+  openAttachment(id: string): Promise<void>;
   trashTask(id: string): Promise<string[]>;
   restoreTask(id: string): Promise<Task>;
   deleteTaskForever(id: string): Promise<void>;
@@ -828,6 +853,12 @@ const tauriApi: Api = {
   checkItemToSubtask: (itemId) => invoke("check_item_to_subtask", { itemId }),
   subtaskToCheckItem: (taskId) => invoke("subtask_to_check_item", { taskId }),
   saveTaskAsTemplate: (taskId, name) => invoke("save_task_as_template", { taskId, name }),
+  listAttachments: (taskId) => invoke("list_attachments", { taskId }),
+  addAttachment: (taskId, fileName, mime, dataBase64) =>
+    invoke("add_attachment", { taskId, fileName, mime, dataBase64 }),
+  readAttachmentDataUrl: (id) => invoke("read_attachment_data_url", { id }),
+  deleteAttachment: (id) => invoke("delete_attachment", { id }),
+  openAttachment: (id) => invoke("open_attachment", { id }),
   listComments: (taskId) => invoke("list_comments", { taskId }),
   addComment: (taskId, body) => invoke("add_comment", { taskId, body }),
   deleteComment: (id) => invoke("delete_comment", { id }),
@@ -1082,6 +1113,8 @@ function browserStubApi(): Api {
   const reminders: Reminder[] = [];
   const activity: ActivityEntry[] = [];
   const comments: Comment[] = [];
+  const attachments: Attachment[] = [];
+  const attachmentData = new Map<string, string>();
   const templates: TaskTemplate[] = [];
   const sections: Section[] = [];
   const filters: Filter[] = [];
@@ -1539,6 +1572,47 @@ function browserStubApi(): Api {
     deleteComment: async (id) => {
       const i = comments.findIndex((c) => c.id === id);
       if (i >= 0) comments.splice(i, 1);
+    },
+    // Attachments are a desktop/file-system feature; the web mock keeps them
+    // in memory (data URLs) so the gallery is still exercisable in tests.
+    listAttachments: async (taskId) =>
+      clone(
+        attachments
+          .filter((a) => a.taskId === taskId)
+          .sort((a, b) => a.createdAt.localeCompare(b.createdAt)),
+      ),
+    addAttachment: async (taskId, fileName, mime, dataBase64) => {
+      if (!dataBase64) throw new Error("attachment is empty");
+      const ext = fileName.split(".").pop()?.toLowerCase() ?? "";
+      const kind: Attachment["kind"] = (mime ?? "").startsWith("image/") ||
+        ["png", "jpg", "jpeg", "gif", "webp"].includes(ext)
+        ? "IMAGE"
+        : (mime ?? "").startsWith("audio/") || ["mp3", "wav", "ogg", "m4a"].includes(ext)
+          ? "AUDIO"
+          : "FILE";
+      const a: Attachment = {
+        id: uid(),
+        taskId,
+        fileName,
+        relPath: `${taskId}/${fileName}`,
+        mime,
+        kind,
+        sizeBytes: Math.floor((dataBase64.length * 3) / 4),
+        createdAt: nowIso(),
+        updatedAt: nowIso(),
+      };
+      attachments.push(a);
+      attachmentData.set(a.id, `data:${mime ?? "application/octet-stream"};base64,${dataBase64}`);
+      return clone(a);
+    },
+    readAttachmentDataUrl: async (id) => attachmentData.get(id) ?? "",
+    deleteAttachment: async (id) => {
+      const i = attachments.findIndex((a) => a.id === id);
+      if (i >= 0) attachments.splice(i, 1);
+      attachmentData.delete(id);
+    },
+    openAttachment: async () => {
+      /* no OS to open into in the browser mock */
     },
     trashTask: async (id) => {
       const targets = [findTask(id), ...descendants(id)].filter(liveTask);
