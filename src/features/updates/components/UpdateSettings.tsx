@@ -6,6 +6,7 @@ import {
   type DownloadProgress,
   type UpdateInfo,
 } from "../lib/updater";
+import { useUpdateCheck } from "../hooks/useUpdateCheck";
 
 const btn = "rounded border border-border px-2 py-1 text-xs hover:bg-bg disabled:opacity-50";
 const primaryBtn =
@@ -28,6 +29,13 @@ function pct(p: DownloadProgress): string {
 export function UpdateSettings() {
   const [status, setStatus] = useState<Status>({ kind: "idle" });
   const [current, setCurrent] = useState<string | null>(null);
+  const { data: bgUpdate } = useUpdateCheck();
+
+  // Surface the background-detected update immediately so the install button is
+  // right there (no need to press "Check for updates" first).
+  useEffect(() => {
+    if (bgUpdate) setStatus((s) => (s.kind === "idle" ? { kind: "available", info: bgUpdate } : s));
+  }, [bgUpdate]);
 
   useEffect(() => {
     if (!IS_TAURI) return;
