@@ -38,14 +38,16 @@ function shuffled<T>(arr: readonly T[]): T[] {
   return a;
 }
 
-/** Plays a bundled focus track/playlist at a volume; `null` track = silence.
- *  `playing` pauses/resumes without losing the selected track. */
+/** Plays a bundled focus track/playlist at a volume. The jazzy lo-fi playlist
+ *  is *selected* by default but nothing plays until `playing` is set — by the
+ *  play button, or by a focus session starting. `playing` pauses/resumes
+ *  without losing the selected track. */
 export function useAmbient() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const playlist = useRef<string[]>([]);
   const idx = useRef(0);
-  const [track, setTrackState] = useState<AmbientTrack | null>(null);
-  const [playing, setPlaying] = useState(true);
+  const [track, setTrackState] = useState<AmbientTrack | null>("lofi");
+  const [playing, setPlaying] = useState(false);
   const [volume, setVolume] = useState(0.5);
 
   // Selecting a track always (re)starts it playing.
