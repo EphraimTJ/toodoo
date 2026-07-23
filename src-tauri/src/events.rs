@@ -79,6 +79,8 @@ pub enum DomainEvent {
     SavedSearchChanged,
     #[serde(rename = "comment.changed")]
     CommentChanged { task_id: String },
+    #[serde(rename = "attachment.changed")]
+    AttachmentChanged { task_id: String },
 }
 
 #[derive(Clone)]

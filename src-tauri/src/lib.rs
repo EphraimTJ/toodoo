@@ -54,6 +54,10 @@ impl AppState {
     fn backups_dir(&self) -> std::path::PathBuf {
         self.data_dir.join("backups")
     }
+
+    fn attachments_dir(&self) -> std::path::PathBuf {
+        self.data_dir.join("attachments")
+    }
 }
 
 type CmdResult<T> = Result<T, String>;
@@ -190,6 +194,73 @@ async fn save_task_as_template(
     name: String,
 ) -> CmdResult<TaskTemplate> {
     repo::templates::save_task_as_template(&state.pool, &state.bus, &task_id, &name).await.map_err(err)
+}
+
+// ---- attachments ---------------------------------------------------------------
+
+#[tauri::command]
+async fn list_attachments(
+    state: State<'_, AppState>,
+    task_id: String,
+) -> CmdResult<Vec<repo::attachments::Attachment>> {
+    repo::attachments::list_attachments(&state.pool, &task_id).await.map_err(err)
+}
+
+/// Add an attachment from the webview: bytes arrive base64-encoded (the file
+/// input reads them in the renderer, so no native file-dialog plugin is needed).
+#[tauri::command]
+async fn add_attachment(
+    state: State<'_, AppState>,
+    task_id: String,
+    file_name: String,
+    mime: Option<String>,
+    data_base64: String,
+) -> CmdResult<repo::attachments::Attachment> {
+    use base64::Engine;
+    let bytes = base64::engine::general_purpose::STANDARD
+        .decode(data_base64.as_bytes())
+        .map_err(|e| format!("attachment is not valid base64: {e}"))?;
+    repo::attachments::add_attachment(
+        &state.pool,
+        &state.bus,
+        &state.attachments_dir(),
+        &task_id,
+        &file_name,
+        mime.as_deref(),
+        &bytes,
+    )
+    .await
+    .map_err(err)
+}
+
+/// The attachment's bytes as a `data:` URL, for inline image/audio previews.
+#[tauri::command]
+async fn read_attachment_data_url(state: State<'_, AppState>, id: String) -> CmdResult<String> {
+    use base64::Engine;
+    let (att, bytes) = repo::attachments::read_attachment(&state.pool, &state.attachments_dir(), &id)
+        .await
+        .map_err(err)?;
+    let mime = att.mime.unwrap_or_else(|| "application/octet-stream".into());
+    let b64 = base64::engine::general_purpose::STANDARD.encode(bytes);
+    Ok(format!("data:{mime};base64,{b64}"))
+}
+
+#[tauri::command]
+async fn delete_attachment(state: State<'_, AppState>, id: String) -> CmdResult<()> {
+    repo::attachments::delete_attachment(&state.pool, &state.bus, &state.attachments_dir(), &id)
+        .await
+        .map_err(err)
+}
+
+/// Open an attachment in the OS default application.
+#[tauri::command]
+async fn open_attachment(app: tauri::AppHandle, state: State<'_, AppState>, id: String) -> CmdResult<()> {
+    use tauri_plugin_opener::OpenerExt;
+    let att = repo::attachments::get_attachment(&state.pool, &id).await.map_err(err)?;
+    let path = repo::attachments::resolve_path(&state.attachments_dir(), &att);
+    app.opener()
+        .open_path(path.to_string_lossy().to_string(), None::<&str>)
+        .map_err(|e| format!("cannot open attachment: {e}"))
 }
 
 // ---- comments ------------------------------------------------------------------
@@ -2219,6 +2290,11 @@ pub fn run() {
             check_item_to_subtask,
             subtask_to_check_item,
             save_task_as_template,
+            list_attachments,
+            add_attachment,
+            read_attachment_data_url,
+            delete_attachment,
+            open_attachment,
             list_comments,
             add_comment,
             delete_comment,

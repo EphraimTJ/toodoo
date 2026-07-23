@@ -16,6 +16,7 @@ import { useTags, useTagMutations } from "../../../tags/hooks/useTags";
 import { useTaskMutations } from "../../hooks/useTasks";
 import { TaskFocusInfo } from "../../../focus/components/TaskFocusInfo";
 import { ActivityLog } from "./ActivityLog";
+import { Attachments } from "./Attachments";
 import { Comments } from "./Comments";
 import { DatePicker } from "./DatePicker";
 import { DescriptionEditor } from "./DescriptionEditor";
@@ -433,6 +434,7 @@ export function TaskDetail() {
       <Reminders task={task} />
       <CheckItems task={task} />
       <Subtasks task={task} />
+      <Attachments task={task} />
       <TaskFocusInfo task={task} />
       <Comments task={task} />
       <ActivityLog task={task} />

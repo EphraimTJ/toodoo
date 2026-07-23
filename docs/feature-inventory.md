@@ -28,7 +28,7 @@ This is the checklist the whole project is graded against, converted from §3 of
 - [x] Multiple reminders per task — add/list/delete shipped; scheduler fires them
   - [x] Absolute reminders
   - [x] Relative reminders ("5 min before", "1 day before at 9am")
-  - [x] Snooze (in-app snooze control; notification-button snooze pending in 12D)
+  - [x] Snooze (in-app control + Complete/Snooze buttons on the Windows toast)
 - [ ] Recurring tasks
   - [x] Daily/weekly/monthly/yearly
   - [x] Custom RRULEs (e.g., "last Friday of month")
@@ -43,8 +43,8 @@ This is the checklist the whole project is graded against, converted from §3 of
   - [x] Parse list (`~list`)
   - [x] Inline highlights with tap-to-dismiss
 - [x] Task templates
-- [ ] Attachments (files, images, audio) stored locally
-  - [ ] Per-task gallery
+- [x] Attachments (files, images, audio) stored locally
+  - [x] Per-task gallery
 - [x] Task activity log (created, completed, edited history)
 - [x] Comments on tasks (single-user: running note/log thread)
 - [x] Pin tasks
@@ -250,8 +250,8 @@ This is the checklist the whole project is graded against, converted from §3 of
   - [x] `DELETE …` endpoints
   - [x] Toodoo extensions for habits, focus, filters
 - [x] `toodoo://` URL scheme (open task/list, quick add)
-- [ ] Optional MCP server exposing Toodoo to Claude and other AI agents
-      — deferred to post-v1.0 (first item after 1.0); nothing in v1.0 depends on it
+- [x] Optional MCP server exposing Toodoo to Claude and other AI agents
+      — see mcp/ (dependency-free stdio server over the local REST API)
 
 ## 3.13 Adapted / Deferred (see §9 of the build plan)
 

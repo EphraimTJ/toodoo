@@ -967,3 +967,22 @@ Rust-side behavior (repository layer, changelog, events) is covered by
 **Why:** §3.12 requires a TickTick-compatible local REST API; storing the
 API's native values avoids a mapping layer and matches TickTick's observed
 data model.
+
+## 2026-07-23 — Deleting an attachment removes its bytes
+
+**Decision:** `delete_attachment` soft-deletes the `attachments` row (keeping
+the changelog coherent) but *hard*-deletes the stored file.
+
+**Why:** attachments are bulky and there is no restore UI for them, so keeping
+orphaned bytes would grow the local store with no way to reclaim it. The row
+survives for sync/changelog integrity; the bytes do not.
+
+## 2026-07-23 — MCP server proxies the local REST API
+
+**Decision:** the MCP server (`mcp/`) is a dependency-free Node script that
+speaks MCP stdio JSON-RPC and forwards to `127.0.0.1:7420/open/v1/...`, rather
+than embedding an MCP server in the Rust binary or depending on the MCP SDK.
+
+**Why:** it reuses the already-tested REST surface and its bearer auth, keeps
+the desktop binary free of another network server, and avoids an npm install
+step (and SDK version drift) for users wiring it into Claude.
