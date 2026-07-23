@@ -1,6 +1,6 @@
 [package]
 name = "toodoo"
-version = "1.9.7"
+version = "1.9.8"
 description = "Toodoo — local-first TickTick Pro clone"
 authors = ["Toodoo"]
 edition = "2021"
