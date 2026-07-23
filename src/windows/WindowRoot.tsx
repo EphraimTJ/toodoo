@@ -44,7 +44,8 @@ function QuickAddWindow() {
   return (
     <div className="p-3" data-testid="win-quickadd">
       <h1 className="mb-1 px-1 text-xs font-semibold uppercase tracking-wide text-text-muted">Quick add</h1>
-      <QuickAddBar defaults={{ projectId: "inbox" }} />
+      {/* The pop-out exists for one capture — adding a task closes it. */}
+      <QuickAddBar defaults={{ projectId: "inbox" }} onAdded={closeWindow} />
     </div>
   );
 }

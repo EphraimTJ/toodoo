@@ -58,6 +58,25 @@ export function AppShell() {
   // sidebar/menu click resets `selectedTaskId`).
   const selectedTaskId = useUiStore((s) => s.selectedTaskId);
 
+  // Click-away: clicking anything that isn't the pane itself, a selectable
+  // task surface (row / kanban card / calendar), or floating UI (menus,
+  // popovers, dialogs) deselects the task and closes the pane. Selectable
+  // surfaces re-select on their own click handlers, which run after this.
+  useEffect(() => {
+    if (!selectedTaskId) return;
+    const KEEP =
+      '[data-detail-pane], [data-testid="task-row"], [data-testid="kanban-card"], ' +
+      '[aria-label="Resize detail pane"], [data-radix-popper-content-wrapper], ' +
+      '[role="dialog"], [role="menu"], [role="listbox"], .fc';
+    const onDown = (e: MouseEvent) => {
+      const el = e.target as HTMLElement | null;
+      if (el?.closest(KEEP)) return;
+      useUiStore.getState().selectTask(null);
+    };
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [selectedTaskId]);
+
   return (
     <FocusProvider>
       <div className="flex h-full flex-col">
