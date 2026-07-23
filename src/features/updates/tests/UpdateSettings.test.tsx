@@ -1,5 +1,6 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { UpdateSettings } from "../components/UpdateSettings";
 
 // In the test (non-Tauri) environment there's no `__TAURI_INTERNALS__`, so the
@@ -7,7 +8,12 @@ import { UpdateSettings } from "../components/UpdateSettings";
 // desktop-only, and no plugin import is ever triggered.
 describe("UpdateSettings", () => {
   it("renders a disabled check control outside the desktop app", () => {
-    render(<UpdateSettings />);
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={queryClient}>
+        <UpdateSettings />
+      </QueryClientProvider>,
+    );
 
     const button = screen.getByTestId("check-for-updates");
     expect(button).toBeDisabled();
