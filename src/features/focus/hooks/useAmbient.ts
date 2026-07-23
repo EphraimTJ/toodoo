@@ -56,6 +56,18 @@ export function useAmbient() {
     if (t) setPlaying(true);
   };
 
+  // Jump to a freshly shuffled lo-fi track (no-op for the noise loops, which
+  // are single files). Starts playing if it wasn't already.
+  const shuffle = () => {
+    const audio = audioRef.current;
+    if (!audio || track !== "lofi") return;
+    playlist.current = shuffled(LOFI_PLAYLIST);
+    idx.current = 0;
+    audio.src = playlist.current[0];
+    setPlaying(true);
+    void audio.play().catch(() => {});
+  };
+
   useEffect(() => {
     const audio = audioRef.current ?? new Audio();
     audioRef.current = audio;
@@ -102,5 +114,5 @@ export function useAmbient() {
 
   useEffect(() => () => audioRef.current?.pause(), []);
 
-  return { track, setTrack, playing, setPlaying, volume, setVolume };
+  return { track, setTrack, playing, setPlaying, volume, setVolume, shuffle };
 }
